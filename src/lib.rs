@@ -1,3 +1,6 @@
+#![feature(specialization)]
+#![recursion_limit="128"]
+
 mod types;
 mod typesetting;
 pub mod mathmlparser;
@@ -10,9 +13,9 @@ mod test {
 
     #[test]
     fn it_works() {
-        //let atom = Atom{atom_type: Default::default(), inner: InnerAtom::Fields{nucleus: Field::Unicode(0x65), ..Default::default()}};
+        //let atom = Atom{atom_type: Default::default(), inner: AtomContents::Fields{nucleus: Field::Unicode(0x65), ..Default::default()}};
         let atom2: Atom = Default::default();
         let list = vec!(ListItem::Atom(atom2));
-        list_to_boxes(&list);
+        list_to_boxes(list);
     }
 }

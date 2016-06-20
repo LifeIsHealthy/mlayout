@@ -2,24 +2,24 @@ use std::mem;
 
 pub type Codepoint = u64;
 
-pub type List<'a> = Vec<ListItem<'a>>;
+pub type List = Vec<ListItem>;
 
 #[derive(Debug)]
-pub enum ListItem<'a> {
-    Atom(Atom<'a>),
-    Hbox(MathBox<'a>),
-    Vbox(MathBox<'a>)
+pub enum ListItem {
+    Atom(Atom),
+    Hbox(MathBox),
+    Vbox(MathBox)
 }
 
 #[derive(Debug)]
-pub enum Field<'a> {
+pub enum Field {
     Empty,
     Unicode(String),
     Glyph(Glyph),
-    List(&'a List<'a>),
+    List(List),
 }
-impl<'a> Default for Field<'a> {
-    fn default() -> Field<'a> {
+impl Default for Field {
+    fn default() -> Field {
         Field::Empty
     }
 }
@@ -48,31 +48,31 @@ impl Default for AtomType {
 }
 
 #[derive(Debug)]
-pub enum InnerAtom<'a> {
+pub enum AtomContents {
     Fields {
-        nucleus: Field<'a>,
-        top_left: Option<Field<'a>>,
-        top_right: Option<Field<'a>>,
-        bottom_left: Option<Field<'a>>,
-        bottom_right: Option<Field<'a>>,
+        nucleus: Field,
+        top_left: Option<Field>,
+        top_right: Option<Field>,
+        bottom_left: Option<Field>,
+        bottom_right: Option<Field>,
     },
-    Translation(Field<'a>),
+    Translation(Field),
 }
-impl<'a> Default for InnerAtom<'a> {
-    fn default() -> InnerAtom<'a> {
-        InnerAtom::Fields{nucleus: Default::default(), top_left: Default::default(), top_right: Default::default(),
+impl Default for AtomContents {
+    fn default() -> AtomContents {
+        AtomContents::Fields{nucleus: Default::default(), top_left: Default::default(), top_right: Default::default(),
                           bottom_left: Default::default(), bottom_right: Default::default()}
     }
 }
 
 #[derive(Debug, Default)]
-pub struct Atom<'a> {
+pub struct Atom {
     pub atom_type: AtomType,
-    pub inner: InnerAtom<'a>,
+    pub inner: AtomContents,
 }
-impl<'a> Atom<'a> {
-    pub fn new_with_nucleus<'b>(t: AtomType, nucleus: Field<'b>) -> Atom<'b> {
-        Atom{atom_type: t, inner: InnerAtom::Fields{
+impl Atom {
+    pub fn new_with_nucleus(t: AtomType, nucleus: Field) -> Atom {
+        Atom{atom_type: t, inner: AtomContents::Fields{
             nucleus: nucleus,
             top_left: None,
             top_right: None,
@@ -96,24 +96,24 @@ impl BoxSize {
 }
 
 #[derive(Debug, Default)]
-pub struct MathBox<'a> {
+pub struct MathBox {
     pub width: i32,
     pub height: i32,
     pub bearing_x: i32,
     pub bearing_y: i32,
 
-    pub field: Field<'a>,
+    pub field: Field,
 }
-impl<'a> MathBox<'a> {
+impl MathBox {
     pub fn depth(self) -> i32 {
         self.height - self.bearing_y
     }
 }
 
 #[derive(Debug, Default)]
-pub struct GeneralizedFraction<'a> {
-    pub numerator: Field<'a>,
-    pub denominator: Field<'a>,
+pub struct GeneralizedFraction {
+    pub numerator: Field,
+    pub denominator: Field,
 }
 
 #[derive(Debug, Default)]
