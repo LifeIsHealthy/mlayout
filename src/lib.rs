@@ -1,5 +1,5 @@
 #![feature(specialization)]
-#![recursion_limit="128"]
+#![allow(unknown_lints)]
 
 mod types;
 mod typesetting;

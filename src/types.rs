@@ -7,8 +7,9 @@ pub type List = Vec<ListItem>;
 #[derive(Debug)]
 pub enum ListItem {
     Atom(Atom),
+    GeneralizedFraction(GeneralizedFraction),
     Hbox(MathBox),
-    Vbox(MathBox)
+    Vbox(MathBox),
 }
 
 #[derive(Debug)]
@@ -21,6 +22,11 @@ pub enum Field {
 impl Default for Field {
     fn default() -> Field {
         Field::Empty
+    }
+}
+impl ::std::convert::From<ListItem> for Field {
+    fn from(item: ListItem) -> Field {
+        Field::List(vec![item])
     }
 }
 
@@ -60,8 +66,13 @@ pub enum AtomContents {
 }
 impl Default for AtomContents {
     fn default() -> AtomContents {
-        AtomContents::Fields{nucleus: Default::default(), top_left: Default::default(), top_right: Default::default(),
-                          bottom_left: Default::default(), bottom_right: Default::default()}
+        AtomContents::Fields {
+            nucleus: Default::default(),
+            top_left: Default::default(),
+            top_right: Default::default(),
+            bottom_left: Default::default(),
+            bottom_right: Default::default(),
+        }
     }
 }
 
@@ -72,12 +83,15 @@ pub struct Atom {
 }
 impl Atom {
     pub fn new_with_nucleus(t: AtomType, nucleus: Field) -> Atom {
-        Atom{atom_type: t, inner: AtomContents::Fields{
-            nucleus: nucleus,
-            top_left: None,
-            top_right: None,
-            bottom_left: None,
-            bottom_right: None}
+        Atom {
+            atom_type: t,
+            inner: AtomContents::Fields {
+                nucleus: nucleus,
+                top_left: None,
+                top_right: None,
+                bottom_left: None,
+                bottom_right: None,
+            },
         }
     }
 }
@@ -140,18 +154,21 @@ pub enum MathStyle {
 }
 impl MathStyle {
     pub fn primed_style(self: MathStyle) -> MathStyle {
-        let mut style: i8 = unsafe {mem::transmute(self)};
+        let mut style: i8 = unsafe { mem::transmute(self) };
         style -= (style + 1) % 2;
         assert!(0 < style && style <= 8);
-        unsafe{mem::transmute(style)}
+        unsafe { mem::transmute(style) }
     }
 
     pub fn superscript_style(self: MathStyle) -> MathStyle {
         match self {
             MathStyle::DisplayStyle | MathStyle::TextStyle => MathStyle::ScriptStyle,
-            MathStyle::DisplayStylePrime | MathStyle::TextStylePrime => MathStyle::ScriptStylePrime,
-            MathStyle::ScriptStyle | MathStyle::ScriptScriptStyle => MathStyle::ScriptScriptStyle,
-            MathStyle::ScriptStylePrime | MathStyle::ScriptScriptStylePrime => MathStyle::ScriptScriptStylePrime,
+            MathStyle::DisplayStylePrime |
+            MathStyle::TextStylePrime => MathStyle::ScriptStylePrime,
+            MathStyle::ScriptStyle |
+            MathStyle::ScriptScriptStyle => MathStyle::ScriptScriptStyle,
+            MathStyle::ScriptStylePrime |
+            MathStyle::ScriptScriptStylePrime => MathStyle::ScriptScriptStylePrime,
             _ => MathStyle::Invalid,
         }
     }
