@@ -1,0 +1,43 @@
+<!-- <msup><mi>a</mi><mi>bg</mi></msup>
+<mfrac><mi>a</mi><mi>bg</mi></mfrac>
+<mi>ab</mi> -->
+
+<mi title='Imaginary Unit'>i</mi>
+<mi title="Reduced Plank's Constant">&#8463;</mi>
+<mfrac title="Partial Differential Operator">
+    <mo>&#8706;</mo>
+    <mrow>
+        <mo>&#8706;</mo>
+        <mi title="Time">t</mi>
+    </mrow>
+</mfrac>
+<mn title="Wavefunction">&#936;</mn>
+<mo form="infix">=</mo>
+<mfrac>
+    <mrow>
+        <mo form="infix" lucida="true">-</mo>
+        <msup>
+            <mi title="Plank's constant">h</mi>
+            <mn>2</mn>
+        </msup>
+    </mrow>
+    <mrow>
+        <mn>2</mn>
+        <mi title="Mass of particle">m</mi>
+    </mrow>
+</mfrac>
+<msup title="Laplacian">
+    <mover><mo>&#8711;</mo><mo>→</mo></mover>
+    <mn>2</mn>
+</msup>
+<mn title="Wavefunction">&#936;</mn>
+<mo form="infix">+</mo>
+<mover title="Potential energy" accent="true"><mi>V</mi><mi>^</mi></mover>
+<mn title="Wavefunction">&#936;</mn>
+
+
+<!-- <mi>V</mi>
+<mi>I</mi>
+<mi>dd</mi> -->
+
+<mover><mo>a</mo><mo>→</mo></mover>

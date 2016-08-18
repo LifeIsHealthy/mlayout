@@ -3,10 +3,14 @@ extern crate quick_xml;
 use std::fmt;
 use std::error::Error;
 use std::io::BufRead;
+use std::borrow::Borrow;
 
 use self::quick_xml::{XmlReader, Event, Element, AsStr};
 
-use types::{List, ListItem, Field, Atom, AtomType, GeneralizedFraction};
+use types::{List, ListItem, Field, Atom, OverUnder, GeneralizedFraction};
+use types::Field::Empty;
+
+use super::{Family, convert_character_to_family};
 
 #[derive(Debug)]
 pub struct ParsingError {
@@ -40,7 +44,7 @@ impl fmt::Display for ParsingError {
 impl Error for ParsingError {
     fn description(&self) -> &str {
         match self.error_type {
-            ErrorType::UnknownElement(..) => "Element not known by the parser",
+            ErrorType::UnknownElement(..) => "Element is not known to the parser.",
             ErrorType::OtherError(ref msg) => msg,
             ErrorType::XmlError(ref error) => error.description(),
         }
@@ -85,14 +89,6 @@ pub fn parse<R: BufRead>(file: R) -> Result<List, ParsingError> {
     parse_math_list(&mut parser, None)
 }
 
-fn atom_type_for_mathml_element_name(name: &[u8]) -> AtomType {
-    match name {
-        b"mo" => AtomType::Bin,
-        b"msqrt" => AtomType::Rad,
-        _ => AtomType::Ord,
-    }
-}
-
 // invoked after a token expression
 // the cursor is moved behind the end element of the token expression
 // the result (if ok) is guaranteed to not be empty
@@ -106,82 +102,167 @@ fn parse_token<R: BufRead>(parser: &mut XmlReader<R>,
                 let text_bytes = try!(text.unescaped_content()).into_owned();
                 let string = try!(String::from_utf8(text_bytes)
                     .map_err(|x| quick_xml::error::Error::Utf8(x.utf8_error())));
-                Some(Ok(Field::Unicode(string)))
+                Ok(Field::Unicode(string))
             }
             Event::Start(elem) => {
                 match elem.name() {
                     b"mglyph" | b"malignmark" => unimplemented!(),
-                    _ => Some(Err(ParsingError::from_string(parser, "unexpected new element"))),
+                    _ => Err(ParsingError::from_string(parser, "unexpected new element")),
                 }
             }
             Event::End(ref end_elem) => {
                 if elem.name() == end_elem.name() {
                     break;
                 }
-                None
+                continue;
             }
-            _ => Some(Err(ParsingError::from("Unknown Error"))),
+            _ => Err(ParsingError::from("Unknown Error")),
         };
-        if let Some(result) = result {
-            fields.push(try!(result));
-        }
+        fields.push(try!(result));
     }
+
     if fields.is_empty() {
-        return Err(ParsingError::from_string(parser, "empty token"));
+        Err(ParsingError::from_string(parser, "empty token"))
+    } else {
+        Ok(fields)
     }
-    Ok(fields)
+}
+
+fn check_start_element<R: BufRead>(parser: &mut XmlReader<R>) -> Result<Element, ParsingError> {
+    let event = try!(parser.next()
+        .ok_or(ParsingError::from_string(parser, "Unexpected end of input")));
+    if let Event::Start(element) = try!(event) {
+        Ok(element)
+    } else {
+        Err(ParsingError::from_string(parser, "Unexpected input"))
+    }
+}
+
+fn check_end_element<R: BufRead>(parser: &mut XmlReader<R>,
+                                 name: &[u8])
+                                 -> Result<(), ParsingError> {
+    match try!(parser.next()
+        .ok_or(ParsingError::from_string(parser, "unexpected end of input"))) {
+        Ok(Event::End(ref end_elem)) => {
+            if end_elem.name() != name {
+                Err(ParsingError::from_string(parser, "unexpected end element"))
+            } else {
+                Ok(())
+            }
+        }
+        Ok(event) => {
+            let msg = format!("unexpected event {:?}", event);
+            Err(ParsingError::from_string(parser, &msg))
+        }
+        Err(error) => Err(error.into()),
+    }
+}
+
+fn assume_presentation_expression<R: BufRead>(parser: &mut XmlReader<R>)
+                                              -> Result<ListItem, ParsingError> {
+    let start_elem = try!(check_start_element(parser));
+    parse_presentation_expression(parser, &start_elem)
 }
 
 fn parse_presentation_expression<R: BufRead>(parser: &mut XmlReader<R>,
                                              elem: &Element)
                                              -> Result<ListItem, ParsingError> {
     let name = elem.name();
-    let advance = |parser: &mut XmlReader<R>| {
-        let event = try!(parser.next()
-            .ok_or(ParsingError::from_string(parser, "Unexpected end of input")));
-        if let Event::Start(element) = try!(event) {
-            Ok(element)
-        } else {
-            Err(ParsingError::from_string(parser, "Unexpected input"))
-        }
-    };
     match name {
         // Token expression
         b"mi" | b"mn" | b"mo" | b"msqrt" => {
             let mut fields = try!(parse_token(parser, elem));
             let field = if fields.len() == 1 {
-                fields.remove(0)
+                let field = fields.remove(0);
+                match (name, field) {
+                    (b"mi", Field::Unicode(ref text)) if text.len() == 1 => {
+                        Field::Unicode(convert_character_to_family(text.chars().next().unwrap(),
+                                                                   Family::Italics)
+                            .to_string())
+                    }
+                    (_, field) => field,
+                }
             } else {
                 let list = fields.into_iter()
-                    .map(|field| ListItem::Atom(Atom::new_with_nucleus(AtomType::Ord, field)));
+                    .map(|field| ListItem::Atom(Atom::new_with_nucleus(field)));
                 Field::List(list.collect())
             };
 
-            let atom_type = atom_type_for_mathml_element_name(name);
-            let atom = Atom::new_with_nucleus(atom_type, field);
+            let atom = Atom::new_with_nucleus(field);
             Ok(ListItem::Atom(atom))
         }
         b"mfrac" => {
-            let new_elem = try!(advance(parser));
-            let numerator = try!(parse_presentation_expression(parser, &new_elem));
-            let new_elem = try!(advance(parser));
-            let denominator = try!(parse_presentation_expression(parser, &new_elem));
-
-            match try!(parser.next()
-                .ok_or(ParsingError::from_string(parser, "unexpected end of input"))) {
-                Ok(Event::End(ref end_elem)) => {
-                    if end_elem.name() != name {
-                        return Err(ParsingError::from_string(parser, "unexpected end element"));
-                    }
-                }
-                _ => return Err(ParsingError::from_string(parser, "unexpected event")),
-            };
+            let numerator: Field = try!(assume_presentation_expression(parser)).into();
+            let denominator: Field = try!(assume_presentation_expression(parser)).into();
+            try!(check_end_element(parser, name));
 
             let frac = GeneralizedFraction {
-                numerator: numerator.into(),
-                denominator: denominator.into(),
+                numerator: numerator,
+                denominator: denominator,
             };
             Ok(ListItem::GeneralizedFraction(frac))
+        }
+        b"mrow" => {
+            let list = try!(parse_math_list(parser, Some(&elem)));
+            Ok(ListItem::Atom(Atom::new_with_nucleus(Field::List(list))))
+        }
+        b"msub" => {
+            let nucleus: Field = try!(assume_presentation_expression(parser)).into();
+            let subscript: Field = try!(assume_presentation_expression(parser)).into();
+            try!(check_end_element(parser, name));
+
+            let atom = Atom::new_with_attachments(nucleus, Empty, Empty, Empty, subscript);
+            Ok(ListItem::Atom(atom))
+        }
+        b"msup" => {
+            let nucleus: Field = try!(assume_presentation_expression(parser)).into();
+            let superscript: Field = try!(assume_presentation_expression(parser)).into();
+            try!(check_end_element(parser, name));
+
+            let atom = Atom::new_with_attachments(nucleus, Empty, superscript, Empty, Empty);
+            Ok(ListItem::Atom(atom))
+        }
+        b"msubsup" => {
+            let nucleus: Field = try!(assume_presentation_expression(parser)).into();
+            let subscript: Field = try!(assume_presentation_expression(parser)).into();
+            let superscript: Field = try!(assume_presentation_expression(parser)).into();
+            try!(check_end_element(parser, name));
+
+            let atom = Atom::new_with_attachments(nucleus, Empty, superscript, Empty, subscript);
+            Ok(ListItem::Atom(atom))
+        }
+        b"mover" => {
+            let attributes = elem.unescaped_attributes();
+            let mut as_accent = false;
+            for attrib in attributes {
+                let (ident, value) = try!(attrib);
+                if ident == b"accent" && &value as &[u8] == b"true" {
+                    as_accent = true;
+                }
+            }
+            let nucleus: Field = try!(assume_presentation_expression(parser)).into();
+            let over: Field = try!(assume_presentation_expression(parser)).into();
+            try!(check_end_element(parser, name));
+
+            let item = OverUnder { nucleus: nucleus, over: over, over_is_accent: as_accent, ..Default::default() };
+            Ok(ListItem::OverUnder(item))
+        }
+        b"munder" => {
+            let nucleus: Field = try!(assume_presentation_expression(parser)).into();
+            let under: Field = try!(assume_presentation_expression(parser)).into();
+            try!(check_end_element(parser, name));
+
+            let item = OverUnder { nucleus: nucleus, under: under, ..Default::default() };
+            Ok(ListItem::OverUnder(item))
+        }
+        b"munderover" => {
+            let nucleus: Field = try!(assume_presentation_expression(parser)).into();
+            let under: Field = try!(assume_presentation_expression(parser)).into();
+            let over: Field = try!(assume_presentation_expression(parser)).into();
+            try!(check_end_element(parser, name));
+
+            let item = OverUnder { nucleus: nucleus, under: under, over: over, ..Default::default() };
+            Ok(ListItem::OverUnder(item))
         }
         _ => {
             Err(ParsingError {
@@ -192,6 +273,12 @@ fn parse_presentation_expression<R: BufRead>(parser: &mut XmlReader<R>,
     }
 }
 
+// <elem> |cursor at start|
+//      <list_begin />
+//      ...
+//      <list_end />
+// <elem/>
+// |cursor at end|
 fn parse_math_list<R: BufRead>(parser: &mut XmlReader<R>,
                                elem: Option<&Element>)
                                -> Result<List, ParsingError> {
@@ -222,104 +309,3 @@ fn parse_math_list<R: BufRead>(parser: &mut XmlReader<R>,
     }
     Ok(list)
 }
-//
-// #[allow(dead_code)]
-// fn list_item_from_node<R: BufRead>(parser: &mut XmlReader<R>,
-//                                    elem: &Element)
-//                                    -> Result<ListItem, ParsingError> {
-//     let name = elem.name();
-//     match name {
-//         b"mi" | b"mn" | b"mo" | b"msqrt" => {
-//             let mut fields = try!(parse_token(parser, elem));
-//             let atom_type = atom_type_for_mathml_element_name(name);
-//             let atom = Atom::new_with_nucleus(atom_type, fields.remove(0));
-//             Ok(ListItem::Atom(atom))
-//         }
-//         b"mfrac" => {
-//             let numerator = try!(parse_token(parser, elem)).remove(0);
-//             let denominator = try!(parse_token(parser, elem)).remove(0);
-//             let frac = GeneralizedFraction {
-//                 numerator: numerator,
-//                 denominator: denominator,
-//             };
-//             Ok(ListItem::GeneralizedFraction(frac))
-//         }
-//         _ => {
-//             Err(ParsingError {
-//                 position: None,
-//                 error_type: ErrorType::UnknownElement(try!(name.as_str()).into()),
-//             })
-//         }
-//     }
-// }
-//
-// // None if both an elemenet
-// #[allow(unused_variables)]
-// #[allow(dead_code)]
-// fn find_children_elements<R: BufRead>(parser: &mut XmlReader<R>,
-//                                       elem: &Element)
-//                                       -> Result<Event, ParsingError> {
-//     let mut tmp_event: Option<Event> = None;
-//     loop {
-//         let event = parser.next();
-//         match event {
-//             Some(Ok(event @ Event::Text(..))) => tmp_event = Some(event),
-//             Some(Ok(event @ Event::Start(..))) => {
-//                 match tmp_event {
-//                     None => return Ok(event),
-//                     _ => return Err(ParsingError::from_string(parser, "unexpected new element")),
-//                 }
-//             }
-//             Some(Ok(Event::End(..))) => return Ok(tmp_event.unwrap()),
-//             Some(Err(xml_error)) => return Err(xml_error.into()),
-//             None => return Err(ParsingError::from_string(parser, "unexpected end of input")),
-//             _ => {}
-//         }
-//     }
-// }
-//
-// #[allow(dead_code)]
-// fn field_from_node<R: BufRead>(parser: &mut XmlReader<R>,
-//                                elem: &Element)
-//                                -> Result<Field, ParsingError> {
-//     let event = try!(find_children_elements(parser, elem));
-//     match event {
-//         Event::Start(..) => list_from_node(parser, &event).map(Field::List),
-//         Event::Text(ident) => {
-//             let text_bytes = try!(ident.unescaped_content()).into_owned();
-//             let string = try!(String::from_utf8(text_bytes)
-//                 .map_err(|x| quick_xml::error::Error::Utf8(x.utf8_error())));
-//             Ok(Field::Unicode(string))
-//         }
-//         _ => Err("internal error: invalid field".into()),
-//     }
-// }
-//
-// #[allow(match_same_arms)]
-// #[allow(dead_code)]
-// fn list_from_node<R: BufRead>(parser: &mut XmlReader<R>,
-//                               event: &Event)
-//                               -> Result<List, ParsingError> {
-//     let mut list = List::new();
-//     match *event {
-//         Event::Start(ref elem) => try!(list_item_from_node(parser, elem).map(|x| list.push(x))),
-//         Event::End(..) => return Err("blabla".into()),
-//         _ => {}
-//     }
-//     loop {
-//         let event = parser.find(|x| match *x {
-//             Ok(Event::End(..)) |
-//             Ok(Event::Start(..)) => true,
-//             _ => false,
-//         });
-//         match event {
-//             Some(Ok(Event::Start(ref elem))) => {
-//                 try!(list_item_from_node(parser, elem).map(|x| list.push(x)))
-//             }
-//             Some(Ok(Event::End(..))) => break,
-//             None => break,
-//             _ => {}
-//         }
-//     }
-//     Ok(list)
-// }

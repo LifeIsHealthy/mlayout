@@ -1,15 +1,16 @@
 use std::mem;
 
 pub type Codepoint = u64;
+pub type GlyphCode = u32;
 
 pub type List = Vec<ListItem>;
 
 #[derive(Debug)]
 pub enum ListItem {
     Atom(Atom),
+    OverUnder(OverUnder),
     GeneralizedFraction(GeneralizedFraction),
-    Hbox(MathBox),
-    Vbox(MathBox),
+    Kern(Kern),
 }
 
 #[derive(Debug)]
@@ -29,99 +30,126 @@ impl ::std::convert::From<ListItem> for Field {
         Field::List(vec![item])
     }
 }
-
-#[allow(dead_code)]
-#[derive(Debug)]
-pub enum AtomType {
-    Ord,
-    Op,
-    Bin,
-    Rel,
-    Open,
-    Close,
-    Punct,
-    Inner,
-    Over,
-    Under,
-    Acc,
-    Rad,
-    Vcent,
-}
-impl Default for AtomType {
-    fn default() -> AtomType {
-        AtomType::Ord
-    }
-}
-
-#[derive(Debug)]
-pub enum AtomContents {
-    Fields {
-        nucleus: Field,
-        top_left: Option<Field>,
-        top_right: Option<Field>,
-        bottom_left: Option<Field>,
-        bottom_right: Option<Field>,
-    },
-    Translation(Field),
-}
-impl Default for AtomContents {
-    fn default() -> AtomContents {
-        AtomContents::Fields {
-            nucleus: Default::default(),
-            top_left: Default::default(),
-            top_right: Default::default(),
-            bottom_left: Default::default(),
-            bottom_right: Default::default(),
+impl Field {
+    pub fn is_empty(&self) -> bool {
+        if let Field::Empty = *self {
+            true
+        } else {
+            false
         }
     }
+}
+
+// initialize with state = 0
+pub struct AtomFieldsIterator<'a> {
+    atom: &'a Atom,
+    state: u8,
+}
+impl<'a> Iterator for AtomFieldsIterator<'a> {
+    type Item = &'a Field;
+    fn next(&mut self) -> Option<&'a Field> {
+        loop {
+            if self.state > 4 {
+                return None;
+            };
+            let result = match self.state {
+                0 => Some(self.atom.nucleus_ref()),
+                1 => Some(self.atom.top_left_ref()),
+                2 => Some(self.atom.top_right_ref()),
+                3 => Some(self.atom.bottom_left_ref()),
+                4 => Some(self.atom.bottom_right_ref()),
+                _ => None,
+            };
+            self.state += 1;
+            match result {
+                Some(field) if !field.is_empty() => return Some(field),
+                _ => {},
+            };
+        }
+    }
+}
+
+macro_rules! field_accessors {
+    ( $( $x:ident ),* ) => {
+        $(
+            interpolate_idents! {
+                pub fn [has_ $x](&self) -> bool {
+                    !(self.$x.is_empty())
+                }
+
+                pub fn [$x _ref](&self) -> &Field {
+                    &self.$x
+                }
+
+                pub fn [$x _ref_mut](&mut self) -> &mut Field {
+                    &mut self.$x
+                }
+
+                pub fn $x(self) -> Field {
+                    self.$x
+                }
+            }
+        )*
+    };
 }
 
 #[derive(Debug, Default)]
 pub struct Atom {
-    pub atom_type: AtomType,
-    pub inner: AtomContents,
+    pub nucleus: Field,
+    pub top_left: Field,
+    pub top_right: Field,
+    pub bottom_left: Field,
+    pub bottom_right: Field,
 }
 impl Atom {
-    pub fn new_with_nucleus(t: AtomType, nucleus: Field) -> Atom {
+    pub fn new_with_attachments(
+               nucleus: Field,
+               top_left: Field,
+               top_right: Field,
+               bottom_left: Field,
+               bottom_right: Field)
+               -> Atom {
         Atom {
-            atom_type: t,
-            inner: AtomContents::Fields {
-                nucleus: nucleus,
-                top_left: None,
-                top_right: None,
-                bottom_left: None,
-                bottom_right: None,
-            },
+            nucleus: nucleus,
+            top_left: top_left,
+            top_right: top_right,
+            bottom_left: bottom_left,
+            bottom_right: bottom_right,
+            ..Default::default()
         }
     }
-}
 
-#[derive(Debug, Default)]
-pub struct BoxSize {
-    pub width: i32,
-    pub height: i32,
-    pub bearing_x: i32,
-    pub bearing_y: i32,
-}
-impl BoxSize {
-    pub fn depth(self) -> i32 {
-        self.height - self.bearing_y
+    pub fn new_with_nucleus(nucleus: Field) -> Atom {
+        Atom {
+            nucleus: nucleus,
+            ..Default::default()
+        }
+    }
+
+    field_accessors!(nucleus, top_left, top_right, bottom_left, bottom_right);
+
+    pub fn fields_iterator(&self) -> AtomFieldsIterator {
+        AtomFieldsIterator {
+            atom: self,
+            state: 0,
+        }
+    }
+    pub fn has_any_attachments(&self) -> bool {
+        self.has_top_left() || self.has_top_right() || self.has_bottom_left() ||
+        self.has_bottom_right()
     }
 }
 
 #[derive(Debug, Default)]
-pub struct MathBox {
-    pub width: i32,
-    pub height: i32,
-    pub bearing_x: i32,
-    pub bearing_y: i32,
-
-    pub field: Field,
+pub struct OverUnder {
+    pub nucleus: Field,
+    pub over: Field,
+    pub under: Field,
+    pub over_is_accent: bool,
+    pub under_is_accent: bool,
 }
-impl MathBox {
-    pub fn depth(self) -> i32 {
-        self.height - self.bearing_y
-    }
+impl OverUnder {
+    field_accessors!(nucleus, over, under);
 }
 
 #[derive(Debug, Default)]
@@ -130,14 +158,19 @@ pub struct GeneralizedFraction {
     pub denominator: Field,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
+pub struct Kern {
+    pub size: i32,
+}
+
+#[derive(Debug, Default, Clone)]
 pub struct Glyph {
-    pub glyph_code: Codepoint,
+    pub glyph_code: GlyphCode,
     pub scale_x: i32,
     pub scale_y: i32,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone, PartialOrd, PartialEq, Eq, Ord)]
 #[repr(i8)]
 pub enum MathStyle {
     DisplayStyle = 8,
@@ -175,5 +208,72 @@ impl MathStyle {
 
     pub fn subscript_style(self: MathStyle) -> MathStyle {
         self.superscript_style().primed_style()
+    }
+
+    pub fn is_cramped(self) -> bool {
+        let style = self as i8;
+        style % 2 == 1
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+#[repr(u32)]
+pub enum CornerPosition {
+    TopLeft = 1,
+    TopRight = 0,
+    BottomLeft = 3,
+    BottomRight = 2,
+}
+
+
+pub use self::CornerPosition::{TopLeft, TopRight, BottomLeft, BottomRight};
+impl CornerPosition {
+
+    pub fn is_left(self) -> bool {
+        match self {
+            TopLeft | BottomLeft => true,
+            _ => false
+        }
+    }
+    pub fn is_top(self) -> bool {
+        match self {
+            TopLeft | TopRight => true,
+            _ => false
+        }
+    }
+    pub fn horizontal_mirror(self) -> Self {
+        match self {
+            TopLeft => TopRight,
+            TopRight => TopLeft,
+            BottomLeft => BottomRight,
+            BottomRight => BottomLeft,
+        }
+    }
+    pub fn vertical_mirror(self) -> Self {
+        match self {
+            TopLeft => BottomLeft,
+            TopRight => BottomRight,
+            BottomLeft => TopLeft,
+            BottomRight => TopRight,
+        }
+    }
+    pub fn diagonal_mirror(self) -> Self {
+        match self {
+            TopLeft => BottomRight,
+            TopRight => BottomLeft,
+            BottomLeft => TopRight,
+            BottomRight => TopLeft,
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::MathStyle::*;
+
+    #[test]
+    fn math_style_test() {
+        assert!(ScriptScriptStyle < ScriptStylePrime);
+        assert!(DisplayStyle > DisplayStylePrime);
     }
 }
