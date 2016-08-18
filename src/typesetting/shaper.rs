@@ -2,13 +2,11 @@
 pub extern crate harfbuzz_sys as hb;
 
 use std;
-use std::iter;
 use std::iter::Iterator;
 
-use types::{Field, Glyph, MathStyle, ListItem, Kern};
-use super::math_box::{MathBox, Extents, Content};
+use types::{Glyph, MathStyle};
+use super::math_box::{MathBox, Content};
 use super::font::{MathFont, Codepoint, GlyphPosition, GlyphInfo};
-use super::layout::BoxIter;
 
 const HB_SCRIPT_MATH: u32 = ot_tag!('M', 'a', 't', 'h');
 
@@ -107,7 +105,7 @@ fn box_from_glyph(font: &MathFont, glyph: Codepoint, style: MathStyle) -> MathBo
         scale_y: scale,
     });
     let bounds = font.get_glyph_bounds(glyph);
-    let mut italic_correction = font.get_italic_correction(glyph);
+    let italic_correction = font.get_italic_correction(glyph);
     let mut logical_extents = bounds.extents;
     logical_extents.width = font.get_glyph_h_advance(glyph);
     //if italic_correction == 0 {

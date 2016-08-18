@@ -4,7 +4,7 @@ pub use types::*;
 
 use std::iter::*;
 use std::rc::Rc;
-use std::cell::{Cell, RefCell};
+use std::cell::RefCell;
 
 
 macro_rules! ot_tag {
@@ -20,7 +20,7 @@ pub mod math_box;
 mod multiscripts;
 mod unicode_math;
 
-use self::layout::{MathBoxLayout, ListIter, BoxIter, LayoutOptions};
+use self::layout::{MathBoxLayout, ListIter, LayoutOptions};
 use self::font::{MathFont};
 use self::shaper::MathShaper;
 pub use self::math_box::{MathBox, Content, Bounds, Extents, Point};
@@ -33,19 +33,21 @@ pub fn list_to_boxes(list: List) -> MathBox {
     let bytes = include_bytes!("../../tests/testfiles/latinmodern-math.otf");
     let library = freetype::Library::init().unwrap();
     let options = LayoutOptions {
-        font: MathFont::from_bytes(bytes, 0, &library),
+        font: &MathFont::from_bytes(bytes, 0, &library),
         shaper: Rc::new(RefCell::new(MathShaper::new())),
         style: MathStyle::DisplayStyle,
 
-        ft_library: Rc::new(library),
+        ft_library: &library,
 
         //preprocessor: Rc::new(join_atoms),
     };
 
     let iter = list.into_iter();
-    iter.layout(options).collect()
+    let result = iter.layout(options).collect();
+    result
 }
 
+/*
 fn join_atoms(iter: ListIter) -> ListIter {
     Box::new(iter)
     //Box::new(AtomJoiner { iter: iter.peekable() })
@@ -105,3 +107,4 @@ impl Iterator for AtomJoiner {
         Some(ListItem::Atom(Atom::new_with_nucleus(Field::Unicode(string))))
     }
 }
+*/

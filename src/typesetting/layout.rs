@@ -3,9 +3,9 @@ extern crate freetype;
 
 use types::*;
 use std::rc::Rc;
-use std::cell::{Cell, RefCell};
+use std::cell::RefCell;
 use std::iter;
-use std::iter::{FromIterator, IntoIterator};
+use std::iter::IntoIterator;
 use std::cmp::max;
 
 use super::font::{MathFont, hb};
@@ -18,21 +18,21 @@ pub type BoxIter = Box<Iterator<Item = MathBox>>;
 
 #[derive(Clone)]
 pub struct LayoutOptions<'a> {
-    pub font: MathFont<'a>,
+    pub font: &'a MathFont<'a>,
     pub shaper: Rc<RefCell<MathShaper>>,
     pub style: MathStyle,
 
-    pub ft_library: Rc<freetype::Library>,
+    pub ft_library: &'a freetype::Library,
 }
 
 pub trait MathBoxLayout {
-    fn layout(self, options: LayoutOptions<'static>) -> BoxIter;
+    fn layout<'a>(self, options: LayoutOptions<'a>) -> Box<Iterator<Item=MathBox> + 'a>;
 }
 
 impl<I> MathBoxLayout for I
     where I: 'static + IntoIterator<Item=ListItem>
 {
-    fn layout(self, options: LayoutOptions<'static>) -> BoxIter {
+    fn layout<'a>(self, options: LayoutOptions<'a>) -> Box<Iterator<Item=MathBox> + 'a> {
         let mut cursor = 0i32;
         let mut previous_ital_cor = 0;
         let layouted = self.into_iter().map(move |item| {
@@ -54,7 +54,7 @@ impl<I> MathBoxLayout for I
 }
 
 impl MathBoxLayout for Atom {
-    fn layout(self, options: LayoutOptions<'static>) -> BoxIter {
+    fn layout<'a>(self, options: LayoutOptions<'a>) -> Box<Iterator<Item=MathBox> + 'a> {
         assert!(self.has_nucleus());
         if !self.has_any_attachments() {
             return self.nucleus.layout(options);
@@ -98,7 +98,7 @@ fn layout_superscript(mut superscript: MathBox,
 }
 
 impl MathBoxLayout for OverUnder {
-    fn layout(self, options: LayoutOptions<'static>) -> BoxIter {
+    fn layout<'a>(self, options: LayoutOptions<'a>) -> Box<Iterator<Item=MathBox> + 'a> {
         if self.has_over() {
             let mut over_options = options.clone();
             if !self.over_is_accent {
@@ -132,7 +132,7 @@ fn layout_over(mut over: MathBox, mut nucleus: MathBox, font: &MathFont, style: 
 }
 
 impl MathBoxLayout for GeneralizedFraction {
-    fn layout(self, options: LayoutOptions<'static>) -> BoxIter {
+    fn layout<'a>(self, options: LayoutOptions<'a>) -> Box<Iterator<Item=MathBox> + 'a> {
         let mut fraction_options = options.clone();
         fraction_options.style = fraction_options.style.primed_style();
         let mut numerator: MathBox = self.numerator.layout(fraction_options.clone()).collect();
@@ -187,7 +187,7 @@ impl MathBoxLayout for GeneralizedFraction {
 }
 
 impl MathBoxLayout for Field {
-    fn layout(self, options: LayoutOptions<'static>) -> BoxIter {
+    fn layout<'a>(self, options: LayoutOptions<'a>) -> Box<Iterator<Item=MathBox> + 'a> {
         match self {
             Field::Empty => Box::new(iter::empty::<MathBox>()),
             Field::Glyph(..) => unreachable!(),
@@ -202,7 +202,7 @@ impl MathBoxLayout for Field {
 }
 
 impl MathBoxLayout for ListItem {
-    fn layout(self, options: LayoutOptions<'static>) -> BoxIter {
+    fn layout<'a>(self, options: LayoutOptions<'a>) -> Box<Iterator<Item=MathBox> + 'a> {
         match self {
             ListItem::Atom(atom) => atom.layout(options),
             ListItem::GeneralizedFraction(frac) => frac.layout(options),

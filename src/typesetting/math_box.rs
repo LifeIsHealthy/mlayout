@@ -132,7 +132,7 @@ impl MathBox {
 }
 
 impl FromIterator<MathBox> for MathBox {
-    fn from_iter<I: IntoIterator<Item = MathBox>>(iter: I) -> Self {
+    fn from_iter<I: IntoIterator<Item=MathBox>>(iter: I) -> Self {
         let mut result = MathBox { content: Content::Boxes(Boxes::new()), ..Default::default() };
         let iter = iter.into_iter();
         let mut count = 0;
