@@ -5,9 +5,14 @@ use types::Glyph;
 
 type Boxes = Vec<MathBox>;
 
+/// A point in 2D space.
+///
+/// Note: The y coordinate increases downwards.
 #[derive(Debug, Default, PartialEq, Eq, Clone, Copy)]
 pub struct Point {
+    /// the x coordinate
     pub x: i32,
+    /// the y coordinate
     pub y: i32,
 }
 impl Mul<i32> for Point {
@@ -29,13 +34,18 @@ impl Div<i32> for Point {
     }
 }
 
+/// Basic Extents of boxes
 #[derive(Debug, Default, PartialEq, Eq, Clone, Copy)]
 pub struct Extents {
+    /// Width of the box
     pub width: i32,
+    /// Maximum extent of box above the baseline.
     pub ascent: i32,
+    /// Maximum extent of box above the baseline.
     pub descent: i32,
 }
 impl Extents {
+    /// Returns the height = ascent + descent of the box
     pub fn height(&self) -> i32 {
         self.ascent + self.descent
     }
@@ -61,9 +71,12 @@ impl Div<i32> for Extents {
     }
 }
 
+/// Describes the box metrics for mathematical objects.
 #[derive(Debug, Default, PartialEq, Eq, Clone, Copy)]
 pub struct Bounds {
+    /// Position on the left on the baseline.
     pub origin: Point,
+    /// Extents of the bounds.
     pub extents: Extents,
 }
 impl Bounds {
@@ -82,24 +95,34 @@ impl Bounds {
             descent: max_descent,
         }
     }
+    /// Returns bounds that have non negative ascent and descent by moving the origin.
     pub fn normalize(self) -> Bounds {
         let mut result = self;
-        if self.extents.descent < 0 {
-            result.origin.y += self.extents.descent;
-            result.extents.descent = -self.extents.descent;
-            result.extents.ascent -= -self.extents.descent;
+        if result.extents.descent < 0 {
+            result.origin.y += result.extents.descent;
+            result.extents.descent = -result.extents.descent;
+            result.extents.ascent -= result.extents.descent;
+        }
+        if result.extents.ascent < 0 {
+            result.origin.y -= result.extents.ascent;
+            result.extents.ascent = -result.extents.ascent;
+            result.extents.descent -= result.extents.ascent;
         }
         result
     }
 }
 
-/// possible content types a MathBox can have.
+/// Possible content types a MathBox can have.
 #[derive(Debug, Clone)]
 pub enum Content {
-    Empty, // empty space e.g. like kerning
-    Filled, // for fraction bars and such
-    Glyph(Glyph), // a single glyph
-    Boxes(Boxes), // a sublist of boxes
+    /// empty space e.g. like kerning
+    Empty,
+    /// for fraction bars and such
+    Filled,
+    ///  a single glyph
+    Glyph(Glyph),
+    /// a sublist of boxes
+    Boxes(Boxes),
 }
 impl Default for Content {
     fn default() -> Content {
@@ -107,22 +130,56 @@ impl Default for Content {
     }
 }
 
+/// A box that contains all the metrics of a mathematical subexpression.
+///
+/// It has two
+///
+/// See also: [MathML in HTML5 - Implementation Note](http://mathml-association.org/MathMLinHTML5/S3.html#SS1.SSS1)
 #[derive(Debug, Default, Clone)]
 pub struct MathBox {
+    /// The logical position of the Box on the baseline.
     pub origin: Point,
+    /// The extents of the ink inside the box.
     pub ink_extents: Extents,
+    /// Logical extents that may show designer's intent or additional free space neede around the
+    /// box.
     pub logical_extents: Extents,
+    /// The italic correction of the entire box.
     pub italic_correction: i32,
+    /// A value controlling the placement of top attachments.
     pub top_accent_attachment: i32,
+    /// The content of the box.
     pub content: Content,
 }
 impl MathBox {
+    /// Returns bounds with the `ink_extents` as their extents and the box origin as their origin.
+    ///
+    /// # Example
+    /// ```
+    /// use math_render::math_box::{Bounds, MathBox, Point, Extents};
+    ///
+    /// let bounds = Bounds { origin: Point { x: 10, y: 20 },
+    ///                       extents: Extents { width: 30, ascent: 40, descent: 50 } };
+    /// let math_box = MathBox { origin: bounds.origin, ink_extents: bounds.extents, ..Default::default() };
+    /// assert_eq!(bounds, math_box.get_ink_bounds())
+    /// ```
     pub fn get_ink_bounds(&self) -> Bounds {
         Bounds {
             origin: self.origin,
             extents: self.ink_extents,
         }
     }
+    /// Returns bounds with the `logical_extents` as their extents and the box origin as their origin.
+    ///
+    /// # Example
+    /// ```
+    /// use math_render::math_box::{Bounds, MathBox, Point, Extents};
+    ///
+    /// let bounds = Bounds { origin: Point { x: 10, y: 20 },
+    ///                       extents: Extents { width: 30, ascent: 40, descent: 50 } };
+    /// let math_box = MathBox { origin: bounds.origin, logical_extents: bounds.extents, ..Default::default() };
+    /// assert_eq!(bounds, math_box.get_logical_bounds())
+    /// ```
     pub fn get_logical_bounds(&self) -> Bounds {
         Bounds {
             origin: self.origin,

@@ -3,10 +3,11 @@ pub extern crate harfbuzz_sys as hb;
 
 use std;
 use std::iter::Iterator;
+use std::cell::RefCell;
 
-use types::{Glyph, MathStyle};
+use types::{Glyph, MathStyle, GlyphCode};
 use super::math_box::{MathBox, Content};
-use super::font::{MathFont, Codepoint, GlyphPosition, GlyphInfo};
+use super::font::{MathFont, GlyphPosition, GlyphInfo};
 
 const HB_SCRIPT_MATH: u32 = ot_tag!('M', 'a', 't', 'h');
 
@@ -43,9 +44,24 @@ impl Buffer {
         }
     }
 
+    fn guess_segment_properties(&mut self) {
+        unsafe {
+            hb::hb_buffer_guess_segment_properties(self.hb_buffer);
+        }
+    }
+
     fn clear(&mut self) {
         unsafe {
             hb::hb_buffer_clear_contents(self.hb_buffer);
+        }
+    }
+}
+
+impl Clone for Buffer {
+    fn clone(&self) -> Self {
+        let hb_buffer = unsafe { hb::hb_buffer_reference(self.hb_buffer) };
+        Buffer {
+            hb_buffer: hb_buffer
         }
     }
 }
@@ -97,7 +113,7 @@ fn shape<'a>(font: &MathFont,
 
 }
 
-fn box_from_glyph(font: &MathFont, glyph: Codepoint, style: MathStyle) -> MathBox {
+fn box_from_glyph(font: &MathFont, glyph: GlyphCode, style: MathStyle) -> MathBox {
     let scale = font.scale_factor_for_style(style);
     let content = Content::Glyph(Glyph {
         glyph_code: glyph,
@@ -123,23 +139,23 @@ fn box_from_glyph(font: &MathFont, glyph: Codepoint, style: MathStyle) -> MathBo
 }
 
 
+#[derive(Debug, Clone)]
 pub struct MathShaper {
-    buffer: Buffer,
+    buffer: RefCell<Buffer>,
 }
 
 impl MathShaper {
     pub fn new() -> MathShaper {
-        MathShaper { buffer: Buffer::new() }
+        MathShaper { buffer: RefCell::new(Buffer::new()) }
     }
 
-    pub fn shape(&mut self, string: &str, font: &MathFont, style: MathStyle) -> Vec<MathBox> {
-        self.buffer.clear();
-        self.buffer.set_direction(hb::HB_DIRECTION_LTR);
-        unsafe {
-            hb::hb_buffer_guess_segment_properties(self.buffer.hb_buffer);
-        }
-        self.buffer.add_str(string);
-        let (positions, infos) = shape(font, &self.buffer, style);
+    pub fn shape(&self, string: &str, font: &MathFont, style: MathStyle) -> Vec<MathBox> {
+        let mut buffer = self.buffer.borrow_mut();
+        buffer.clear();
+        buffer.set_direction(hb::HB_DIRECTION_LTR);
+        buffer.add_str(string);
+        buffer.guess_segment_properties();
+        let (positions, infos) = shape(font, &buffer, style);
         let mut cursor = 0i32;
         let list_iter = positions.iter().zip(infos.iter()).map(move |pos_info| {
             let pos = pos_info.0;

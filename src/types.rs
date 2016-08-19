@@ -1,26 +1,48 @@
 use std::mem;
 
-pub type Codepoint = u64;
+/// An identifier of a glyph inside a font.
 pub type GlyphCode = u32;
 
+/// A List of mathematical notation objects that can be typeset.
 pub type List = Vec<ListItem>;
 
+
+/// List Items are the building blocks of Lists and can represent every notation object.
 #[derive(Debug)]
 pub enum ListItem {
+    /// An expression that consists of a base (called nucleus) and optionally of attachments at
+    /// each corner (e.g. subscripts and superscripts).
     Atom(Atom),
+    /// An expression that consists of a base (called nucleus) and optionally of attachments that
+    /// go above or below the nucleus like e.g. accents.
     OverUnder(OverUnder),
+    /// A generalized version of a fraction that can also be simply a stack of objects.
     GeneralizedFraction(GeneralizedFraction),
+    /// Empty space used for visually separating adjacent elements.
     Kern(Kern),
 }
 
+/// A Field is the basic building block of mathematical subexpressions. It can be a single
+/// mathematical character or an entire mathematical sublist.
+///
+/// Typically a client will create Unicode Fields rather than Glyph fields, as the String will
+/// automatically be typesetted using complex text layout and the correct glyphs will be chosen.
+/// However the client can also choose to directly insert some specific glyph at the desired
+/// position.
+
 #[derive(Debug)]
 pub enum Field {
+    /// Nothing. This will not show in typesetted output.
     Empty,
+    /// Represents some text.
     Unicode(String),
+    /// Represents a specific glyph in the current font.
     Glyph(Glyph),
+    /// A subexpression.
     List(List),
 }
 impl Default for Field {
+    /// Returns the empty field.
     fn default() -> Field {
         Field::Empty
     }
@@ -31,6 +53,13 @@ impl ::std::convert::From<ListItem> for Field {
     }
 }
 impl Field {
+    /// Returns true if the field is an empty field.
+    /// # Example
+    /// ```
+    /// use math_render::Field;
+    ///
+    /// assert!(Field::Empty.is_empty());
+    /// ```
     pub fn is_empty(&self) -> bool {
         if let Field::Empty = *self {
             true
@@ -40,10 +69,10 @@ impl Field {
     }
 }
 
-// initialize with state = 0
+/// An Iterator over the non-empty fields of an atom.
 pub struct AtomFieldsIterator<'a> {
     atom: &'a Atom,
-    state: u8,
+    state: u8, // initial value 0
 }
 impl<'a> Iterator for AtomFieldsIterator<'a> {
     type Item = &'a Field;
@@ -53,11 +82,11 @@ impl<'a> Iterator for AtomFieldsIterator<'a> {
                 return None;
             };
             let result = match self.state {
-                0 => Some(self.atom.nucleus_ref()),
-                1 => Some(self.atom.top_left_ref()),
-                2 => Some(self.atom.top_right_ref()),
-                3 => Some(self.atom.bottom_left_ref()),
-                4 => Some(self.atom.bottom_right_ref()),
+                0 => Some(&self.atom.nucleus),
+                1 => Some(&self.atom.top_left),
+                2 => Some(&self.atom.top_right),
+                3 => Some(&self.atom.bottom_left),
+                4 => Some(&self.atom.bottom_right),
                 _ => None,
             };
             self.state += 1;
@@ -73,35 +102,32 @@ macro_rules! field_accessors {
     ( $( $x:ident ),* ) => {
         $(
             interpolate_idents! {
+                /// Returns true if the field is non-empty.
                 pub fn [has_ $x](&self) -> bool {
                     !(self.$x.is_empty())
-                }
-
-                pub fn [$x _ref](&self) -> &Field {
-                    &self.$x
-                }
-
-                pub fn [$x _ref_mut](&mut self) -> &mut Field {
-                    &mut self.$x
-                }
-
-                pub fn $x(self) -> Field {
-                    self.$x
                 }
             }
         )*
     };
 }
 
+/// An expression that consists of a base (called nucleus) and optionally of attachments at
+/// each corner (e.g. subscripts and superscripts).
 #[derive(Debug, Default)]
 pub struct Atom {
+    /// The base of the atom.
     pub nucleus: Field,
+    /// top left attachment
     pub top_left: Field,
+    /// top right attachment
     pub top_right: Field,
+    /// bottom left attachment
     pub bottom_left: Field,
+    /// bottom right attachment
     pub bottom_right: Field,
 }
 impl Atom {
+    /// Constructs an atom.
     pub fn new_with_attachments(
                nucleus: Field,
                top_left: Field,
@@ -119,6 +145,7 @@ impl Atom {
         }
     }
 
+    /// Constructs an atom with empty attachments.
     pub fn new_with_nucleus(nucleus: Field) -> Atom {
         Atom {
             nucleus: nucleus,
@@ -128,12 +155,15 @@ impl Atom {
 
     field_accessors!(nucleus, top_left, top_right, bottom_left, bottom_right);
 
+    /// Returns an iterator over all non-empty fields of the Atom.
     pub fn fields_iterator(&self) -> AtomFieldsIterator {
         AtomFieldsIterator {
             atom: self,
             state: 0,
         }
     }
+
+    /// Returns true if any of the attachments is non-empty.
     pub fn has_any_attachments(&self) -> bool {
         self.has_top_left() || self.has_top_right() || self.has_bottom_left() ||
         self.has_bottom_right()
@@ -152,21 +182,32 @@ impl OverUnder {
     field_accessors!(nucleus, over, under);
 }
 
+/// A structure describing a generalized fraction.
 #[derive(Debug, Default)]
 pub struct GeneralizedFraction {
+    /// The field above the fraction bar.
     pub numerator: Field,
+    /// The field below the fraction bar.
     pub denominator: Field,
 }
 
+/// A structure describing a fixed amount of whitespace.
 #[derive(Debug)]
 pub struct Kern {
     pub size: i32,
 }
 
+/// A font-dependent representation of a scaled glyph.
+///
+/// The scaling values are in percent and range from 0 to 100. A value of 100 means no rescaling in
+/// that direction.
 #[derive(Debug, Default, Clone)]
 pub struct Glyph {
+    /// The identifier of the glyph inside the font.
     pub glyph_code: GlyphCode,
+    /// The horizontal scale factor in percent.
     pub scale_x: i32,
+    /// The vertical scale factor in percent.
     pub scale_y: i32,
 }
 
@@ -216,6 +257,7 @@ impl MathStyle {
     }
 }
 
+/// Possible positions of multiscripts relative to the base.
 #[derive(Debug, Clone, Copy)]
 #[repr(u32)]
 pub enum CornerPosition {

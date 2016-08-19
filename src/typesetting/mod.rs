@@ -1,10 +1,6 @@
 extern crate freetype;
 
-pub use types::*;
-
 use std::iter::*;
-use std::rc::Rc;
-use std::cell::RefCell;
 
 
 macro_rules! ot_tag {
@@ -18,14 +14,15 @@ pub mod font;
 mod shaper;
 pub mod math_box;
 mod multiscripts;
-mod unicode_math;
+pub mod unicode_math;
 
-use self::layout::{MathBoxLayout, ListIter, LayoutOptions};
+use types::*;
+pub use self::layout::{MathBoxLayout, LayoutOptions};
 use self::font::{MathFont};
 use self::shaper::MathShaper;
-pub use self::math_box::{MathBox, Content, Bounds, Extents, Point};
+use self::math_box::{MathBox, Content, Bounds, Extents, Point};
 
-pub use self::unicode_math::{Family, convert_character_to_family};
+use self::unicode_math::{Family, convert_character_to_family};
 
 // Calculates the dimensions of the components and their relative positioning. However no space
 // is distributed.
@@ -34,7 +31,7 @@ pub fn list_to_boxes(list: List) -> MathBox {
     let library = freetype::Library::init().unwrap();
     let options = LayoutOptions {
         font: &MathFont::from_bytes(bytes, 0, &library),
-        shaper: Rc::new(RefCell::new(MathShaper::new())),
+        shaper: &MathShaper::new(),
         style: MathStyle::DisplayStyle,
 
         ft_library: &library,

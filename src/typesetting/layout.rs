@@ -2,8 +2,6 @@
 extern crate freetype;
 
 use types::*;
-use std::rc::Rc;
-use std::cell::RefCell;
 use std::iter;
 use std::iter::IntoIterator;
 use std::cmp::max;
@@ -16,10 +14,10 @@ use super::multiscripts::*;
 pub type ListIter = Box<Iterator<Item = ListItem>>;
 pub type BoxIter = Box<Iterator<Item = MathBox>>;
 
-#[derive(Clone)]
+#[derive(Clone, Copy)]
 pub struct LayoutOptions<'a> {
     pub font: &'a MathFont<'a>,
-    pub shaper: Rc<RefCell<MathShaper>>,
+    pub shaper: &'a MathShaper,
     pub style: MathStyle,
 
     pub ft_library: &'a freetype::Library,
@@ -36,7 +34,7 @@ impl<I> MathBoxLayout for I
         let mut cursor = 0i32;
         let mut previous_ital_cor = 0;
         let layouted = self.into_iter().map(move |item| {
-            let mut math_box: MathBox = item.layout(options.clone()).collect();
+            let mut math_box: MathBox = item.layout(options).collect();
             if math_box.italic_correction == 0 {
                 if previous_ital_cor != 0 {
                     cursor += previous_ital_cor;
@@ -60,10 +58,10 @@ impl MathBoxLayout for Atom {
             return self.nucleus.layout(options);
         }
         if self.has_top_right() {
-            let mut superscript_options = options.clone();
+            let mut superscript_options = options;
             superscript_options.style = options.style.superscript_style();
             return layout_superscript(self.top_right.layout(superscript_options).collect(),
-                               self.nucleus.layout(options.clone()).collect(),
+                               self.nucleus.layout(options).collect(),
                                &options.font,
                                options.style)
         } else {
@@ -100,13 +98,13 @@ fn layout_superscript(mut superscript: MathBox,
 impl MathBoxLayout for OverUnder {
     fn layout<'a>(self, options: LayoutOptions<'a>) -> Box<Iterator<Item=MathBox> + 'a> {
         if self.has_over() {
-            let mut over_options = options.clone();
+            let mut over_options = options;
             if !self.over_is_accent {
                 over_options.style = over_options.style.superscript_style();
             }
             let font = &options.font;
             let style = options.style;
-            layout_over(self.over.layout(over_options).collect(), self.nucleus.layout(options.clone()).collect(), font, style, self.over_is_accent)
+            layout_over(self.over.layout(over_options).collect(), self.nucleus.layout(options).collect(), font, style, self.over_is_accent)
         } else {
             unimplemented!()
         }
@@ -116,7 +114,7 @@ impl MathBoxLayout for OverUnder {
 fn layout_over(mut over: MathBox, mut nucleus: MathBox, font: &MathFont, style: MathStyle, as_accent: bool) -> BoxIter {
     let over_gap = font.get_math_constant(hb::HB_OT_MATH_CONSTANT_OVERBAR_VERTICAL_GAP);
     let over_shift = over_gap + nucleus.ink_extents.ascent + over.ink_extents.descent;
-    println!("{:?}", over);
+    // println!("{:?}", over);
     over.origin.y -= over_shift;
 
     // centering
@@ -133,10 +131,10 @@ fn layout_over(mut over: MathBox, mut nucleus: MathBox, font: &MathFont, style: 
 
 impl MathBoxLayout for GeneralizedFraction {
     fn layout<'a>(self, options: LayoutOptions<'a>) -> Box<Iterator<Item=MathBox> + 'a> {
-        let mut fraction_options = options.clone();
+        let mut fraction_options = options;
         fraction_options.style = fraction_options.style.primed_style();
-        let mut numerator: MathBox = self.numerator.layout(fraction_options.clone()).collect();
-        let mut denominator: MathBox = self.denominator.layout(fraction_options.clone()).collect();
+        let mut numerator: MathBox = self.numerator.layout(fraction_options).collect();
+        let mut denominator: MathBox = self.denominator.layout(fraction_options).collect();
         let font = &options.font;
 
         let axis_height = font.get_math_constant(hb::HB_OT_MATH_CONSTANT_AXIS_HEIGHT);
@@ -192,7 +190,7 @@ impl MathBoxLayout for Field {
             Field::Empty => Box::new(iter::empty::<MathBox>()),
             Field::Glyph(..) => unreachable!(),
             Field::Unicode(content) => {
-                let mut shaper = options.shaper.borrow_mut();
+                let shaper = options.shaper;
                 let shaping_result = shaper.shape(&content, &options.font, options.style);
                 Box::new(shaping_result.into_iter())
             }

@@ -3,19 +3,18 @@ extern crate quick_xml;
 use std::fmt;
 use std::error::Error;
 use std::io::BufRead;
-use std::borrow::Borrow;
 
 use self::quick_xml::{XmlReader, Event, Element, AsStr};
 
 use types::{List, ListItem, Field, Atom, OverUnder, GeneralizedFraction};
 use types::Field::Empty;
 
-use super::{Family, convert_character_to_family};
+use unicode_math::{Family, convert_character_to_family};
 
 #[derive(Debug)]
 pub struct ParsingError {
-    position: Option<usize>,
-    error_type: ErrorType,
+    pub position: Option<usize>,
+    pub error_type: ErrorType,
 }
 impl ParsingError {
     fn from_string<B: BufRead>(parser: &XmlReader<B>, string: &str) -> ParsingError {

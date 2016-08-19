@@ -1,5 +1,6 @@
 use std::char;
 
+/// Mathematical font families available from the unicode character range.
 #[derive(Copy, Clone)]
 #[repr(u32)]
 #[derive(Debug)]

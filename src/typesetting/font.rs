@@ -11,7 +11,6 @@ use super::freetype;
 use super::freetype::face;
 
 pub type Position = hb::hb_position_t;
-pub type Codepoint = hb::hb_codepoint_t;
 pub type GlyphPosition = hb::hb_glyph_position_t;
 pub type GlyphExtents = hb::hb_glyph_extents_t;
 pub type GlyphInfo = hb::hb_glyph_info_t;
@@ -50,6 +49,20 @@ impl<'a> Blob<'a> {
         }
     }
 }
+
+impl<'a> Clone for Blob<'a> {
+    fn clone(&self) -> Self {
+        let hb_blob = unsafe { hb::hb_blob_reference(self.hb_blob) };
+        Blob {
+            hb_blob: hb_blob,
+            _marker: PhantomData,
+        }
+    }
+}
+
+unsafe impl<'a> Send for Blob<'a> {}
+unsafe impl<'a> Sync for Blob<'a> {}
+
 impl<'a> Drop for Blob<'a> {
     fn drop(&mut self) {
         unsafe {
