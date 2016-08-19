@@ -1,7 +1,7 @@
 use std::cmp::max;
 
 use types::{GlyphCode, MathStyle, Glyph, CornerPosition};
-use types::CornerPosition::{TopLeft, TopRight, BottomLeft, BottomRight};
+use types::CornerPosition::{TopLeft, BottomRight};
 use super::font::{MathFont, hb, Position};
 use super::math_box::{MathBox, Content};
 
@@ -47,18 +47,17 @@ pub fn get_superscript_shift_up(superscript: &MathBox,
 
 pub fn get_subscript_shift_dn(subscript: &MathBox,
                               nucleus: &MathBox,
-                              font: &MathFont,
-                              style: MathStyle)
+                              font: &MathFont)
                               -> Position {
-    let min_shif_dn_from_baseline_drop =
+    let min_shift_dn_from_baseline_drop =
         nucleus.ink_extents.descent +
         font.get_math_constant(hb::HB_OT_MATH_CONSTANT_SUBSCRIPT_BASELINE_DROP_MIN);
 
     let std_shift_dn = font.get_math_constant(hb::HB_OT_MATH_CONSTANT_SUBSCRIPT_SHIFT_DOWN);
-    let min_shift_dn = subscript.ink_extents.ascent +
+    let min_shift_dn = subscript.ink_extents.ascent -
                        font.get_math_constant(hb::HB_OT_MATH_CONSTANT_SUBSCRIPT_TOP_MAX);
 
-    max(min_shif_dn_from_baseline_drop,
+    max(min_shift_dn_from_baseline_drop,
         max(std_shift_dn, min_shift_dn))
 }
 

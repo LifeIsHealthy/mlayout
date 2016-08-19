@@ -20,9 +20,7 @@ use types::*;
 pub use self::layout::{MathBoxLayout, LayoutOptions};
 use self::font::{MathFont};
 use self::shaper::MathShaper;
-use self::math_box::{MathBox, Content, Bounds, Extents, Point};
-
-use self::unicode_math::{Family, convert_character_to_family};
+use self::math_box::MathBox;
 
 // Calculates the dimensions of the components and their relative positioning. However no space
 // is distributed.

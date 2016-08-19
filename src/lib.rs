@@ -2,7 +2,7 @@
 #![plugin(interpolate_idents)]
 
 // #![feature(specialization)]
-#![warn(missing_docs)]
+#![allow(missing_docs)]
 #![allow(unknown_lints)]
 
 mod types;

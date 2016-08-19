@@ -112,7 +112,7 @@ impl Bounds {
     }
 }
 
-/// Possible content types a MathBox can have.
+/// Possible content types a `MathBox` can have.
 #[derive(Debug, Clone)]
 pub enum Content {
     /// empty space e.g. like kerning

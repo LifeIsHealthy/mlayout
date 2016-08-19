@@ -3,6 +3,7 @@ extern crate math_render;
 extern crate freetype;
 
 use math_render::*;
+use math_render::math_box::*;
 
 use svg::Document;
 use svg::node::element::{Rectangle, Line, Group, Path};

@@ -40,4 +40,4 @@
 <mi>I</mi>
 <mi>dd</mi> -->
 
-<mover><mo>a</mo><mo>→</mo></mover>
+<msub><mi>a</mi><mi>b</mi></msub>

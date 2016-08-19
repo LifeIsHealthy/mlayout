@@ -78,16 +78,13 @@ impl<'a> Iterator for AtomFieldsIterator<'a> {
     type Item = &'a Field;
     fn next(&mut self) -> Option<&'a Field> {
         loop {
-            if self.state > 4 {
-                return None;
-            };
             let result = match self.state {
                 0 => Some(&self.atom.nucleus),
                 1 => Some(&self.atom.top_left),
                 2 => Some(&self.atom.top_right),
                 3 => Some(&self.atom.bottom_left),
                 4 => Some(&self.atom.bottom_right),
-                _ => None,
+                _ => return None,
             };
             self.state += 1;
             match result {
@@ -170,12 +167,19 @@ impl Atom {
     }
 }
 
+/// An expression that consists of a base (called nucleus) and optionally of attachments that
+/// go above or below the nucleus like e.g. accents.
 #[derive(Debug, Default)]
 pub struct OverUnder {
+    /// the base
     pub nucleus: Field,
+    /// the `Field` to go above the base
     pub over: Field,
+    /// the `Field` to go below the base
     pub under: Field,
+    /// the `over` field should be rendered as an accent
     pub over_is_accent: bool,
+    /// the `under` field should be rendered as an accent
     pub under_is_accent: bool,
 }
 impl OverUnder {
@@ -194,6 +198,7 @@ pub struct GeneralizedFraction {
 /// A structure describing a fixed amount of whitespace.
 #[derive(Debug)]
 pub struct Kern {
+    /// the size of the whitespace
     pub size: i32,
 }
 
@@ -213,6 +218,7 @@ pub struct Glyph {
 
 #[derive(Debug, Copy, Clone, PartialOrd, PartialEq, Eq, Ord)]
 #[repr(i8)]
+#[allow(missing_docs)]
 pub enum MathStyle {
     DisplayStyle = 8,
     DisplayStylePrime = 7,
@@ -227,6 +233,7 @@ pub enum MathStyle {
     Decrease = -2,
 }
 impl MathStyle {
+    /// Returns the primed version of the style. No changes if the style is already primed.
     pub fn primed_style(self: MathStyle) -> MathStyle {
         let mut style: i8 = unsafe { mem::transmute(self) };
         style -= (style + 1) % 2;
@@ -234,6 +241,7 @@ impl MathStyle {
         unsafe { mem::transmute(style) }
     }
 
+    /// Returns the style used to layout a superscript.
     pub fn superscript_style(self: MathStyle) -> MathStyle {
         match self {
             MathStyle::DisplayStyle | MathStyle::TextStyle => MathStyle::ScriptStyle,
@@ -247,10 +255,12 @@ impl MathStyle {
         }
     }
 
+    /// Returns the style used to layout a subscript.
     pub fn subscript_style(self: MathStyle) -> MathStyle {
         self.superscript_style().primed_style()
     }
 
+    /// Returns true if the style is 'cramped'.
     pub fn is_cramped(self) -> bool {
         let style = self as i8;
         style % 2 == 1
@@ -261,9 +271,13 @@ impl MathStyle {
 #[derive(Debug, Clone, Copy)]
 #[repr(u32)]
 pub enum CornerPosition {
+    /// Prescript top
     TopLeft = 1,
+    /// Superscript position
     TopRight = 0,
+    /// Prescript bottom
     BottomLeft = 3,
+    /// Subscript position
     BottomRight = 2,
 }
 
@@ -271,18 +285,23 @@ pub enum CornerPosition {
 pub use self::CornerPosition::{TopLeft, TopRight, BottomLeft, BottomRight};
 impl CornerPosition {
 
+    /// Returns true if the position is left of the base
     pub fn is_left(self) -> bool {
         match self {
             TopLeft | BottomLeft => true,
             _ => false
         }
     }
+
+    /// Returns true if the position is right of the base
     pub fn is_top(self) -> bool {
         match self {
             TopLeft | TopRight => true,
             _ => false
         }
     }
+
+    /// Returns the position that is horizontally "on the other side".
     pub fn horizontal_mirror(self) -> Self {
         match self {
             TopLeft => TopRight,
@@ -291,6 +310,8 @@ impl CornerPosition {
             BottomRight => BottomLeft,
         }
     }
+
+    /// Returns the position that is vercally opposite.
     pub fn vertical_mirror(self) -> Self {
         match self {
             TopLeft => BottomLeft,
@@ -299,6 +320,8 @@ impl CornerPosition {
             BottomRight => TopRight,
         }
     }
+
+    /// Returns the position that is both horizontally and vertically mirrored.
     pub fn diagonal_mirror(self) -> Self {
         match self {
             TopLeft => BottomRight,

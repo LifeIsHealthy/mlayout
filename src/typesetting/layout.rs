@@ -64,10 +64,16 @@ impl MathBoxLayout for Atom {
                                self.nucleus.layout(options).collect(),
                                &options.font,
                                options.style)
+        } else if self.has_bottom_right() {
+            let mut subscript_options = options;
+            subscript_options.style = options.style.subscript_style();
+            return layout_subscript(self.bottom_right.layout(subscript_options).collect(),
+                               self.nucleus.layout(options).collect(),
+                               &options.font,
+                               options.style)
         } else {
             unimplemented!()
         }
-
     }
 }
 
@@ -92,6 +98,30 @@ fn layout_superscript(mut superscript: MathBox,
     superscript.origin.y -= superscript_shift_up;
     superscript.logical_extents.width += space_after_script;
     let result = vec![nucleus, superscript];
+    Box::new(result.into_iter())
+}
+
+fn layout_subscript(mut subscript: MathBox,
+                      nucleus: MathBox,
+                      font: &MathFont,
+                      style: MathStyle)
+                      -> BoxIter {
+    let space_after_script = font.get_math_constant(hb::HB_OT_MATH_CONSTANT_SPACE_AFTER_SCRIPT);
+
+    let subscript_shift_dn = get_subscript_shift_dn(&subscript, &nucleus, font);
+    println!("{:?}", subscript_shift_dn);
+
+    let superscript_kerning = get_attachment_kern(&nucleus,
+                                                  &subscript,
+                                                  CornerPosition::BottomRight,
+                                                  subscript_shift_dn,
+                                                  font);
+
+    subscript.origin.x  = nucleus.origin.x + nucleus.logical_extents.width;
+    subscript.origin.x += superscript_kerning;
+    subscript.origin.y += subscript_shift_dn;
+    subscript.logical_extents.width += space_after_script;
+    let result = vec![nucleus, subscript];
     Box::new(result.into_iter())
 }
 
