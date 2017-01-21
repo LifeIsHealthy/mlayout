@@ -1,5 +1,6 @@
 extern crate freetype;
 
+use std::fmt::Debug;
 use std::iter::*;
 
 
@@ -11,95 +12,36 @@ macro_rules! ot_tag {
 
 mod layout;
 pub mod font;
-mod shaper;
+pub mod shaper;
 pub mod math_box;
 mod multiscripts;
 pub mod unicode_math;
 
 use types::*;
 pub use self::layout::{MathBoxLayout, LayoutOptions};
-use self::font::{MathFont};
+use self::font::MathFont;
 use self::shaper::MathShaper;
 use self::math_box::MathBox;
 
 // Calculates the dimensions of the components and their relative positioning. However no space
 // is distributed.
-pub fn list_to_boxes(list: List) -> MathBox {
-    let bytes = include_bytes!("../../tests/testfiles/latinmodern-math.otf");
-    let library = freetype::Library::init().unwrap();
+pub fn layout<T: Debug>(expression: MathExpression<T>,
+                 font: &MathFont,
+                 ft_lib: &freetype::Library)
+                 -> MathBox<T> {
+    let shaper = MathShaper::new();
     let options = LayoutOptions {
-        font: &MathFont::from_bytes(bytes, 0, &library),
-        shaper: &MathShaper::new(),
-        style: MathStyle::DisplayStyle,
+        font: font,
+        shaper: &shaper,
+        style: LayoutStyle {
+            math_style: MathStyle::Display,
+            script_level: 0,
+            is_cramped: false,
+        },
 
-        ft_library: &library,
-
-        //preprocessor: Rc::new(join_atoms),
+        ft_library: ft_lib,
     };
 
-    let iter = list.into_iter();
-    let result = iter.layout(options).collect();
-    result
+    let boxes = expression.layout(options);
+    boxes.collect()
 }
-
-/*
-fn join_atoms(iter: ListIter) -> ListIter {
-    Box::new(iter)
-    //Box::new(AtomJoiner { iter: iter.peekable() })
-}
-
-struct AtomJoiner {
-    iter: Peekable<ListIter>,
-}
-impl Iterator for AtomJoiner {
-    type Item = ListItem;
-    fn next(&mut self) -> Option<ListItem> {
-        let mut cur_item = match self.iter.next() {
-            Some(item) => item,
-            None => return None,
-        };
-
-        let mut string = String::new();
-        let mut should_finalize = false;
-        loop {
-            match cur_item {
-                ListItem::Atom(ref atom @ Atom{
-                                nucleus: Field::Unicode(..), ..
-                            }) if !atom.has_any_attachments() => {
-                    let next_atom = self.iter.peek();
-                    match next_atom {
-                        Some(&ListItem::Atom(ref next_atom @ Atom{
-                                    nucleus: Field::Unicode(..), ..
-                                })) if !next_atom.has_any_attachments() => {},
-                        _ => should_finalize = true,
-                    }
-                }
-                _ => return Some(cur_item),
-            };
-
-            let content = match cur_item {
-                ListItem::Atom(Atom { nucleus: Field::Unicode(txt), .. }) => txt,
-                _ => unreachable!(),
-            };
-            string.push_str(&content);
-
-            if should_finalize && !string.is_empty() {
-                break;
-            };
-            should_finalize = false;
-            cur_item = match self.iter.next() {
-                Some(item) => item,
-                None => {
-                    if string.is_empty() {
-                        return None;
-                    } else {
-                        break;
-                    }
-                }
-            };
-        }
-
-        Some(ListItem::Atom(Atom::new_with_nucleus(Field::Unicode(string))))
-    }
-}
-*/

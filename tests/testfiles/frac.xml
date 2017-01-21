@@ -1,0 +1,17 @@
+<mfrac>
+    <mi>V</mi>
+    <mi>b</mi>
+</mfrac>
+
+<mfrac>
+    <mroot>
+    <mi mathvariant="fraktur">hello</mi>
+    <mi mathvariant="bold-script">S</mi>
+</mroot>
+    <mi mathvariant="double-struck">world</mi>
+</mfrac>
+<mo>+</mo>
+<mfrac>
+    <mn>1</mn>
+    <mn>2</mn>
+</mfrac>

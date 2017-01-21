@@ -18,7 +18,7 @@
 <mo form="infix">=</mo>
 <mfrac>
     <mrow>
-        <mo form="infix" lucida="true">-</mo>
+        <mo lucida="true">−</mo>
         <msup>
             <mi title="Plank's constant">h</mi>
             <mn>2</mn>
@@ -30,9 +30,9 @@
     </mrow>
 </mfrac>
 <msup title="Laplacian">
-    <mover>
+    <mover accent="true">
         <mo>&#8711;</mo>
-        <mo>→</mo>
+        <mo>&#x20D7;</mo>
     </mover>
     <mn>2</mn>
 </msup>
@@ -43,10 +43,12 @@
 <mo form="infix">+</mo>
 <mover title="Potential energy" accent="true">
     <mi>V</mi>
-    <mi>^</mi>
+    <mi>&#x0302;</mi>
 </mover>
-<mi>V̂</mi>
-<mn title="Wavefunction">&#936;</mn>
+<msub>
+    <mn title="Wavefunction">&#936;</mn>
+    <mi>t</mi>
+</msub>
 
 <!-- <mi>V</mi>
 <mi>I</mi>

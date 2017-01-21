@@ -1,0 +1,21 @@
+<mover accent="true">
+    <mi>V</mi>
+    <mi>^</mi>
+</mover>
+
+<mover accent="false">
+    <mi>V</mi>
+    <mi>^</mi>
+</mover>
+
+<mover accent="true">
+    <mi>V</mi>
+    <mi>&#x0302;</mi>
+</mover>
+
+<mi>V&#x0302;</mi>
+
+<mover accent="false">
+    <mi>V</mi>
+    <mi>&#x0302;</mi>
+</mover>

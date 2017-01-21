@@ -1,0 +1,33 @@
+<mroot>
+    <mi>2</mi>
+    <mi>3</mi>
+</mroot>
+<mo>+</mo>
+<msqrt>
+    <mfrac>
+        <mi>V</mi>
+        <mi>B</mi>
+    </mfrac>
+</msqrt>
+<mo>+</mo>
+<mroot>
+    <mfrac>
+        <mi>V</mi>
+        <mi>B</mi>
+    </mfrac>
+    <mi>k</mi>
+</mroot>
+<mo>+</mo>
+<msqrt>
+    <mfrac>
+        <mi>1</mi>
+        <mrow>
+            <mi>1</mi>
+            <mo>+</mo>
+            <mfrac>
+                <mi>1</mi>
+                <mi>2</mi>
+            </mfrac>
+        </mrow>
+    </mfrac>
+</msqrt>

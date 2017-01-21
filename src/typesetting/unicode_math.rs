@@ -375,19 +375,19 @@ const MONOSPACE: &'static [u32] = &[
 ];
 
 static FAMILY_TABLES: &'static [&'static [u32]] = &[
-    &ITALICS,
-    &BOLD,
-    &BOLD_ITALICS,
-    &SCRIPT,
-    &BOLD_SCRIPT,
-    &FRAKTUR,
-    &DOUBLE_STRUCK,
-    &BOLD_FRAKTUR,
-    &SANS_SERIF,
-    &SANS_SERIF_BOLD,
-    &SANS_SERIF_ITALICS,
-    &SANS_SERIF_BOLD_ITALICS,
-    &MONOSPACE
+    ITALICS,
+    BOLD,
+    BOLD_ITALICS,
+    SCRIPT,
+    BOLD_SCRIPT,
+    FRAKTUR,
+    DOUBLE_STRUCK,
+    BOLD_FRAKTUR,
+    SANS_SERIF,
+    SANS_SERIF_BOLD,
+    SANS_SERIF_ITALICS,
+    SANS_SERIF_BOLD_ITALICS,
+    MONOSPACE
 ];
 
 static CHARACTER_TABLES: &'static [&'static [u32]] = &[

@@ -1,9 +1,9 @@
-#![feature(plugin)]
-#![plugin(interpolate_idents)]
-
-// #![feature(specialization)]
 #![allow(missing_docs)]
 #![allow(unknown_lints)]
+
+#[macro_use]
+extern crate bitflags;
+
 
 mod types;
 mod typesetting;

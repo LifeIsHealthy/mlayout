@@ -1,55 +1,124 @@
-use std::mem;
+use std::default::Default;
+use std::fmt::Debug;
+use std::fmt;
+use std::ops::{Mul, Div};
 
 /// An identifier of a glyph inside a font.
 pub type GlyphCode = u32;
 
-/// A List of mathematical notation objects that can be typeset.
-pub type List = Vec<ListItem>;
-
-
-/// List Items are the building blocks of Lists and can represent every notation object.
-#[derive(Debug)]
-pub enum ListItem {
-    /// An expression that consists of a base (called nucleus) and optionally of attachments at
-    /// each corner (e.g. subscripts and superscripts).
-    Atom(Atom),
-    /// An expression that consists of a base (called nucleus) and optionally of attachments that
-    /// go above or below the nucleus like e.g. accents.
-    OverUnder(OverUnder),
-    /// A generalized version of a fraction that can also be simply a stack of objects.
-    GeneralizedFraction(GeneralizedFraction),
-    /// Empty space used for visually separating adjacent elements.
-    Kern(Kern),
+/// The main type used for typesetting.
+#[derive(Default, Debug)]
+pub struct MathExpression<T: Debug> {
+    /// The contained `MathItem`.
+    pub content: MathItem<T>,
+    /// User provided information that can be used for fancy rendering (colors, etc.) or matching
+    /// input with output. This will get returned in the `MathBox`es of the layouted content.
+    pub user_info: T,
 }
 
-/// A Field is the basic building block of mathematical subexpressions. It can be a single
-/// mathematical character or an entire mathematical sublist.
-///
-/// Typically a client will create Unicode Fields rather than Glyph fields, as the String will
-/// automatically be typesetted using complex text layout and the correct glyphs will be chosen.
-/// However the client can also choose to directly insert some specific glyph at the desired
-/// position.
+impl<T: Debug> MathExpression<T> {
+    /// Returns `true` if the `MathExpression` contains just an empty field.
+    pub fn is_empty(&self) -> bool {
+        if let MathItem::Field(Field::Empty) = self.content {
+            true
+        } else {
+            false
+        }
+    }
+}
 
+impl<T: Default + Debug> MathExpression<T> {
+    /// Creates an empty `MathExpression`.
+    pub fn empty() -> MathExpression<T> {
+        let item = MathItem::Field(Field::Empty);
+        MathExpression {
+            content: item,
+            user_info: Default::default(),
+        }
+    }
+
+    /// Returns true if the content is spacelike. That means the content will not cause anything
+    /// to be drawn.
+    pub fn is_space(&self) -> bool {
+        self.content.is_space()
+    }
+}
+
+
+/// A `MathItem` is the abstract representation of mathematical notation that manages the layout
+/// of its subexpressions.
 #[derive(Debug)]
+pub enum MathItem<T: Debug> {
+    /// A simple element displaying a single field without special formatting.
+    Field(Field),
+    /// A fixed amount of whitespace in the formula. `width` specifies the horizontal space,
+    /// `ascent` the space above the baseline and `descent` the space below the baseline.
+    Space {
+        width: Length,
+        ascent: Length,
+        descent: Length,
+    },
+    /// An expression that consists of a base (called nucleus) and optionally of attachments at
+    /// each corner (e.g. subscripts and superscripts).
+    Atom(Box<Atom<T>>),
+    /// An expression that consists of a base and optionally of attachments that go above or below
+    /// the nucleus like e.g. accents.
+    OverUnder(Box<OverUnder<T>>),
+    /// A generalized version of a fraction that can ether render as a standard fraction or
+    /// as a stack of objects (e.g. for layout of mathematical vectors).
+    GeneralizedFraction(Box<GeneralizedFraction<T>>),
+    /// A expression inside a radical symbol with an optional degree.
+    Root(Box<Root<T>>),
+    /// A expression that can grow horizontally or vertically to match the size of its surrounding
+    /// elements.
+    Stretchy(Box<Stretchable<T>>),
+    /// A list of math items to be layed out sequentially.
+    List(Vec<MathExpression<T>>),
+}
+
+impl<T: Debug> Default for MathItem<T> {
+    fn default() -> MathItem<T> {
+        MathItem::Field(Field::Empty)
+    }
+}
+
+impl<T: Debug> MathItem<T> {
+    pub fn is_space(&self) -> bool {
+        if let MathItem::Space { .. } = *self {
+            true
+        } else {
+            false
+        }
+    }
+}
+
+
+/// A Field is the basic building block of mathematical notation. If a `MathExpression` is
+/// considered as a tree data structure, then a `Field` represents a leaf.
+///
+/// You can choose to create fields directly using the font-specific glyph code of the glyph to be
+/// displayed or just create one from just a `String`. Typically you should create Unicode Fields
+/// rather than Glyph fields, as the String will automatically be typesetted using complex text
+/// layout and the correct glyphs will be chosen. However if you are absolutely sure that you want
+/// a certain glyph to appear in the output, This can be specified with a Glyph field.
+///
+/// There is also a third option to create an empty field. This should be used if for some reason
+/// you don't actually want to draw anything but still get an empty 'marker'-box in the output.
+/// This can be used e.g. to denote the cursor position in an equation editor.
+#[derive(Debug, PartialEq, Eq)]
 pub enum Field {
     /// Nothing. This will not show in typesetted output.
     Empty,
-    /// Represents some text.
+    /// Represents some text that should be layed out using complex text layout features of
+    /// OpenType.
     Unicode(String),
     /// Represents a specific glyph in the current font.
     Glyph(Glyph),
-    /// A subexpression.
-    List(List),
 }
 impl Default for Field {
     /// Returns the empty field.
     fn default() -> Field {
         Field::Empty
-    }
-}
-impl ::std::convert::From<ListItem> for Field {
-    fn from(item: ListItem) -> Field {
-        Field::List(vec![item])
     }
 }
 impl Field {
@@ -59,211 +128,268 @@ impl Field {
     /// use math_render::Field;
     ///
     /// assert!(Field::Empty.is_empty());
+    /// assert!(!Field::Unicode("Not empty".into()).is_empty())
     /// ```
     pub fn is_empty(&self) -> bool {
-        if let Field::Empty = *self {
-            true
-        } else {
-            false
-        }
+        *self == Field::Empty
     }
 }
 
-/// An Iterator over the non-empty fields of an atom.
-pub struct AtomFieldsIterator<'a> {
-    atom: &'a Atom,
-    state: u8, // initial value 0
-}
-impl<'a> Iterator for AtomFieldsIterator<'a> {
-    type Item = &'a Field;
-    fn next(&mut self) -> Option<&'a Field> {
-        loop {
-            let result = match self.state {
-                0 => Some(&self.atom.nucleus),
-                1 => Some(&self.atom.top_left),
-                2 => Some(&self.atom.top_right),
-                3 => Some(&self.atom.bottom_left),
-                4 => Some(&self.atom.bottom_right),
-                _ => return None,
-            };
-            self.state += 1;
-            match result {
-                Some(field) if !field.is_empty() => return Some(field),
-                _ => {},
-            };
-        }
-    }
-}
-
-macro_rules! field_accessors {
-    ( $( $x:ident ),* ) => {
-        $(
-            interpolate_idents! {
-                /// Returns true if the field is non-empty.
-                pub fn [has_ $x](&self) -> bool {
-                    !(self.$x.is_empty())
-                }
-            }
-        )*
-    };
-}
-
-/// An expression that consists of a base (called nucleus) and optionally of attachments at
-/// each corner (e.g. subscripts and superscripts).
-#[derive(Debug, Default)]
-pub struct Atom {
+/// An expression that consists of a base (called nucleus) and attachments at each corner (e.g.
+/// subscripts and superscripts).
+#[derive(Default, Debug)]
+pub struct Atom<T: Debug> {
     /// The base of the atom.
-    pub nucleus: Field,
+    pub nucleus: MathExpression<T>,
     /// top left attachment
-    pub top_left: Field,
+    pub top_left: MathExpression<T>,
     /// top right attachment
-    pub top_right: Field,
+    pub top_right: MathExpression<T>,
     /// bottom left attachment
-    pub bottom_left: Field,
+    pub bottom_left: MathExpression<T>,
     /// bottom right attachment
-    pub bottom_right: Field,
-}
-impl Atom {
-    /// Constructs an atom.
-    pub fn new_with_attachments(
-               nucleus: Field,
-               top_left: Field,
-               top_right: Field,
-               bottom_left: Field,
-               bottom_right: Field)
-               -> Atom {
-        Atom {
-            nucleus: nucleus,
-            top_left: top_left,
-            top_right: top_right,
-            bottom_left: bottom_left,
-            bottom_right: bottom_right,
-            ..Default::default()
-        }
-    }
-
-    /// Constructs an atom with empty attachments.
-    pub fn new_with_nucleus(nucleus: Field) -> Atom {
-        Atom {
-            nucleus: nucleus,
-            ..Default::default()
-        }
-    }
-
-    field_accessors!(nucleus, top_left, top_right, bottom_left, bottom_right);
-
-    /// Returns an iterator over all non-empty fields of the Atom.
-    pub fn fields_iterator(&self) -> AtomFieldsIterator {
-        AtomFieldsIterator {
-            atom: self,
-            state: 0,
-        }
-    }
-
-    /// Returns true if any of the attachments is non-empty.
-    pub fn has_any_attachments(&self) -> bool {
-        self.has_top_left() || self.has_top_right() || self.has_bottom_left() ||
-        self.has_bottom_right()
-    }
+    pub bottom_right: MathExpression<T>,
 }
 
-/// An expression that consists of a base (called nucleus) and optionally of attachments that
-/// go above or below the nucleus like e.g. accents.
+
+/// An expression that consists of a base (called nucleus) and attachments that go above or below
+/// the nucleus like e.g. accents.
 #[derive(Debug, Default)]
-pub struct OverUnder {
+pub struct OverUnder<T: Debug> {
     /// the base
-    pub nucleus: Field,
-    /// the `Field` to go above the base
-    pub over: Field,
-    /// the `Field` to go below the base
-    pub under: Field,
-    /// the `over` field should be rendered as an accent
+    pub nucleus: MathExpression<T>,
+    /// the `Element` to go above the base
+    pub over: MathExpression<T>,
+    /// the `Element` to go below the base
+    pub under: MathExpression<T>,
+    /// the `over` element should be rendered as an accent
     pub over_is_accent: bool,
-    /// the `under` field should be rendered as an accent
+    /// the `under` element should be rendered as an accent
     pub under_is_accent: bool,
-}
-impl OverUnder {
-    field_accessors!(nucleus, over, under);
 }
 
 /// A structure describing a generalized fraction.
-#[derive(Debug, Default)]
-pub struct GeneralizedFraction {
-    /// The field above the fraction bar.
-    pub numerator: Field,
-    /// The field below the fraction bar.
-    pub denominator: Field,
-}
-
-/// A structure describing a fixed amount of whitespace.
-#[derive(Debug)]
-pub struct Kern {
-    /// the size of the whitespace
-    pub size: i32,
-}
-
-/// A font-dependent representation of a scaled glyph.
 ///
-/// The scaling values are in percent and range from 0 to 100. A value of 100 means no rescaling in
-/// that direction.
-#[derive(Debug, Default, Clone)]
+/// This can either be rendered as a fraction (with a line separating the numerator and the
+/// denominator) or as a stack with no separating line (setting the `thickness`-parameter to a
+/// value of 0).
+#[derive(Debug, Default)]
+pub struct GeneralizedFraction<T: Debug> {
+    /// The field above the fraction bar.
+    pub numerator: MathExpression<T>,
+    /// The field below the fraction bar.
+    pub denominator: MathExpression<T>,
+    /// Thickness of the fraction line. If this is zero the fraction is drawn as a stack. If
+    /// thickness is None the default fraction thickness is used.
+    pub thickness: Option<Length>,
+}
+
+/// An expression consisting of a radical symbol encapsulating the radicand and an optional degree
+/// expression to the left of the radical symbol.
+#[derive(Debug, Default)]
+pub struct Root<T: Debug> {
+    /// The expression "inside" of the radical symbol.
+    pub radicand: MathExpression<T>,
+    /// The degree of the radical.
+    pub degree: MathExpression<T>,
+}
+
+#[derive(Debug, Default)]
+pub struct Stretchable<T: Debug> {
+    pub min_size: Option<Length>,
+    pub max_size: Option<Length>,
+    pub symmetric: bool,
+    pub expr: MathExpression<T>,
+    pub before: MathExpression<T>,
+    pub after: MathExpression<T>,
+}
+
+/// Lenghts can be specified either by absolute point values or relative em values that depend on
+/// the font size.
+#[derive(Debug, Copy, Clone, PartialEq)]
+pub enum Length {
+    /// A `Length` given in Points. A point traditionally equals 1/72 of an inch.
+    Points(f32),
+    /// A `Length` relative to the font size. The `f32` acts as a multiplier on the current
+    /// EM-Size.
+    Em(f32),
+    /// A `Length` relative to the default value.
+    Relative(f32),
+}
+
+impl Length {
+    pub fn is_null(self) -> bool {
+        match self {
+            Length::Points(val) => val == 0.0f32,
+            Length::Em(val) => val == 0.0f32,
+            Length::Relative(val) => val == 0.0f32,
+        }
+    }
+}
+
+/// A type for representing fractional scale values in percent. A value of 100 means original size,
+/// 50 means scaled to half the original size.
+///
+/// # Examples
+/// ```
+/// # use math_render::PercentScale;
+/// let scale = PercentScale::new(50);
+/// let num = 300;
+/// assert_eq!(150, num * scale);
+/// ```
+#[derive(Default, Clone, Copy, PartialOrd, Ord, PartialEq, Eq)]
+pub struct PercentScale {
+    percent: u8,
+}
+
+impl PercentScale {
+    /// Create a new `PercentScale` from an integer between 0 and 100 representing the percentage.
+    pub fn new(value: u8) -> PercentScale {
+        debug_assert!(value <= 100, "Not a valid percent value");
+        // for release builds still make sure that percentage is valid
+        let value = if value > 100 { 100u8 } else { value };
+        PercentScale { percent: value }
+    }
+
+    /// Returns the percentage as an unsigned integer
+    pub fn as_percentage(self) -> u8 {
+        self.percent
+    }
+
+    /// Returns the scale factor corresponding to the percentage. Essentially the percentage
+    /// divided by 100
+    ///
+    /// # Examples
+    /// ```
+    /// # use math_render::PercentScale;
+    /// let percent = PercentScale::new(50);
+    /// assert_eq!( 0.5f32, percent.as_scale_mult() );
+    /// ```
+    pub fn as_scale_mult(self) -> f32 {
+        (self.percent as f32) / 100f32
+    }
+}
+
+impl fmt::Debug for PercentScale {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{:?} %", self.percent)
+    }
+}
+
+
+impl Mul<i32> for PercentScale {
+    type Output = i32;
+
+    fn mul(self, _rhs: i32) -> i32 {
+        let value = _rhs.saturating_mul(self.percent as i32);
+        value / 100i32
+    }
+}
+
+impl Mul<PercentScale> for i32 {
+    type Output = i32;
+
+    fn mul(self, _rhs: PercentScale) -> i32 {
+        _rhs * self
+    }
+}
+
+impl Div<PercentScale> for i32 {
+    type Output = i32;
+
+    fn div(self, _rhs: PercentScale) -> i32 {
+        if _rhs.percent == 100 {
+            self
+        } else {
+            let value = self * 100i32;
+            value / (_rhs.percent as i32)
+        }
+    }
+}
+
+/// Combines a horizontal and a vertical `PercentScale` value for direction-dependent scaling.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub struct PercentScale2D {
+    /// horizontal scaling value
+    pub horiz: PercentScale,
+    /// vertical scaling value
+    pub vert: PercentScale,
+}
+
+/// A font-dependent representation of a (possibly scaled) glyph.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub struct Glyph {
     /// The identifier of the glyph inside the font.
     pub glyph_code: GlyphCode,
-    /// The horizontal scale factor in percent.
-    pub scale_x: i32,
-    /// The vertical scale factor in percent.
-    pub scale_y: i32,
+
+    /// The scaling to apply to this glyph
+    pub scale: PercentScale2D,
 }
 
-#[derive(Debug, Copy, Clone, PartialOrd, PartialEq, Eq, Ord)]
-#[repr(i8)]
-#[allow(missing_docs)]
+/// Vertical layout style for equations.
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum MathStyle {
-    DisplayStyle = 8,
-    DisplayStylePrime = 7,
-    TextStyle = 6,
-    TextStylePrime = 5,
-    ScriptStyle = 4,
-    ScriptStylePrime = 3,
-    ScriptScriptStyle = 2,
-    ScriptScriptStylePrime = 1,
-    Invalid = 0,
-    Increase = -1,
-    Decrease = -2,
+    /// Equation is displayed in its own line.
+    Display,
+    /// Equation is displayed inline with text.
+    Inline,
 }
-impl MathStyle {
-    /// Returns the primed version of the style. No changes if the style is already primed.
-    pub fn primed_style(self: MathStyle) -> MathStyle {
-        let mut style: i8 = unsafe { mem::transmute(self) };
-        style -= (style + 1) % 2;
-        assert!(0 < style && style <= 8);
-        unsafe { mem::transmute(style) }
+
+/// Determines the general style how a math expression should be layed out.
+///
+/// This affects lots of parameters when laying out an equation.
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub struct LayoutStyle {
+    /// This affects how much vertical space the equation will use.
+    pub math_style: MathStyle,
+    /// When the `script_level` property is non-null the glyphs of the font are scaled down. To be
+    /// used e.g. when rendering subscripts.
+    pub script_level: u8,
+    /// If `true` superscripts and similar protrude less at the top.
+    pub is_cramped: bool,
+}
+
+impl LayoutStyle {
+    /// Returns a new `LayoutStyle` with default settings
+    pub fn new() -> LayoutStyle {
+        Default::default()
     }
 
-    /// Returns the style used to layout a superscript.
-    pub fn superscript_style(self: MathStyle) -> MathStyle {
-        match self {
-            MathStyle::DisplayStyle | MathStyle::TextStyle => MathStyle::ScriptStyle,
-            MathStyle::DisplayStylePrime |
-            MathStyle::TextStylePrime => MathStyle::ScriptStylePrime,
-            MathStyle::ScriptStyle |
-            MathStyle::ScriptScriptStyle => MathStyle::ScriptScriptStyle,
-            MathStyle::ScriptStylePrime |
-            MathStyle::ScriptScriptStylePrime => MathStyle::ScriptScriptStylePrime,
-            _ => MathStyle::Invalid,
+    /// Returns the style that the superscript of a base styled with `self` should have.
+    pub fn superscript_style(self) -> LayoutStyle {
+        LayoutStyle {
+            math_style: MathStyle::Inline,
+            script_level: self.script_level + 1,
+            is_cramped: self.is_cramped,
         }
     }
 
-    /// Returns the style used to layout a subscript.
-    pub fn subscript_style(self: MathStyle) -> MathStyle {
-        self.superscript_style().primed_style()
+    /// Returns the style that the subscript of a base styled with `self` should have.
+    pub fn subscript_style(self) -> LayoutStyle {
+        self.superscript_style().cramped_style()
     }
 
-    /// Returns true if the style is 'cramped'.
-    pub fn is_cramped(self) -> bool {
-        let style = self as i8;
-        style % 2 == 1
+    /// Returns a cramped version of the style.
+    ///
+    /// If the style is already cramped it is left unaltered. Cramped styles try to limit vertical
+    /// extent of equations above the text. This is used for example in denominators of fractions or
+    /// subscripts and similar.
+    pub fn cramped_style(self) -> LayoutStyle {
+        LayoutStyle {
+            math_style: self.math_style,
+            script_level: self.script_level,
+            is_cramped: true,
+        }
+    }
+}
+
+impl Default for LayoutStyle {
+    fn default() -> LayoutStyle {
+        LayoutStyle {
+            math_style: MathStyle::Display,
+            script_level: 0,
+            is_cramped: false,
+        }
     }
 }
 
@@ -284,12 +410,11 @@ pub enum CornerPosition {
 
 pub use self::CornerPosition::{TopLeft, TopRight, BottomLeft, BottomRight};
 impl CornerPosition {
-
     /// Returns true if the position is left of the base
     pub fn is_left(self) -> bool {
         match self {
             TopLeft | BottomLeft => true,
-            _ => false
+            _ => false,
         }
     }
 
@@ -297,7 +422,7 @@ impl CornerPosition {
     pub fn is_top(self) -> bool {
         match self {
             TopLeft | TopRight => true,
-            _ => false
+            _ => false,
         }
     }
 
@@ -334,11 +459,18 @@ impl CornerPosition {
 
 #[cfg(test)]
 mod tests {
-    use super::MathStyle::*;
+    use super::*;
+    use super::PercentScale;
 
     #[test]
-    fn math_style_test() {
-        assert!(ScriptScriptStyle < ScriptStylePrime);
-        assert!(DisplayStyle > DisplayStylePrime);
+    #[should_panic(expected = "Not a valid percent value")]
+    fn percent_test() {
+        let val = PercentScale::new(101);
+        assert_eq!(val.as_percentage(), 100);
+    }
+
+    #[test]
+    fn empty_test() {
+        assert!(MathExpression::<()>::empty().is_empty());
     }
 }

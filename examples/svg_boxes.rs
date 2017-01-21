@@ -4,36 +4,72 @@ extern crate freetype;
 
 use math_render::*;
 use math_render::math_box::*;
+use math_render::font::*;
 
 use svg::Document;
-use svg::node::element::{Rectangle, Line, Group, Path};
+use svg::node::element::{Rectangle, Line, Group, Path, Description};
 use svg::node::element::path::Data;
-use svg::node::Node;
+use svg::node::{Node, Text};
 
-use freetype::{Library, face, Vector};
+use freetype::{face, Vector};
 use freetype::outline::Curve;
 
-fn main() {
-    let bytes = include_bytes!("../tests/testfiles/trivial.xml");
-    let list = mathmlparser::parse(&bytes[..]).expect("invalid parse");
-    let parsed_box = math_render::list_to_boxes(list);
+macro_rules! render_test {
+    ( $y:expr, $( $x:expr ),+ ) => (
+        $(
+            let test = include_bytes!(concat!("../tests/testfiles/", $x,".xml"));
+            render_mathml(test, $y, concat!("svg_images/", $x, ".svg"));
+        )+
+    );
+}
 
-    let origin = parsed_box.origin;
-    let logical_extents = parsed_box.logical_extents;
+fn main() {
+
+    // let font = include_bytes!("/Users/mr/Library/Fonts/latinmodern-math.otf");
+    let font = include_bytes!("/Library/Fonts/Microsoft/Cambria Math.ttf");
+    // let font = include_bytes!("/Users/mr/Library/Fonts/Asana-Math-2.otf");
+    // let font = include_bytes!("/Users/mr/Library/Fonts/texgyreschola-math.otf");
+    // let font = include_bytes!("/Users/mr/Library/Fonts/xits-math.otf");
+
+    render_test!(font, "schrödinger", "Vaccent", "horizontal_glyphs", "frac", "pythagoras",
+        "italic_sup", "math_kern", "root", "sum", "euler", "limit", "stokes");
+    // render_test!(font, "pythagoras");
+
+    let library = freetype::Library::init().unwrap();
+    let font = MathFont::from_bytes(font, 0, &library);
+
+    let shaper = math_render::shaper::MathShaper::new();
+    let math_box = shaper.shape_stretchy::<()>("√",
+                             &font,
+                             false,
+                             6000,
+                             Default::default()).into_iter().collect::<MathBox<_>>();
+
+
+    render_box(math_box, &font, "svg_images/big_root.svg");
+}
+
+fn render_mathml(file: &[u8], font_bytes: &[u8], output_name: &str) {
+    let list = mathmlparser::parse(&file[..]).expect("invalid parse");
+
+    let library = freetype::Library::init().unwrap();
+    let font = MathFont::from_bytes(font_bytes, 0, &library);
+
+    let parsed_box = math_render::layout(list, &font, &library);
+
+    render_box(parsed_box, &font, output_name);
+}
+
+fn render_box<T>(math_box: MathBox<T>, font: &MathFont, output_name: &str) {
+    let logical_extents = math_box.logical_extents;
 
     let mut document = Document::new();
     // let mut group = Group::new();
     document.assign("viewBox",
-                    (parsed_box.origin.x - 10,
-                     parsed_box.origin.y - logical_extents.ascent - 10,
+                    (math_box.origin.x - 10,
+                     math_box.origin.y - logical_extents.ascent - 10,
                      logical_extents.width + 20,
                      logical_extents.descent + logical_extents.ascent + 20));
-
-    // group.assign("transform",
-    //              format!("translate(0, {:?}) scale(1, -1) translate(0, {:?})",
-    //                      logical_extents.ascent,
-    //                      logical_extents.descent));
-    // generate_svg(&mut group, parsed_box);
 
     let mut ink_group = Group::new().set("stroke", "none").set("fill", "#FFE6E6");
     let mut logical_group = Group::new()
@@ -48,38 +84,51 @@ fn main() {
         .set("stroke-dasharray", "30,20")
         .set("stroke-linecap", "round");
 
+    let mut top_accent_attachment_group = Group::new()
+        .set("stroke", "green")
+        .set("stroke-width", 13)
+        .set("fill", "none")
+        .set("stroke-dasharray", "140,70")
+        .set("stroke-linecap", "round");
+
     let mut black_group = Group::new().set("fill", "black").set("stroke", "none");
 
-    generate_svg(&mut ink_group, &parsed_box, draw_ink_rect);
-    generate_svg(&mut logical_group, &parsed_box, draw_logical_bounds);
-    generate_svg(&mut italic_cor_group, &parsed_box, draw_italic_correction);
-    generate_svg(&mut black_group, &parsed_box, draw_glyph);
-    generate_svg(&mut black_group, &parsed_box, draw_filled);
+    generate_svg(&mut ink_group, &math_box, &draw_ink_rect);
+    generate_svg(&mut logical_group, &math_box, &draw_logical_bounds);
+    generate_svg(&mut italic_cor_group, &math_box, &draw_italic_correction);
+    generate_svg(&mut top_accent_attachment_group,
+                 &math_box,
+                 &draw_top_accent_attachment);
+    generate_svg(&mut black_group,
+                 &math_box,
+                 &|group, math_box| draw_glyph(group, math_box, font));
+    generate_svg(&mut black_group, &math_box, &draw_filled);
 
-    document.append(ink_group);
-    document.append(logical_group);
-    document.append(italic_cor_group);
+    // document.append(ink_group);
+    // document.append(logical_group);
+    // document.append(italic_cor_group);
     document.append(black_group);
+    // document.append(top_accent_attachment_group);
 
-    let baseline = Line::new()
-        .set("stroke", "green")
-        .set("stroke-width", 8)
-        .set("x1", origin.x - 10)
-        .set("x2", logical_extents.width + 10)
-        .set("y1", 0)
-        .set("y2", 0)
-        .set("stroke-dasharray", "30,20")
-        .set("stroke-linecap", "round");
+    // let baseline = Line::new()
+    //     .set("stroke", "green")
+    //     .set("stroke-width", 8)
+    //     .set("x1", origin.x - 10)
+    //     .set("x2", logical_extents.width + 10)
+    //     .set("y1", 0)
+    //     .set("y2", 0)
+    //     .set("stroke-dasharray", "30,20")
+    //     .set("stroke-linecap", "round");
     // group.append(baseline);
     // document.append(group);
-    //document.append(baseline);
+    // document.append(baseline);
 
-    svg::save("image.svg", &document).unwrap();
+    svg::save(output_name, &document).unwrap();
 }
 
 
-fn generate_svg<F>(node: &mut Group, math_box: &MathBox, func: F)
-    where F: Fn(&mut Group, &MathBox) + Copy
+fn generate_svg<F, U>(node: &mut Group, math_box: &MathBox<U>, func: &F)
+    where F: Fn(&mut Group, &MathBox<U>)
 {
     match math_box.content {
         Content::Boxes(ref list) => {
@@ -101,7 +150,7 @@ fn generate_svg<F>(node: &mut Group, math_box: &MathBox, func: F)
     }
 }
 
-fn draw_filled<T: Node>(doc: &mut T, math_box: &MathBox) {
+fn draw_filled<T: Node, U>(doc: &mut T, math_box: &MathBox<U>) {
     if let Content::Filled = math_box.content {
         let bounds = math_box.get_logical_bounds();
         let rect = Rectangle::new()
@@ -115,9 +164,22 @@ fn draw_filled<T: Node>(doc: &mut T, math_box: &MathBox) {
 
         doc.append(rect);
     }
+    if let Content::Empty = math_box.content {
+        let bounds = math_box.get_logical_bounds();
+        let rect = Rectangle::new()
+            .set("x", bounds.origin.x)
+            .set("y", bounds.origin.y - bounds.extents.ascent)
+            .set("width", bounds.extents.width)
+            .set("height", 100)
+            .set("stroke", "none")
+            .set("fill", "red")
+            .set("z-index", 1);
+
+        //doc.append(rect);
+    }
 }
 
-fn draw_ink_rect<T: Node>(group: &mut T, math_box: &MathBox) {
+fn draw_ink_rect<T: Node, U>(group: &mut T, math_box: &MathBox<U>) {
     if let Content::Glyph(..) = math_box.content {
 
         let ink_bounds = math_box.get_ink_bounds();
@@ -133,7 +195,7 @@ fn draw_ink_rect<T: Node>(group: &mut T, math_box: &MathBox) {
     }
 }
 
-fn draw_logical_bounds<T: Node>(group: &mut T, math_box: &MathBox) {
+fn draw_logical_bounds<T: Node, U>(group: &mut T, math_box: &MathBox<U>) {
     if let Content::Glyph(..) = math_box.content {
         let logical_bounds = math_box.get_logical_bounds().normalize();
 
@@ -157,7 +219,7 @@ fn draw_logical_bounds<T: Node>(group: &mut T, math_box: &MathBox) {
     }
 }
 
-fn draw_italic_correction<T: Node>(doc: &mut T, math_box: &MathBox) {
+fn draw_italic_correction<T: Node, U>(doc: &mut T, math_box: &MathBox<U>) {
     if let Content::Glyph(..) = math_box.content {
         let ink_bounds = math_box.get_ink_bounds().normalize();
 
@@ -173,7 +235,8 @@ fn draw_italic_correction<T: Node>(doc: &mut T, math_box: &MathBox) {
         let ink_rect = Rectangle::new()
             .set("x", ink_bounds.origin.x)
             .set("y", ink_bounds.origin.y - ink_bounds.extents.ascent)
-            .set("width", ink_bounds.extents.width - math_box.italic_correction)
+            .set("width",
+                 ink_bounds.extents.width - math_box.italic_correction)
             .set("height",
                  ink_bounds.extents.ascent + ink_bounds.extents.descent);
 
@@ -183,51 +246,66 @@ fn draw_italic_correction<T: Node>(doc: &mut T, math_box: &MathBox) {
     }
 }
 
-fn draw_glyph<T: Node>(doc: &mut T, math_box: &MathBox) {
+fn draw_top_accent_attachment<T: Node, U>(doc: &mut T, math_box: &MathBox<U>) {
+    let line = Line::new()
+        .set("x1", math_box.top_accent_attachment + math_box.origin.x)
+        .set("y1",
+             math_box.origin.y + math_box.logical_extents.descent + 200)
+        .set("x2", math_box.top_accent_attachment + math_box.origin.x)
+        .set("y2",
+             math_box.origin.y - math_box.logical_extents.ascent - 200);
+    doc.append(line);
+}
+
+fn draw_glyph<T: Node, U>(doc: &mut T, math_box: &MathBox<U>, font: &MathFont) {
     let (glyph, scale_x, scale_y) =
-        if let MathBox { content: Content::Glyph(Glyph { glyph_code, scale_x, scale_y }), .. } =
+        if let MathBox { content: Content::Glyph(Glyph { glyph_code, scale }), .. } =
                *math_box {
-            (glyph_code, scale_x, scale_y)
+            (glyph_code, scale.horiz.as_scale_mult(), scale.vert.as_scale_mult())
         } else {
             return;
         };
 
-    let lib = Library::init().unwrap();
-    let face = lib.new_face("/Library/Fonts/latinmodern-math.otf", 0).unwrap();
-    let origin = math_box.origin;
 
-    face.load_glyph(glyph, face::NO_SCALE).unwrap();
-    let outline = face.glyph().outline().unwrap();
-    let x = face.glyph().metrics().horiBearingX as i32;
 
     let mut group = Group::new();
-    let scale_x = (scale_x as f32) / 100f32;
-    let scale_y = (scale_y as f32) / 100f32;
-    group.assign("transform",
-                 format!("translate({:?}, {:?}) scale({:?}, {:?})",
-                         origin.x - x,
-                         origin.y,
-                         scale_x,
-                         -scale_y));
+    {
+        let face = font.ft_face.borrow();
+        let origin = math_box.origin;
 
-    let mut data = Data::new();
-    for contour in outline.contours_iter() {
-        let Vector { x, y } = *contour.start();
-        data = data.move_to((x, y));
-        for curve in contour {
-            match curve {
-                Curve::Line(pt) => data = data.line_to((pt.x, pt.y)),
-                Curve::Bezier2(pt1, pt2) => {
-                    data = data.quadratic_curve_to((pt1.x, pt1.y, pt2.x, pt2.y))
-                }
-                Curve::Bezier3(pt1, pt2, pt3) => {
-                    data = data.cubic_curve_to((pt1.x, pt1.y, pt2.x, pt2.y, pt3.x, pt3.y))
+        face.load_glyph(glyph, face::NO_SCALE).unwrap();
+        let outline = face.glyph().outline().unwrap();
+
+        group.assign("transform",
+                     format!("translate({:?}, {:?}) scale({:?}, {:?})",
+                             origin.x,
+                             origin.y,
+                             scale_x,
+                             -scale_y));
+
+        let mut data = Data::new();
+        for contour in outline.contours_iter() {
+            let Vector { x, y } = *contour.start();
+            data = data.move_to((x, y));
+            for curve in contour {
+                match curve {
+                    Curve::Line(pt) => data = data.line_to((pt.x, pt.y)),
+                    Curve::Bezier2(pt1, pt2) => {
+                        data = data.quadratic_curve_to((pt1.x, pt1.y, pt2.x, pt2.y))
+                    }
+                    Curve::Bezier3(pt1, pt2, pt3) => {
+                        data = data.cubic_curve_to((pt1.x, pt1.y, pt2.x, pt2.y, pt3.x, pt3.y))
+                    }
                 }
             }
         }
+        data = data.close();
+        let path = Path::new().set("d", data);
+        group.append(path);
     }
-    data = data.close();
-    let path = Path::new().set("d", data);
-    group.append(path);
+
+    let desc_text = format!("Glyph code: {:?}, name: {:?}", glyph, font.get_glyph_name(glyph) );
+    let desc = Description::new().add(Text::new(desc_text));
+    doc.append(desc);
     doc.append(group);
 }

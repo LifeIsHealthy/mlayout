@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 extern crate math_render;
 extern crate freetype;
 
@@ -147,7 +149,7 @@ impl Renderer {
         //self.ft_face.load_glyph(glyph, LoadFlag::empty()).unwrap();
 
         let glyph = self.ft_face.glyph();
-        glyph.render_glyph(RenderMode::Lcd);
+        glyph.render_glyph(RenderMode::Lcd).unwrap();
         //glyph.render_glyph(RenderMode::Normal);
         let bitmap = glyph.bitmap();
         println!("{:?}, pitch {:?}", bitmap.pixel_mode().unwrap(), bitmap.pitch()-bitmap.width());
@@ -176,7 +178,7 @@ impl Renderer {
             let mut src = Color3f{ r: t[0] as f32, g: t[1] as f32, b: t[2] as f32 };
             src /= 255f32;
 
-            let mut blend = 1f32 - mask + mask * src;
+            let blend = 1f32 - mask + mask * src;
             Color4::from_color3f(blend, new_alpha)
         });
         (iterator.collect(), bitmap.width(), bitmap.rows())
@@ -187,5 +189,5 @@ fn main() {
     let renderer = Renderer::new();
     let (buffer, width, height) = renderer.render_glyph(22);
     println!("lenth {:?}, width {:?}, height {:?}", buffer.len(), width, height);
-    image::save_buffer(&Path::new("image.png"), &buffer, (width/3i32) as u32, height as u32, image::RGBA(8));
+    image::save_buffer(&Path::new("image.png"), &buffer, (width/3i32) as u32, height as u32, image::RGBA(8)).unwrap();
 }

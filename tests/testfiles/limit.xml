@@ -1,0 +1,17 @@
+<math xmlns='http://www.w3.org/1998/Math/MathML' display='block'>
+  <munder>
+    <mo>lim</mo>
+    <mrow>
+      <mi>x</mi>
+      <mo>&rarr;</mo>
+      <mn>0</mn>
+    </mrow>
+  </munder>
+  <mo>&ApplyFunction;</mo>
+  <mfrac>
+    <mn>1</mn>
+    <mi>x</mi>
+  </mfrac>
+  <mo>=</mo>
+  <mi>&infin;</mi>
+</math>

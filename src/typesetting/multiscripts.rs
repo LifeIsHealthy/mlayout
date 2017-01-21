@@ -1,32 +1,31 @@
 use std::cmp::max;
 
-use types::{GlyphCode, MathStyle, Glyph, CornerPosition};
-use types::CornerPosition::{TopLeft, BottomRight};
+use types::{LayoutStyle, Glyph, CornerPosition};
 use super::font::{MathFont, hb, Position};
 use super::math_box::{MathBox, Content};
 
-fn get_first_glyph(math_box: &MathBox) -> Option<GlyphCode> {
+fn get_first_glyph<T>(math_box: &MathBox<T>) -> Option<Glyph> {
     match math_box.content {
-        Content::Glyph(Glyph { ref glyph_code, .. }) => Some(*glyph_code),
-        Content::Boxes(ref list) => get_last_glyph(list.first().unwrap()),
+        Content::Glyph(glyph) => Some(glyph),
+        Content::Boxes(ref list) => get_first_glyph(list.first().unwrap()),
         _ => None,
     }
 }
 
-fn get_last_glyph(math_box: &MathBox) -> Option<GlyphCode> {
+fn get_last_glyph<T>(math_box: &MathBox<T>) -> Option<Glyph> {
     match math_box.content {
-        Content::Glyph(Glyph { ref glyph_code, .. }) => Some(*glyph_code),
+        Content::Glyph(glyph) => Some(glyph),
         Content::Boxes(ref list) => get_last_glyph(list.last().unwrap()),
         _ => None,
     }
 }
 
-pub fn get_superscript_shift_up(superscript: &MathBox,
-                                nucleus: &MathBox,
-                                font: &MathFont,
-                                style: MathStyle)
-                                -> Position {
-    let std_shift_up = font.get_math_constant(if style.is_cramped() {
+pub fn get_superscript_shift_up<T>(superscript: &MathBox<T>,
+                                   nucleus: &MathBox<T>,
+                                   font: &MathFont,
+                                   style: LayoutStyle)
+                                   -> Position {
+    let std_shift_up = font.get_math_constant(if style.is_cramped {
         hb::HB_OT_MATH_CONSTANT_SUPERSCRIPT_SHIFT_UP_CRAMPED
     } else {
         hb::HB_OT_MATH_CONSTANT_SUPERSCRIPT_SHIFT_UP
@@ -45,10 +44,10 @@ pub fn get_superscript_shift_up(superscript: &MathBox,
         max(std_shift_up, min_shift_up))
 }
 
-pub fn get_subscript_shift_dn(subscript: &MathBox,
-                              nucleus: &MathBox,
-                              font: &MathFont)
-                              -> Position {
+pub fn get_subscript_shift_dn<T>(subscript: &MathBox<T>,
+                                 nucleus: &MathBox<T>,
+                                 font: &MathFont)
+                                 -> Position {
     let min_shift_dn_from_baseline_drop =
         nucleus.ink_extents.descent +
         font.get_math_constant(hb::HB_OT_MATH_CONSTANT_SUBSCRIPT_BASELINE_DROP_MIN);
@@ -61,13 +60,44 @@ pub fn get_subscript_shift_dn(subscript: &MathBox,
         max(std_shift_dn, min_shift_dn))
 }
 
+pub fn get_subsup_shifts<T>(subscript: &MathBox<T>,
+                            superscript: &MathBox<T>,
+                            nucleus: &MathBox<T>,
+                            font: &MathFont,
+                            style: LayoutStyle)
+                            -> (Position, Position) {
+    let mut super_shift = get_superscript_shift_up(superscript, nucleus, font, style);
+    let mut sub_shift = get_subscript_shift_dn(subscript, nucleus, font);
+
+    let subsup_gap_min = font.get_math_constant(hb::HB_OT_MATH_CONSTANT_SUB_SUPERSCRIPT_GAP_MIN);
+    let super_bottom_max =
+        font.get_math_constant(hb::HB_OT_MATH_CONSTANT_SUPERSCRIPT_BOTTOM_MAX_WITH_SUBSCRIPT);
+
+    let super_bottom = super_shift - superscript.ink_extents.descent;
+    let sub_top = -sub_shift + subscript.ink_extents.ascent;
+    let gap = super_bottom - sub_top;
+    if gap < subsup_gap_min {
+        let needed_space = subsup_gap_min - gap;
+        assert!(needed_space > 0);
+        let super_max_additional_shift = super_bottom_max - super_bottom;
+        if needed_space <= super_max_additional_shift {
+            super_shift += needed_space;
+        } else {
+            super_shift += super_max_additional_shift;
+            sub_shift += needed_space - super_max_additional_shift;
+        }
+    }
+
+    (sub_shift, super_shift)
+}
+
 // TODO: needs tests
-pub fn get_attachment_kern(nucleus: &MathBox,
-                           attachment: &MathBox,
-                           attachment_position: CornerPosition,
-                           attachment_shift: Position,
-                           font: &MathFont)
-                           -> Position {
+pub fn get_attachment_kern<T>(nucleus: &MathBox<T>,
+                              attachment: &MathBox<T>,
+                              attachment_position: CornerPosition,
+                              attachment_shift: Position,
+                              font: &MathFont)
+                              -> Position {
     let mut kerning = 0;
 
     let nucleus_glyph = if attachment_position.is_left() {
@@ -77,31 +107,24 @@ pub fn get_attachment_kern(nucleus: &MathBox,
     };
 
     if let Some(nucleus_glyph) = nucleus_glyph {
-        match attachment_position {
-            TopLeft | BottomRight => kerning -= font.get_italic_correction(nucleus_glyph) / 2,
-            _ => kerning += font.get_italic_correction(nucleus_glyph) / 2,
-        }
         let attachment_glyph = if attachment_position.is_left() {
             get_last_glyph(attachment)
         } else {
             get_first_glyph(attachment)
         };
         if let Some(attachment_glyph) = attachment_glyph {
-            if attachment_position.is_top() {
-                kerning += font.get_math_kern(nucleus_glyph,
-                                              attachment_position,
-                                              attachment_shift - attachment.ink_extents.descent);
-                kerning += font.get_math_kern(attachment_glyph,
-                                              attachment_position.diagonal_mirror(),
-                                              nucleus.ink_extents.ascent - attachment_shift);
+            let (bch, ach) = if attachment_position.is_top() {
+                let base_correction_height = attachment_shift - attachment.ink_extents.descent;
+                let attachment_correction_height = nucleus.ink_extents.ascent - attachment_shift;
+                (base_correction_height, attachment_correction_height)
             } else {
-                kerning += font.get_math_kern(nucleus_glyph,
-                                              attachment_position,
-                                              attachment.ink_extents.ascent - attachment_shift);
-                kerning += font.get_math_kern(attachment_glyph,
-                                              attachment_position.diagonal_mirror(),
-                                              attachment_shift - nucleus.ink_extents.descent);
-            }
+                let base_correction_height = -attachment_shift + attachment.ink_extents.ascent;
+                let attachment_correction_height = attachment_shift - nucleus.ink_extents.descent;
+                (base_correction_height, attachment_correction_height)
+            };
+            kerning += font.get_math_kern(nucleus_glyph, attachment_position, bch);
+            kerning +=
+                font.get_math_kern(attachment_glyph, attachment_position.diagonal_mirror(), ach);
         }
     };
     kerning

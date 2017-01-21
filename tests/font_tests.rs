@@ -1,20 +1,14 @@
-
 extern crate math_render;
 extern crate freetype;
 
-use std::mem;
-use math_render::font::*;
+mod util;
 
-fn get_bytes() -> &'static [u8] {
-    include_bytes!("testfiles/latinmodern-math.otf")
-}
+use math_render::font::*;
+use util::test_font;
 
 #[test]
 fn constants_test() {
-    let bytes = get_bytes();
-    let library = freetype::Library::init().unwrap();
-    let font = MathFont::from_bytes(bytes, 0, &library);
-
+    let font = test_font();
     let latin_moder_consts = [70i32, 50, 1300, 1300, 154, 250, 450, 664, 247, 344, 200, 363, 289,
                               108, 250, 160, 344, 56, 200, 111, 167, 600, 444, 677, 345, 686, 120,
                               280, 111, 600, 200, 167, 394, 677, 345, 686, 40, 120, 40, 40, 120,
