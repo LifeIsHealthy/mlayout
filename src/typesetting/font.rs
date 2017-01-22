@@ -4,7 +4,6 @@ pub extern crate harfbuzz_sys as hb;
 
 use std;
 use std::cell::RefCell;
-use std::marker::PhantomData;
 use std::str::FromStr;
 
 use types::{Glyph, GlyphCode, CornerPosition, PercentScale, PercentScale2D, LayoutStyle};
@@ -12,9 +11,6 @@ use super::math_box::{MathBox, Point, Extents, Bounds, Content};
 
 pub use self::harfbuzz_rs::{Font, Position, GlyphPosition, GlyphExtents, GlyphInfo, GlyphBuffer,
                             Tag, Blob, HarfbuzzObject, UnicodeBuffer};
-
-use super::freetype;
-use super::freetype::face;
 
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
 #[repr(C)]
@@ -217,7 +213,7 @@ impl<'a> HarfbuzzShaper<'a> {
         let extents = Extents {
             width: glyph_extents.width,
             ascent: glyph_extents.y_bearing,
-            descent: glyph_extents.height - glyph_extents.y_bearing,
+            descent: - (glyph_extents.height + glyph_extents.y_bearing),
         };
         let extents = extents * glyph.scale;
         let pos = Point { x: glyph_offset.0, y: glyph_offset.1 };
@@ -280,7 +276,7 @@ impl<'a> MathShaper for HarfbuzzShaper<'a> {
                          target_size: u32,
                          style: LayoutStyle)
                          -> Vec<MathBox<T>> {
-        unimplemented!()
+        Vec::new()
     }
 
     fn glyph_box<T>(&self, glyph: Glyph) -> MathBox<T> {
