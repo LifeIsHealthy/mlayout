@@ -1,8 +1,8 @@
 <mfrac>
+    <mi>i</mi>
     <mi>V</mi>
-    <mi>b</mi>
 </mfrac>
-
+<mo>&sdot;</mo>
 <mfrac>
     <mroot>
     <mi mathvariant="fraktur">hello</mi>
