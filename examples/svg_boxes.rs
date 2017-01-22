@@ -12,7 +12,10 @@ use svg::node::element::path::Data;
 use svg::node::{Node, Text};
 
 use freetype::{face, Vector};
+use freetype::face::Face as FT_Face;
 use freetype::outline::Curve;
+
+use math_render::font::harfbuzz_rs::{Face};
 
 macro_rules! render_test {
     ( $y:expr, $( $x:expr ),+ ) => (
@@ -36,31 +39,32 @@ fn main() {
     // render_test!(font, "pythagoras");
 
     let library = freetype::Library::init().unwrap();
-    let font = MathFont::from_bytes(font, 0, &library);
-
-    let shaper = math_render::shaper::MathShaper::new();
+    let face = library.new_memory_face(&font[..], 0).unwrap();
+    let font = Face::new(&font[..], 0).create_font();
+    let shaper = HarfbuzzShaper::new(font);
     let math_box = shaper.shape_stretchy::<()>("√",
-                             &font,
                              false,
                              6000,
                              Default::default()).into_iter().collect::<MathBox<_>>();
 
 
-    render_box(math_box, &font, "svg_images/big_root.svg");
+    render_box(math_box, &shaper, &face, "svg_images/big_root.svg");
 }
 
 fn render_mathml(file: &[u8], font_bytes: &[u8], output_name: &str) {
     let list = mathmlparser::parse(&file[..]).expect("invalid parse");
 
     let library = freetype::Library::init().unwrap();
-    let font = MathFont::from_bytes(font_bytes, 0, &library);
+    let face = library.new_memory_face(font_bytes, 0).unwrap();
+    let font = Face::new(font_bytes, 0).create_font();
+    let shaper = HarfbuzzShaper::new(font);
 
-    let parsed_box = math_render::layout(list, &font, &library);
+    let parsed_box = math_render::layout(list, &shaper, &library);
 
-    render_box(parsed_box, &font, output_name);
+    render_box(parsed_box, &shaper, &face, output_name);
 }
 
-fn render_box<T>(math_box: MathBox<T>, font: &MathFont, output_name: &str) {
+fn render_box<T>(math_box: MathBox<T>, shaper: &HarfbuzzShaper, font: &FT_Face, output_name: &str) {
     let logical_extents = math_box.logical_extents;
 
     let mut document = Document::new();
@@ -257,7 +261,7 @@ fn draw_top_accent_attachment<T: Node, U>(doc: &mut T, math_box: &MathBox<U>) {
     doc.append(line);
 }
 
-fn draw_glyph<T: Node, U>(doc: &mut T, math_box: &MathBox<U>, font: &MathFont) {
+fn draw_glyph<T: Node, U>(doc: &mut T, math_box: &MathBox<U>, face: &FT_Face) {
     let (glyph, scale_x, scale_y) =
         if let MathBox { content: Content::Glyph(Glyph { glyph_code, scale }), .. } =
                *math_box {
@@ -270,7 +274,6 @@ fn draw_glyph<T: Node, U>(doc: &mut T, math_box: &MathBox<U>, font: &MathFont) {
 
     let mut group = Group::new();
     {
-        let face = font.ft_face.borrow();
         let origin = math_box.origin;
 
         face.load_glyph(glyph, face::NO_SCALE).unwrap();
@@ -304,8 +307,8 @@ fn draw_glyph<T: Node, U>(doc: &mut T, math_box: &MathBox<U>, font: &MathFont) {
         group.append(path);
     }
 
-    let desc_text = format!("Glyph code: {:?}, name: {:?}", glyph, font.get_glyph_name(glyph) );
-    let desc = Description::new().add(Text::new(desc_text));
-    doc.append(desc);
+    //let desc_text = format!("Glyph code: {:?}, name: {:?}", glyph, font.get_glyph_name(glyph) );
+    //let desc = Description::new().add(Text::new(desc_text));
+    //doc.append(desc);
     doc.append(group);
 }

@@ -1,189 +1,245 @@
 
+pub extern crate harfbuzz_rs;
 pub extern crate harfbuzz_sys as hb;
 
 use std;
 use std::cell::RefCell;
 use std::marker::PhantomData;
+use std::str::FromStr;
 
-use types::{Glyph, GlyphCode, CornerPosition, PercentScale};
-use super::math_box::{Point, Extents, Bounds};
+use types::{Glyph, GlyphCode, CornerPosition, PercentScale, PercentScale2D, LayoutStyle};
+use super::math_box::{MathBox, Point, Extents, Bounds, Content};
+
+pub use self::harfbuzz_rs::{Font, Position, GlyphPosition, GlyphExtents, GlyphInfo, GlyphBuffer,
+                            Tag, Blob, HarfbuzzObject, UnicodeBuffer};
 
 use super::freetype;
 use super::freetype::face;
 
-/// Type for a coordinate that represents some metric of a font (e.g. advance width).
-pub type Position = hb::hb_position_t;
-/// Wrapper of the `hb_glyph_info_t` struct.
-pub type GlyphPosition = hb::hb_glyph_position_t;
-/// Metrics of a glyph.
-pub type GlyphExtents = hb::hb_glyph_extents_t;
-/// Wrapper of the `hb_glyph_info_t` struct.
-pub type GlyphInfo = hb::hb_glyph_info_t;
-
-/// A wrapper around the harfbuzz `hb_blob_t`. It owns a slice of bytes and is fully threadsafe.
-/// A blob includes reference counting to allow shared usage of its memory.
-pub struct Blob<'a> {
-    hb_blob: *mut hb::hb_blob_t,
-    _marker: PhantomData<&'a [u8]>,
+#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
+#[repr(C)]
+pub enum MathConstant {
+    ScriptPercentScaleDown = 0,
+    ScriptScriptPercentScaleDown,
+    DelimitedSubFormulaMinHeight,
+    DisplayOperatorMinHeight,
+    MathLeading,
+    AxisHeight,
+    AccentBaseHeight,
+    FlattenedAccentBaseHeight,
+    SubscriptShiftDown,
+    SubscriptTopMax,
+    SubscriptBaselineDropMin,
+    SuperscriptShiftUp,
+    SuperscriptShiftUpCramped,
+    SuperscriptBottomMin,
+    SuperscriptBaselineDropMax,
+    SubSuperscriptGapMin,
+    SuperscriptBottomMaxWithSubscript,
+    SpaceAfterScript,
+    UpperLimitGapMin,
+    UpperLimitBaselineRiseMin,
+    LowerLimitGapMin,
+    LowerLimitBaselineDropMin,
+    StackTopShiftUp,
+    StackTopDisplayStyleShiftUp,
+    StackBottomShiftDown,
+    StackBottomDisplayStyleShiftDown,
+    StackGapMin,
+    StackDisplayStyleGapMin,
+    StretchStackTopShiftUp,
+    StretchStackBottomShiftDown,
+    StretchStackGapAboveMin,
+    StretchStackGapBelowMin,
+    FractionNumeratorShiftUp,
+    FractionNumeratorDisplayStyleShiftUp,
+    FractionDenominatorShiftDown,
+    FractionDenominatorDisplayStyleShiftDown,
+    FractionNumeratorGapMin,
+    FractionNumDisplayStyleGapMin,
+    FractionRuleThickness,
+    FractionDenominatorGapMin,
+    FractionDenomDisplayStyleGapMin,
+    SkewedFractionHorizontalGap,
+    SkewedFractionVerticalGap,
+    OverbarVerticalGap,
+    OverbarRuleThickness,
+    OverbarExtraAscender,
+    UnderbarVerticalGap,
+    UnderbarRuleThickness,
+    UnderbarExtraDescender,
+    RadicalVerticalGap,
+    RadicalDisplayStyleVerticalGap,
+    RadicalRuleThickness,
+    RadicalExtraAscender,
+    RadicalKernBeforeDegree,
+    RadicalKernAfterDegree,
+    RadicalDegreeBottomRaisePercent,
 }
-impl<'a> Blob<'a> {
-    /// Create from slice.
-    pub fn with_bytes(bytes: &[u8]) -> Blob {
-        let hb_blob = unsafe {
-            hb::hb_blob_create(bytes.as_ptr() as *const i8,
-                               bytes.len() as u32,
-                               hb::HB_MEMORY_MODE_READONLY,
-                               0 as *mut _,
-                               None)
+
+pub trait MathShaper: Clone {
+    fn math_constant(&self, c: MathConstant) -> i32;
+
+    fn italic_correction(&self, glyph: Glyph) -> Position;
+
+    fn top_accent_attachment(&self, glyph: Glyph) -> Position;
+
+    fn math_kerning(&self,
+                    glyph: Glyph,
+                    corner: CornerPosition,
+                    correction_height: Position)
+                    -> Position;
+
+    fn glyph_box<T>(&self, glyph: Glyph) -> MathBox<T>;
+
+    fn shape_string<T>(&self, string: &str, style: LayoutStyle) -> Vec<MathBox<T>>;
+
+    fn shape_stretchy<T>(&self,
+                         symbol: &str,
+                         horizontal: bool,
+                         target_size: u32,
+                         style: LayoutStyle)
+                         -> Vec<MathBox<T>>;
+
+    fn get_math_table(&self) -> &[u8];
+
+    fn scale_factor_for_script_level(&self, script_level: u8) -> PercentScale {
+        let percent = if script_level >= 1 {
+            if script_level >= 2 {
+                self.math_constant(MathConstant::ScriptScriptPercentScaleDown)
+            } else {
+                self.math_constant(MathConstant::ScriptPercentScaleDown)
+            }
+        } else {
+            100
         };
-        Blob {
-            hb_blob: hb_blob,
-            _marker: PhantomData,
-        }
+        PercentScale::new(percent as u8)
     }
 
-    /// Make a `Blob` from a raw harfbuzz pointer. Transfers ownership.
-    pub fn from_raw<'b>(blob: *mut hb::hb_blob_t) -> Blob<'b> {
-        Blob {
-            hb_blob: blob,
-            _marker: PhantomData,
-        }
-    }
-
-    /// Convert the `Blob` into a raw harfbuzz pointer.
-    pub fn as_raw(&self) -> *mut hb::hb_blob_t {
-        self.hb_blob
-    }
-
-    /// Get a slice of the `Blob`'s bytes.
-    pub fn get_data(&self) -> &'a [u8] {
-        unsafe {
-            let mut length = hb::hb_blob_get_length(self.hb_blob);
-            let data_ptr = hb::hb_blob_get_data(self.hb_blob, &mut length as *mut _);
-            std::slice::from_raw_parts(data_ptr as *const u8, length as usize)
-        }
-    }
+    fn em_size(&self) -> u32;
 }
 
-impl<'a> Clone for Blob<'a> {
-    fn clone(&self) -> Self {
-        let hb_blob = unsafe { hb::hb_blob_reference(self.hb_blob) };
-        Blob {
-            hb_blob: hb_blob,
-            _marker: PhantomData,
-        }
-    }
-}
 
-unsafe impl<'a> Send for Blob<'a> {}
-unsafe impl<'a> Sync for Blob<'a> {}
-
-impl<'a> Drop for Blob<'a> {
-    fn drop(&mut self) {
-        unsafe {
-            hb::hb_blob_destroy(self.hb_blob);
-        }
-    }
-}
 
 /// The basic font structure used
-#[derive(Debug)]
-pub struct MathFont<'a> {
-    pub hb_font: *mut hb::hb_font_t,
-    pub ft_face: RefCell<freetype::Face<'a>>,
+#[derive(Debug, Clone)]
+pub struct HarfbuzzShaper<'a> {
+    pub font: Font<'a>,
+    buffer: RefCell<Option<UnicodeBuffer>>,
 }
 
-impl<'a> MathFont<'a> {
-    /// Create a `MathFont` from raw bytes of an opentype font file.
-    ///
-    /// # Arguments
-    ///
-    /// * `bytes` – The bytes of an opentype font file
-    /// * `face_index` – The face_index of the font face inside the file
-    /// * `ft_library` – A freetype `Library` object to use for initialization
-    pub fn from_bytes<'b>(bytes: &'b [u8],
-                          face_index: isize,
-                          ft_library: &freetype::Library)
-                          -> MathFont<'b> {
-        let blob = Blob::with_bytes(bytes);
-        let hb_font = unsafe {
-            let hb_face = hb::hb_face_create(blob.hb_blob, face_index as u32);
-            let hb_font = hb::hb_font_create(hb_face);
-            hb::hb_face_destroy(hb_face);
-            hb::hb_ot_font_set_funcs(hb_font);
-            hb_font
+impl<'a> HarfbuzzShaper<'a> {
+    pub fn new(font: Font) -> HarfbuzzShaper {
+        let buffer = Some(UnicodeBuffer::new()).into();
+        HarfbuzzShaper { font: font, buffer: buffer }
+    }
+
+    fn shape_with_style(&self, string: &str, style: LayoutStyle) -> GlyphBuffer {
+        let buffer = self.buffer.borrow_mut().take().unwrap();
+        // hb::hb_buffer_set_language(buffer.hb_buffer, hb::hb_language_get_default());
+        let mut features: Vec<hb::hb_feature_t> = Vec::with_capacity(2);
+        if style.script_level >= 1 {
+            let math_variants_tag = ot_tag!('s', 's', 't', 'y');
+            let variant_num = style.script_level as u32;
+
+            features.push(hb::hb_feature_t {
+                tag: math_variants_tag,
+                value: variant_num,
+                start: 0,
+                end: std::u32::MAX,
+            })
+        }
+        features.push(hb::hb_feature_t {
+            tag: ot_tag!('f', 'l', 'a', 'c'),
+            value: 1,
+            start: 0,
+            end: std::u32::MAX,
+        });
+        buffer.add_str(string)
+            .set_script(Tag::from_str("Math").unwrap())
+            .shape(&self.font, &features)
+    }
+
+    // pub fn shape_stretchy<T>(&self,
+    //                          symbol: &str,
+    //                          font: &MathFont,
+    //                          horizontal: bool,
+    //                          target_size: Position,
+    //                          style: LayoutStyle)
+    //                          -> Vec<MathBox<T>> {
+    //     let mut buffer = self.buffer.borrow_mut();
+    //     buffer.clear();
+    //     buffer.set_direction(hb::HB_DIRECTION_LTR);
+    //     buffer.add_str(symbol);
+    //     buffer.guess_segment_properties();
+    //     let (positions, infos) = shape_stretchy(font, &buffer, horizontal, target_size);
+    //     MathShaper::layout_boxes(font, style, positions, infos)
+    // }
+
+    fn layout_boxes<T>(&self, style: LayoutStyle, glyph_buffer: GlyphBuffer) -> Vec<MathBox<T>> {
+        let boxes = {
+            let positions = glyph_buffer.get_glyph_positions();
+            let infos = glyph_buffer.get_glyph_infos();
+            let scale = self.scale_factor_for_script_level(style.script_level);
+            let mut cursor = Point { x: 0, y: 0 };
+            positions.iter()
+                .zip(infos.iter())
+                .map(move |pos_info| {
+                    let pos = pos_info.0;
+                    let info = pos_info.1;
+                    let glyph = Glyph {
+                        glyph_code: info.codepoint,
+                        scale: PercentScale2D {
+                            horiz: scale,
+                            vert: scale,
+                        },
+                    };
+                    let mut new_box = self.glyph_box(glyph);
+
+                    let advance_x = pos.x_advance * scale;
+                    let advance_y = pos.y_advance * scale;
+                    new_box.origin.x += cursor.x + pos.x_offset * scale;
+                    new_box.origin.y += cursor.y - pos.y_offset * scale;
+                    // new_box.logical_extents.width = advance_width;
+                    cursor.x += advance_x;
+                    cursor.y -= advance_y;
+                    new_box
+                })
+                .collect()
         };
-        let face = ft_library.new_memory_face(blob.get_data(), face_index).unwrap();
-        MathFont {
-            hb_font: hb_font,
-            ft_face: RefCell::new(face),
-        }
+        *self.buffer.borrow_mut() = Some(glyph_buffer.clear());
+        boxes
     }
 
-    pub unsafe fn from_raw<'b, 'c>(font: *mut hb::hb_font_t,
-                                   ft_library: &'c freetype::Library)
-                                   -> MathFont<'b> {
-        let hb_face = hb::hb_font_get_face(font);
-        let index = hb::hb_face_get_index(hb_face);
-        let blob = Blob::from_raw(hb::hb_face_reference_blob(hb_face));
-
-        let face = ft_library.new_memory_face(blob.get_data(), index as isize).unwrap();
-        MathFont {
-            hb_font: font,
-            ft_face: RefCell::new(face),
-        }
-    }
-
-    pub fn get_glyph_h_advance(&self, glyph: Glyph) -> i32 {
-        let unscaled = unsafe { hb::hb_font_get_glyph_h_advance(self.hb_font, glyph.glyph_code) };
-        unscaled * glyph.scale.horiz
-    }
-    pub fn get_glyph_v_advance(&self, glyph: Glyph) -> i32 {
-        let unscaled = unsafe { hb::hb_font_get_glyph_v_advance(self.hb_font, glyph.glyph_code) };
-        unscaled * glyph.scale.vert
-    }
-    pub fn get_glyph_bounds(&self, glyph: Glyph) -> Bounds {
-        let result = self.ft_face.borrow().load_glyph(glyph.glyph_code, face::NO_SCALE);
-        if result.is_err() {
-            let new_glyph_index = self.ft_face.borrow().get_char_index(0x221A);
-            println!("{:?}    {:?}", glyph.glyph_code, new_glyph_index);
-            self.ft_face
-                .borrow()
-                .load_glyph(new_glyph_index, face::NO_SCALE)
-                .expect("freetype could not load glyph");
-        }
-        let metrics = self.ft_face.borrow().glyph().metrics();
+    fn glyph_bounds(&self, glyph: Glyph) -> Bounds {
+        let glyph_extents = self.font.get_glyph_extents(glyph.glyph_code).unwrap_or_default();
+        let glyph_offset = self.font.get_glyph_h_origin(glyph.glyph_code).unwrap_or_default();
         let extents = Extents {
-            width: metrics.width as i32,
-            ascent: metrics.horiBearingY as i32,
-            descent: metrics.height as i32 - metrics.horiBearingY as i32,
+            width: glyph_extents.width,
+            ascent: glyph_extents.y_bearing,
+            descent: glyph_extents.height - glyph_extents.y_bearing,
         };
         let extents = extents * glyph.scale;
-        let pos = Point { x: 0, y: 0 };
+        let pos = Point { x: glyph_offset.0, y: glyph_offset.1 };
         Bounds {
             extents: extents,
             origin: pos,
         }
     }
-    pub fn get_math_table(&self) -> Blob {
-        let hb_blob = unsafe {
-            let face = hb::hb_font_get_face(self.hb_font);
-            hb::hb_face_reference_table(face, ot_tag!('M', 'A', 'T', 'H'))
-        };
-        Blob::from_raw(hb_blob)
+}
+
+impl<'a> MathShaper for HarfbuzzShaper<'a> {
+    fn math_constant(&self, c: MathConstant) -> i32 {
+        unsafe { hb::hb_ot_layout_get_math_constant(self.font.as_raw(), c as u32) }
     }
 
-    pub fn get_math_constant(&self, index: hb::hb_ot_math_constant_t) -> i32 {
-        unsafe { hb::hb_ot_layout_get_math_constant(self.hb_font, index) }
-    }
-
-    pub fn get_math_kern(&self,
-                         glyph: Glyph,
-                         corner: CornerPosition,
-                         correction_height: Position)
-                         -> Position {
+    fn math_kerning(&self,
+                    glyph: Glyph,
+                    corner: CornerPosition,
+                    correction_height: Position)
+                    -> Position {
         let unscaled = unsafe {
-            hb::hb_ot_layout_get_math_kerning(self.hb_font,
+            hb::hb_ot_layout_get_math_kerning(self.font.as_raw(),
                                               glyph.glyph_code,
                                               corner as hb::hb_ot_math_kern_t,
                                               correction_height / glyph.scale.vert)
@@ -191,63 +247,109 @@ impl<'a> MathFont<'a> {
         unscaled * glyph.scale.horiz
     }
 
-    pub fn get_italic_correction(&self, glyph: Glyph) -> Position {
-        let unscaled =
-            unsafe { hb::hb_ot_layout_get_math_italic_correction(self.hb_font, glyph.glyph_code) };
-        unscaled * glyph.scale.horiz
-    }
-
-    pub fn get_top_accent_attachment(&self, glyph: Glyph) -> Position {
+    fn italic_correction(&self, glyph: Glyph) -> Position {
         let unscaled = unsafe {
-            hb::hb_ot_layout_get_math_top_accent_attachment(self.hb_font, glyph.glyph_code)
+            hb::hb_ot_layout_get_math_italic_correction(self.font.as_raw(), glyph.glyph_code)
         };
         unscaled * glyph.scale.horiz
     }
 
-    pub fn get_glyph_name(&self, glyph: GlyphCode) -> String {
-        let string_capacity = 512;
-        let mut buffer: Vec<u8> = Vec::with_capacity(string_capacity);
-        let ptr = buffer.as_mut_ptr();
-        unsafe {
-            freetype::ffi::FT_Get_Glyph_Name(self.ft_face.borrow_mut().raw_mut() as *mut _,
-                                             glyph,
-                                             ptr as *mut _,
-                                             string_capacity as u32);
-        }
-        let cstr = unsafe { std::ffi::CStr::from_ptr(buffer.as_ptr() as *const _) };
-        unsafe { buffer.set_len(cstr.to_bytes().len()) };
-        String::from_utf8(buffer).unwrap()
-    }
-
-    pub fn scale_factor_for_script_level(&self, script_level: u8) -> PercentScale {
-        let percent = if script_level >= 1 {
-            if script_level >= 2 {
-                self.get_math_constant(hb::HB_OT_MATH_CONSTANT_SCRIPT_SCRIPT_PERCENT_SCALE_DOWN)
-            } else {
-                self.get_math_constant(hb::HB_OT_MATH_CONSTANT_SCRIPT_PERCENT_SCALE_DOWN)
-            }
-        } else {
-            100
+    fn top_accent_attachment(&self, glyph: Glyph) -> Position {
+        let unscaled = unsafe {
+            hb::hb_ot_layout_get_math_top_accent_attachment(self.font.as_raw(), glyph.glyph_code)
         };
-        PercentScale::new(percent as u8)
+        unscaled * glyph.scale.horiz
+    }
+
+    fn get_math_table(&self) -> &[u8] {
+        let blob = unsafe {
+            hb::hb_face_reference_table(self.font.face().as_raw(), Tag::from_str("MATH").unwrap().0)
+        };
+        let blob = unsafe { Blob::from_raw(blob) };
+        blob.get_data()
+    }
+
+    fn shape_string<T>(&self, string: &str, style: LayoutStyle) -> Vec<MathBox<T>> {
+        let glyph_buffer = self.shape_with_style(string, style);
+        self.layout_boxes(style, glyph_buffer)
+    }
+
+    fn shape_stretchy<T>(&self,
+                         symbol: &str,
+                         horizontal: bool,
+                         target_size: u32,
+                         style: LayoutStyle)
+                         -> Vec<MathBox<T>> {
+        unimplemented!()
+    }
+
+    fn glyph_box<T>(&self, glyph: Glyph) -> MathBox<T> {
+        let content = Content::Glyph(glyph);
+        let mut bounds = self.glyph_bounds(glyph);
+        bounds.extents.width = self.font.get_glyph_h_advance(glyph.glyph_code) * glyph.scale.horiz;
+
+        assert_eq!(bounds.origin, Point { x: 0, y: 0 });
+
+        let italic_correction = self.italic_correction(glyph);
+        let mut logical_extents = bounds.extents;
+        logical_extents.width += italic_correction;
+
+        // if italic_correction == 0 {
+        //     italic_correction = std::cmp::max(logical_extents.width - bounds.extents.width, 0);
+        // }
+
+
+        let mut top_accent_attachment = self.top_accent_attachment(glyph);
+        top_accent_attachment = if top_accent_attachment == 0 {
+            bounds.extents.width / 2
+        } else {
+            top_accent_attachment
+        };
+
+        MathBox {
+            origin: bounds.origin,
+            ink_extents: bounds.extents,
+            logical_extents: logical_extents,
+            italic_correction: italic_correction,
+            top_accent_attachment: top_accent_attachment,
+            content: content,
+            ..Default::default()
+        }
+    }
+
+    fn em_size(&self) -> u32 {
+        self.font.face().upem()
     }
 }
 
-impl<'a> Clone for MathFont<'a> {
-    fn clone(&self) -> Self {
-        let hb_font = unsafe { hb::hb_font_reference(self.hb_font) };
-        let ft_face = self.ft_face.clone();
-        MathFont {
-            hb_font: hb_font,
-            ft_face: ft_face,
-        }
-    }
-}
-
-impl<'a> Drop for MathFont<'a> {
-    fn drop(&mut self) {
-        unsafe {
-            hb::hb_font_destroy(self.hb_font);
-        }
-    }
-}
+// pub fn get_glyph_h_advance(&self, glyph: Glyph) -> i32 {
+//     let unscaled = unsafe { hb::hb_font_get_glyph_h_advance(self.hb_font, glyph.glyph_code) };
+//     unscaled * glyph.scale.horiz
+// }
+// pub fn get_glyph_v_advance(&self, glyph: Glyph) -> i32 {
+//     let unscaled = unsafe { hb::hb_font_get_glyph_v_advance(self.hb_font, glyph.glyph_code) };
+//     unscaled * glyph.scale.vert
+// }
+// pub fn get_glyph_bounds(&self, glyph: Glyph) -> Bounds {
+//     let result = self.ft_face.borrow().load_glyph(glyph.glyph_code, face::NO_SCALE);
+//     if result.is_err() {
+//         let new_glyph_index = self.ft_face.borrow().get_char_index(0x221A);
+//         println!("{:?}    {:?}", glyph.glyph_code, new_glyph_index);
+//         self.ft_face
+//             .borrow()
+//             .load_glyph(new_glyph_index, face::NO_SCALE)
+//             .expect("freetype could not load glyph");
+//     }
+//     let metrics = self.ft_face.borrow().glyph().metrics();
+//     let extents = Extents {
+//         width: metrics.width as i32,
+//         ascent: metrics.horiBearingY as i32,
+//         descent: metrics.height as i32 - metrics.horiBearingY as i32,
+//     };
+//     let extents = extents * glyph.scale;
+//     let pos = Point { x: 0, y: 0 };
+//     Bounds {
+//         extents: extents,
+//         origin: pos,
+//     }
+// }

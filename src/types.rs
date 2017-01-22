@@ -460,7 +460,6 @@ impl CornerPosition {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use super::PercentScale;
 
     #[test]
     #[should_panic(expected = "Not a valid percent value")]

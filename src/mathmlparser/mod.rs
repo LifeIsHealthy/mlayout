@@ -12,10 +12,10 @@ use std::borrow::Cow;
 
 use types::{MathExpression, MathItem, Atom, OverUnder, GeneralizedFraction, Root, Length};
 
-use self::quick_xml::{XmlReader, Event, Element};
-use self::quick_xml::error::ResultPos;
+pub use self::quick_xml::{XmlReader, Event, Element};
+pub use self::quick_xml::error::ResultPos;
 
-use self::error::*;
+pub use self::error::*;
 
 type Result<T> = std::result::Result<T, ParsingError>;
 

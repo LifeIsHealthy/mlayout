@@ -1,7 +1,7 @@
 use std::cmp::max;
 
 use types::{LayoutStyle, Glyph, CornerPosition};
-use super::font::{MathFont, hb, Position};
+use super::font::{MathShaper, MathConstant, Position};
 use super::math_box::{MathBox, Content};
 
 fn get_first_glyph<T>(math_box: &MathBox<T>) -> Option<Glyph> {
@@ -20,23 +20,22 @@ fn get_last_glyph<T>(math_box: &MathBox<T>) -> Option<Glyph> {
     }
 }
 
-pub fn get_superscript_shift_up<T>(superscript: &MathBox<T>,
-                                   nucleus: &MathBox<T>,
-                                   font: &MathFont,
-                                   style: LayoutStyle)
-                                   -> Position {
-    let std_shift_up = font.get_math_constant(if style.is_cramped {
-        hb::HB_OT_MATH_CONSTANT_SUPERSCRIPT_SHIFT_UP_CRAMPED
+pub fn get_superscript_shift_up<T, S: MathShaper>(superscript: &MathBox<T>,
+                                                  nucleus: &MathBox<T>,
+                                                  shaper: &S,
+                                                  style: LayoutStyle)
+                                                  -> Position {
+    let std_shift_up = shaper.math_constant(if style.is_cramped {
+        MathConstant::SuperscriptShiftUpCramped
     } else {
-        hb::HB_OT_MATH_CONSTANT_SUPERSCRIPT_SHIFT_UP
+        MathConstant::SuperscriptShiftUp
     });
 
     let min_shift_up = superscript.ink_extents.descent +
-                       font.get_math_constant(hb::HB_OT_MATH_CONSTANT_SUPERSCRIPT_BOTTOM_MIN);
+                       shaper.math_constant(MathConstant::SuperscriptBottomMin);
 
     let min_shift_from_baseline_drop =
-        nucleus.ink_extents.ascent -
-        font.get_math_constant(hb::HB_OT_MATH_CONSTANT_SUPERSCRIPT_BASELINE_DROP_MAX);
+        nucleus.ink_extents.ascent - shaper.math_constant(MathConstant::SuperscriptBaselineDropMax);
 
 
 
@@ -44,34 +43,32 @@ pub fn get_superscript_shift_up<T>(superscript: &MathBox<T>,
         max(std_shift_up, min_shift_up))
 }
 
-pub fn get_subscript_shift_dn<T>(subscript: &MathBox<T>,
-                                 nucleus: &MathBox<T>,
-                                 font: &MathFont)
-                                 -> Position {
+pub fn get_subscript_shift_dn<T, S: MathShaper>(subscript: &MathBox<T>,
+                                                nucleus: &MathBox<T>,
+                                                shaper: &S)
+                                                -> Position {
     let min_shift_dn_from_baseline_drop =
-        nucleus.ink_extents.descent +
-        font.get_math_constant(hb::HB_OT_MATH_CONSTANT_SUBSCRIPT_BASELINE_DROP_MIN);
+        nucleus.ink_extents.descent + shaper.math_constant(MathConstant::SubscriptBaselineDropMin);
 
-    let std_shift_dn = font.get_math_constant(hb::HB_OT_MATH_CONSTANT_SUBSCRIPT_SHIFT_DOWN);
+    let std_shift_dn = shaper.math_constant(MathConstant::SubscriptShiftDown);
     let min_shift_dn = subscript.ink_extents.ascent -
-                       font.get_math_constant(hb::HB_OT_MATH_CONSTANT_SUBSCRIPT_TOP_MAX);
+                       shaper.math_constant(MathConstant::SubscriptTopMax);
 
     max(min_shift_dn_from_baseline_drop,
         max(std_shift_dn, min_shift_dn))
 }
 
-pub fn get_subsup_shifts<T>(subscript: &MathBox<T>,
-                            superscript: &MathBox<T>,
-                            nucleus: &MathBox<T>,
-                            font: &MathFont,
-                            style: LayoutStyle)
-                            -> (Position, Position) {
-    let mut super_shift = get_superscript_shift_up(superscript, nucleus, font, style);
-    let mut sub_shift = get_subscript_shift_dn(subscript, nucleus, font);
+pub fn get_subsup_shifts<T, S: MathShaper>(subscript: &MathBox<T>,
+                                           superscript: &MathBox<T>,
+                                           nucleus: &MathBox<T>,
+                                           shaper: &S,
+                                           style: LayoutStyle)
+                                           -> (Position, Position) {
+    let mut super_shift = get_superscript_shift_up(superscript, nucleus, shaper, style);
+    let mut sub_shift = get_subscript_shift_dn(subscript, nucleus, shaper);
 
-    let subsup_gap_min = font.get_math_constant(hb::HB_OT_MATH_CONSTANT_SUB_SUPERSCRIPT_GAP_MIN);
-    let super_bottom_max =
-        font.get_math_constant(hb::HB_OT_MATH_CONSTANT_SUPERSCRIPT_BOTTOM_MAX_WITH_SUBSCRIPT);
+    let subsup_gap_min = shaper.math_constant(MathConstant::SubSuperscriptGapMin);
+    let super_bottom_max = shaper.math_constant(MathConstant::SuperscriptBottomMaxWithSubscript);
 
     let super_bottom = super_shift - superscript.ink_extents.descent;
     let sub_top = -sub_shift + subscript.ink_extents.ascent;
@@ -92,12 +89,12 @@ pub fn get_subsup_shifts<T>(subscript: &MathBox<T>,
 }
 
 // TODO: needs tests
-pub fn get_attachment_kern<T>(nucleus: &MathBox<T>,
-                              attachment: &MathBox<T>,
-                              attachment_position: CornerPosition,
-                              attachment_shift: Position,
-                              font: &MathFont)
-                              -> Position {
+pub fn get_attachment_kern<T, S: MathShaper>(nucleus: &MathBox<T>,
+                                             attachment: &MathBox<T>,
+                                             attachment_position: CornerPosition,
+                                             attachment_shift: Position,
+                                             shaper: &S)
+                                             -> Position {
     let mut kerning = 0;
 
     let nucleus_glyph = if attachment_position.is_left() {
@@ -122,9 +119,9 @@ pub fn get_attachment_kern<T>(nucleus: &MathBox<T>,
                 let attachment_correction_height = attachment_shift - nucleus.ink_extents.descent;
                 (base_correction_height, attachment_correction_height)
             };
-            kerning += font.get_math_kern(nucleus_glyph, attachment_position, bch);
+            kerning += shaper.math_kerning(nucleus_glyph, attachment_position, bch);
             kerning +=
-                font.get_math_kern(attachment_glyph, attachment_position.diagonal_mirror(), ach);
+                shaper.math_kerning(attachment_glyph, attachment_position.diagonal_mirror(), ach);
         }
     };
     kerning

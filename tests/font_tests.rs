@@ -14,11 +14,11 @@ fn constants_test() {
                               280, 111, 600, 200, 167, 394, 677, 345, 686, 40, 120, 40, 40, 120,
                               350, 96, 120, 40, 40, 120, 40, 40, 50, 148, 40, 40, 278, -556, 60];
     for (num, latin_const) in latin_moder_consts.iter().enumerate() {
-        let const_index = num as hb::hb_ot_math_constant_t;
-        let value = font.get_math_constant(const_index);
+        let math_const: MathConstant = unsafe { ::std::mem::transmute(num as u32) };
+        let value = font.math_constant(math_const);
         println!("constant num {:?}, named: {:?}; expected value: {:?}, computed value: {:?}",
                  num,
-                 const_index,
+                 math_const,
                  *latin_const,
                  value);
         assert!(value == *latin_const);
