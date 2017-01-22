@@ -25,6 +25,6 @@ pub fn test_font() -> HarfbuzzShaper<'static> {
 #[allow(dead_code)]
 pub fn layout_list<T: Debug>(list: math_render::MathExpression<T>) -> math_render::math_box::MathBox<T> {
     FT_LIB.with(|ft_lib| {
-        math_render::layout(list, &test_font(), ft_lib)
+        math_render::layout(list, &test_font())
     })
 }

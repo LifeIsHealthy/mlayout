@@ -1,6 +1,4 @@
 #![allow(unused_variables, dead_code, needless_lifetimes)]
-extern crate freetype;
-
 use types::*;
 use std::iter;
 use std::iter::IntoIterator;
@@ -18,8 +16,6 @@ pub struct LayoutOptions<'a, S: 'a + MathShaper> {
     pub shaper: &'a S,
     pub style: LayoutStyle,
     pub stretch_size: Option<StretchSize>,
-
-    pub ft_library: &'a freetype::Library,
 }
 
 // We need to implement Copy and Clone manually for LayoutOptions instead of deriving it because

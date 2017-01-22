@@ -59,7 +59,7 @@ fn render_mathml(file: &[u8], font_bytes: &[u8], output_name: &str) {
     let font = Face::new(font_bytes, 0).create_font();
     let shaper = HarfbuzzShaper::new(font);
 
-    let parsed_box = math_render::layout(list, &shaper, &library);
+    let parsed_box = math_render::layout(list, &shaper);
 
     render_box(parsed_box, &shaper, &face, output_name);
 }

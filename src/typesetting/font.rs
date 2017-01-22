@@ -135,18 +135,18 @@ impl<'a> HarfbuzzShaper<'a> {
         // hb::hb_buffer_set_language(buffer.hb_buffer, hb::hb_language_get_default());
         let mut features: Vec<hb::hb_feature_t> = Vec::with_capacity(2);
         if style.script_level >= 1 {
-            let math_variants_tag = ot_tag!('s', 's', 't', 'y');
+            let math_variants_tag = Tag::new('s', 's', 't', 'y');
             let variant_num = style.script_level as u32;
 
             features.push(hb::hb_feature_t {
-                tag: math_variants_tag,
+                tag: math_variants_tag.0,
                 value: variant_num,
                 start: 0,
                 end: std::u32::MAX,
             })
         }
         features.push(hb::hb_feature_t {
-            tag: ot_tag!('f', 'l', 'a', 'c'),
+            tag: Tag::new('f', 'l', 'a', 'c').0,
             value: 1,
             start: 0,
             end: std::u32::MAX,
