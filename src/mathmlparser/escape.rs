@@ -24,15 +24,18 @@ pub fn unescape(s: &str) -> Result<Cow<str>> {
     'outer: for ent_ref in s.split('&').skip(1) {
         if let Some(i) = ent_ref.find(';') {
             let start_index = ent_ref.as_ptr() as usize - s.as_ptr() as usize;
+            if ent_ref.as_bytes()[0] == b'#' {
+                let replacement = parse_numeric_entity(&ent_ref[1..i])?;
+                escapes.push((start_index - 1..start_index + i, StrOrChr::Chr(replacement)));
+                continue 'outer;
+            }
             for &(name, replacement) in ENTITIES.iter() {
                 if &ent_ref[0..i] == name {
                     escapes.push((start_index - 1..start_index + i, StrOrChr::Str(replacement)));
                     continue 'outer;
                 }
             }
-            // no text entity replacement found
-            let replacement = parse_numeric_entity(&ent_ref[0..i])?;
-            escapes.push((start_index - 1..start_index + i, StrOrChr::Chr(replacement)));
+            return Err(ParsingError::from("unrecognized entity"));
         } else {
             return Err(ParsingError::from("bad entity"));
         }
@@ -61,11 +64,11 @@ pub fn unescape(s: &str) -> Result<Cow<str>> {
 fn parse_numeric_entity(ent: &str) -> Result<char> {
     match ent {
         "" => Err(ParsingError::from("empty entity")),
-        "#x0" | "#0" => Err(ParsingError::from("malformed entity")),
-        ent if ent.len() > 1 && ent.as_bytes()[0] == b'#' => {
+        "x0" | "0" => Err(ParsingError::from("malformed entity")),
+        ent => {
             let bytes = ent.as_bytes();
-            if bytes[1] == b'x' {
-                let name = &ent[2..];
+            if bytes[0] == b'x' {
+                let name = &ent[1..];
                 match u32::from_str_radix(name, 16).ok().and_then(std::char::from_u32) {
                     Some(c) => Ok(c),
                     None => {
@@ -73,16 +76,15 @@ fn parse_numeric_entity(ent: &str) -> Result<char> {
                     }
                 }
             } else {
-                let name = &ent[1..];
+                let name = &ent[..];
                 match u32::from_str_radix(name, 10).ok().and_then(std::char::from_u32) {
                     Some(c) => Ok(c),
                     None => {
-                        Err(ParsingError::from("Invalid hexadecimal character number in an entity"))
+                        Err(ParsingError::from("Invalid decimal character number in an entity"))
                     }
                 }
             }
         }
-        _ => Err(ParsingError::from("unrecognized entity")),
     }
 }
 
