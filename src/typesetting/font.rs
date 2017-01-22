@@ -127,7 +127,10 @@ pub struct HarfbuzzShaper<'a> {
 impl<'a> HarfbuzzShaper<'a> {
     pub fn new(font: Font) -> HarfbuzzShaper {
         let buffer = Some(UnicodeBuffer::new()).into();
-        HarfbuzzShaper { font: font, buffer: buffer }
+        HarfbuzzShaper {
+            font: font,
+            buffer: buffer,
+        }
     }
 
     fn shape_with_style(&self, string: &str, style: LayoutStyle) -> GlyphBuffer {
@@ -213,10 +216,13 @@ impl<'a> HarfbuzzShaper<'a> {
         let extents = Extents {
             width: glyph_extents.width,
             ascent: glyph_extents.y_bearing,
-            descent: - (glyph_extents.height + glyph_extents.y_bearing),
+            descent: -(glyph_extents.height + glyph_extents.y_bearing),
         };
         let extents = extents * glyph.scale;
-        let pos = Point { x: glyph_offset.0, y: glyph_offset.1 };
+        let pos = Point {
+            x: glyph_offset.0,
+            y: glyph_offset.1,
+        };
         Bounds {
             extents: extents,
             origin: pos,
@@ -271,12 +277,19 @@ impl<'a> MathShaper for HarfbuzzShaper<'a> {
     }
 
     fn shape_stretchy<T>(&self,
-                         symbol: &str,
+                         string: &str,
                          horizontal: bool,
                          target_size: u32,
                          style: LayoutStyle)
                          -> Vec<MathBox<T>> {
-        Vec::new()
+        let glyph_buffer = self.shape_with_style(string, style);
+        unsafe {
+            hb::hb_ot_shape_math_stretchy(self.font.as_raw(),
+                                          glyph_buffer.as_raw(),
+                                          horizontal as i32,
+                                          target_size as i32);
+        }
+        self.layout_boxes(style, glyph_buffer)
     }
 
     fn glyph_box<T>(&self, glyph: Glyph) -> MathBox<T> {
