@@ -10,13 +10,14 @@ use std;
 use std::io::BufRead;
 use std::borrow::Cow;
 
-use types::{MathExpression, MathItem, Atom, OverUnder, GeneralizedFraction, Root, Length};
+use types::{Atom, OverUnder, GeneralizedFraction, Root, Length, MathExpression, MathItem};
 
 pub use self::quick_xml::{XmlReader, Event, Element};
 pub use self::quick_xml::error::ResultPos;
 
 pub use self::error::*;
 
+pub type MExpression = MathExpression<MathmlInfo>;
 type Result<T> = std::result::Result<T, ParsingError>;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -32,6 +33,7 @@ enum ElementType {
     MathmlRoot,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum ArgumentRequirements {
     ArgumentList, // single argument or inferred mrow
@@ -114,6 +116,7 @@ fn match_math_element(identifier: &str) -> Option<MathmlElement> {
 #[derive(Debug, Default, Copy, Clone)]
 pub struct MathmlInfo {
     operator_attrs: Option<operator::Attributes>,
+    pub is_space: bool
 }
 
 impl MathmlInfo {
@@ -121,8 +124,6 @@ impl MathmlInfo {
         !self.operator_attrs.is_none()
     }
 }
-
-pub type MExpression = MathExpression<MathmlInfo>;
 
 pub fn parse<R: BufRead>(file: R) -> Result<MExpression> {
     let mut parser = XmlReader::from_reader(file).trim_text(true);
@@ -208,7 +209,7 @@ fn parse_list_schema<'a, A>(content: Vec<MExpression>,
                             -> Result<MExpression>
     where A: Iterator<Item = ResultPos<(&'a [u8], Cow<'a, [u8]>)>>
 {
-    let content = MathExpression {
+    let content = MExpression {
         content: MathItem::List(content),
         user_info: Default::default(),
     };
@@ -251,7 +252,7 @@ fn parse_fixed_schema<'a, A>(mut content: Vec<MExpression>,
     where A: Iterator<Item = ResultPos<(&'a [u8], Cow<'a, [u8]>)>>
 {
     let mut arguments = content.drain(..);
-    let item = match elem.identifier {
+    let result = match elem.identifier {
         "mfrac" => {
             let frac = GeneralizedFraction {
                 numerator: arguments.next().unwrap(),
@@ -327,14 +328,11 @@ fn parse_fixed_schema<'a, A>(mut content: Vec<MExpression>,
         }
         _ => unimplemented!(),
     };
-    Ok(MathExpression {
-        content: item,
-        user_info: Default::default(),
-    })
+    Ok(MExpression { content: result, ..Default::default() })
 }
 
 
-fn parse_length(length_str: &str) -> Result<Length> {
+fn parse_length(_: &str) -> Result<Length> {
     unimplemented!()
 }
 

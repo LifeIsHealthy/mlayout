@@ -27,24 +27,6 @@ impl<T: Debug> MathExpression<T> {
     }
 }
 
-impl<T: Default + Debug> MathExpression<T> {
-    /// Creates an empty `MathExpression`.
-    pub fn empty() -> MathExpression<T> {
-        let item = MathItem::Field(Field::Empty);
-        MathExpression {
-            content: item,
-            user_info: Default::default(),
-        }
-    }
-
-    /// Returns true if the content is spacelike. That means the content will not cause anything
-    /// to be drawn.
-    pub fn is_space(&self) -> bool {
-        self.content.is_space()
-    }
-}
-
-
 /// A `MathItem` is the abstract representation of mathematical notation that manages the layout
 /// of its subexpressions.
 #[derive(Debug)]
@@ -53,11 +35,7 @@ pub enum MathItem<T: Debug> {
     Field(Field),
     /// A fixed amount of whitespace in the formula. `width` specifies the horizontal space,
     /// `ascent` the space above the baseline and `descent` the space below the baseline.
-    Space {
-        width: Length,
-        ascent: Length,
-        descent: Length,
-    },
+    Space(MathSpace),
     /// An expression that consists of a base (called nucleus) and optionally of attachments at
     /// each corner (e.g. subscripts and superscripts).
     Atom(Box<Atom<T>>),
@@ -81,17 +59,6 @@ impl<T: Debug> Default for MathItem<T> {
         MathItem::Field(Field::Empty)
     }
 }
-
-impl<T: Debug> MathItem<T> {
-    pub fn is_space(&self) -> bool {
-        if let MathItem::Space { .. } = *self {
-            true
-        } else {
-            false
-        }
-    }
-}
-
 
 /// A Field is the basic building block of mathematical notation. If a `MathExpression` is
 /// considered as a tree data structure, then a `Field` represents a leaf.
@@ -132,6 +99,19 @@ impl Field {
     /// ```
     pub fn is_empty(&self) -> bool {
         *self == Field::Empty
+    }
+}
+
+#[derive(Copy, Clone, Default, Debug)]
+pub struct MathSpace {
+    pub width: Length,
+    pub ascent: Length,
+    pub descent: Length,
+}
+
+impl MathSpace {
+    pub fn horizontal_space(width: Length) -> Self {
+        MathSpace { width: width, ..Default::default() }
     }
 }
 
@@ -227,6 +207,12 @@ impl Length {
     }
 }
 
+impl Default for Length {
+    fn default() -> Length {
+        Length::Em(0.0)
+    }
+}
+
 /// A type for representing fractional scale values in percent. A value of 100 means original size,
 /// 50 means scaled to half the original size.
 ///
@@ -237,7 +223,7 @@ impl Length {
 /// let num = 300;
 /// assert_eq!(150, num * scale);
 /// ```
-#[derive(Default, Clone, Copy, PartialOrd, Ord, PartialEq, Eq)]
+#[derive(Default, Clone, Copy, PartialOrd, Ord, PartialEq, Eq, Hash)]
 pub struct PercentScale {
     percent: u8,
 }
@@ -308,7 +294,7 @@ impl Div<PercentScale> for i32 {
 }
 
 /// Combines a horizontal and a vertical `PercentScale` value for direction-dependent scaling.
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct PercentScale2D {
     /// horizontal scaling value
     pub horiz: PercentScale,
@@ -317,7 +303,7 @@ pub struct PercentScale2D {
 }
 
 /// A font-dependent representation of a (possibly scaled) glyph.
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Glyph {
     /// The identifier of the glyph inside the font.
     pub glyph_code: GlyphCode,
@@ -466,10 +452,5 @@ mod tests {
     fn percent_test() {
         let val = PercentScale::new(101);
         assert_eq!(val.as_percentage(), 100);
-    }
-
-    #[test]
-    fn empty_test() {
-        assert!(MathExpression::<()>::empty().is_empty());
     }
 }

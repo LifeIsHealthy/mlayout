@@ -1,20 +1,22 @@
 use std::fmt::Debug;
-use std::iter::*;
 
 mod layout;
-pub mod font;
+pub mod shaper;
 pub mod math_box;
 mod multiscripts;
 pub mod unicode_math;
+mod lazy_vec;
 
 use types::*;
 pub use self::layout::{MathBoxLayout, LayoutOptions};
-use self::font::MathShaper;
+use self::shaper::MathShaper;
 use self::math_box::MathBox;
 
 // Calculates the dimensions of the components and their relative positioning. However no space
 // is distributed.
-pub fn layout<T: Debug, S: MathShaper>(expression: MathExpression<T>, shaper: &S) -> MathBox<T> {
+pub fn layout<'a, T: 'a + Debug, S: MathShaper>(expression: MathExpression<T>,
+                                                shaper: &'a S)
+                                                -> MathBox<'a, T> {
     let options = LayoutOptions {
         shaper: shaper,
         style: LayoutStyle {
@@ -25,6 +27,5 @@ pub fn layout<T: Debug, S: MathShaper>(expression: MathExpression<T>, shaper: &S
         stretch_size: None,
     };
 
-    let boxes = expression.layout(options);
-    boxes.collect()
+    expression.layout(options)
 }

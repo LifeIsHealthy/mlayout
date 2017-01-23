@@ -1,7 +1,7 @@
 use std::str::FromStr;
 use std::ops::Not;
 
-use types::{MathItem, Length, MathExpression};
+use types::{Length, MathSpace, MathItem};
 
 use super::MExpression;
 use super::operator_dict;
@@ -25,7 +25,7 @@ impl Default for Flags {
 }
 
 pub struct FormParsingError {
-    pub unknown_str: String
+    pub unknown_str: String,
 }
 
 #[derive(PartialEq, Eq, Copy, Clone, Debug, Ord, PartialOrd)]
@@ -74,27 +74,34 @@ impl Attributes {
     }
 }
 
-pub fn insert_space_for_operator(list: &mut Vec<MExpression>, mut index: usize) {
+pub fn insert_space_for_operator(list: &mut Vec<MExpression>,
+                                                          mut index: usize) {
     let operator_attrs = list[index].user_info.operator_attrs.unwrap();
     let lspace = operator_attrs.lspace.expect("operator has no lspace");
     let rspace = operator_attrs.rspace.expect("operator has no rspace");
     if !lspace.is_null() {
-        let left_space = MathItem::Space {
+        let left_space = MathSpace {
             width: lspace,
             ascent: Length::Em(0f32),
             descent: Length::Em(0f32),
         };
-        let left_space = MathExpression { content: left_space, ..Default::default() };
+        let left_space = MExpression {
+            content: MathItem::Space(left_space),
+            user_info: Default::default(),
+        };
         list.insert(index, left_space);
         index += 1;
     }
     if !rspace.is_null() {
-        let right_space = MathItem::Space {
+        let right_space = MathSpace {
             width: rspace,
             ascent: Length::Em(0f32),
             descent: Length::Em(0f32),
         };
-        let right_space = MathExpression { content: right_space, ..Default::default() };
+        let right_space = MExpression {
+            content: MathItem::Space(right_space),
+            user_info: Default::default(),
+        };
         list.insert(index + 1, right_space);
     }
 }
@@ -106,7 +113,7 @@ pub fn process_operators(list: &mut Vec<MExpression>) {
     let mut last_non_ws_index = 0;
     let operator_indices = list.iter_mut()
         .enumerate()
-        .filter(|&(_, ref elem)| elem.is_space().not())
+        .filter(|&(_, ref elem)| elem.user_info.is_space.not())
         .inspect(|&(index, _)| {
             if first_non_ws_index == -1 {
                 first_non_ws_index = index as isize;
@@ -115,9 +122,7 @@ pub fn process_operators(list: &mut Vec<MExpression>) {
         })
         .filter(|&(_, ref elem)| elem.user_info.is_operator())
         .by_ref()
-        .map(|(index, _)| {
-            index
-        })
+        .map(|(index, _)| index)
         .collect::<Vec<_>>();
 
     for index in &operator_indices {

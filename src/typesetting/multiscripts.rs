@@ -1,41 +1,25 @@
 use std::cmp::max;
 
-use types::{LayoutStyle, Glyph, CornerPosition};
-use super::font::{MathShaper, MathConstant, Position};
-use super::math_box::{MathBox, Content};
+use types::{LayoutStyle, CornerPosition};
+use super::shaper::{MathShaper, MathConstant, Position};
+use super::math_box::MathBox;
 
-fn get_first_glyph<T>(math_box: &MathBox<T>) -> Option<Glyph> {
-    match math_box.content {
-        Content::Glyph(glyph) => Some(glyph),
-        Content::Boxes(ref list) => get_first_glyph(list.first().unwrap()),
-        _ => None,
-    }
-}
-
-fn get_last_glyph<T>(math_box: &MathBox<T>) -> Option<Glyph> {
-    match math_box.content {
-        Content::Glyph(glyph) => Some(glyph),
-        Content::Boxes(ref list) => get_last_glyph(list.last().unwrap()),
-        _ => None,
-    }
-}
-
-pub fn get_superscript_shift_up<T, S: MathShaper>(superscript: &MathBox<T>,
-                                                  nucleus: &MathBox<T>,
-                                                  shaper: &S,
-                                                  style: LayoutStyle)
-                                                  -> Position {
+pub fn get_superscript_shift_up<'a, T: 'a>(superscript: &MathBox<'a, T>,
+                                   nucleus: &MathBox<'a, T>,
+                                   shaper: &MathShaper,
+                                   style: LayoutStyle)
+                                   -> Position {
     let std_shift_up = shaper.math_constant(if style.is_cramped {
         MathConstant::SuperscriptShiftUpCramped
     } else {
         MathConstant::SuperscriptShiftUp
     });
 
-    let min_shift_up = superscript.ink_extents.descent +
+    let min_shift_up = superscript.descent() +
                        shaper.math_constant(MathConstant::SuperscriptBottomMin);
 
     let min_shift_from_baseline_drop =
-        nucleus.ink_extents.ascent - shaper.math_constant(MathConstant::SuperscriptBaselineDropMax);
+        nucleus.ascent() - shaper.math_constant(MathConstant::SuperscriptBaselineDropMax);
 
 
 
@@ -43,35 +27,34 @@ pub fn get_superscript_shift_up<T, S: MathShaper>(superscript: &MathBox<T>,
         max(std_shift_up, min_shift_up))
 }
 
-pub fn get_subscript_shift_dn<T, S: MathShaper>(subscript: &MathBox<T>,
-                                                nucleus: &MathBox<T>,
-                                                shaper: &S)
-                                                -> Position {
+pub fn get_subscript_shift_dn<'a, T: 'a>(subscript: &MathBox<'a, T>,
+                                 nucleus: &MathBox<'a, T>,
+                                 shaper: &MathShaper)
+                                 -> Position {
     let min_shift_dn_from_baseline_drop =
-        nucleus.ink_extents.descent + shaper.math_constant(MathConstant::SubscriptBaselineDropMin);
+        nucleus.descent() + shaper.math_constant(MathConstant::SubscriptBaselineDropMin);
 
     let std_shift_dn = shaper.math_constant(MathConstant::SubscriptShiftDown);
-    let min_shift_dn = subscript.ink_extents.ascent -
-                       shaper.math_constant(MathConstant::SubscriptTopMax);
+    let min_shift_dn = subscript.ascent() - shaper.math_constant(MathConstant::SubscriptTopMax);
 
     max(min_shift_dn_from_baseline_drop,
         max(std_shift_dn, min_shift_dn))
 }
 
-pub fn get_subsup_shifts<T, S: MathShaper>(subscript: &MathBox<T>,
-                                           superscript: &MathBox<T>,
-                                           nucleus: &MathBox<T>,
-                                           shaper: &S,
-                                           style: LayoutStyle)
-                                           -> (Position, Position) {
+pub fn get_subsup_shifts<'a, T: 'a>(subscript: &MathBox<'a, T>,
+                            superscript: &MathBox<'a, T>,
+                            nucleus: &MathBox<'a, T>,
+                            shaper: &MathShaper,
+                            style: LayoutStyle)
+                            -> (Position, Position) {
     let mut super_shift = get_superscript_shift_up(superscript, nucleus, shaper, style);
     let mut sub_shift = get_subscript_shift_dn(subscript, nucleus, shaper);
 
     let subsup_gap_min = shaper.math_constant(MathConstant::SubSuperscriptGapMin);
     let super_bottom_max = shaper.math_constant(MathConstant::SuperscriptBottomMaxWithSubscript);
 
-    let super_bottom = super_shift - superscript.ink_extents.descent;
-    let sub_top = -sub_shift + subscript.ink_extents.ascent;
+    let super_bottom = super_shift - superscript.descent();
+    let sub_top = -sub_shift + subscript.ascent();
     let gap = super_bottom - sub_top;
     if gap < subsup_gap_min {
         let needed_space = subsup_gap_min - gap;
@@ -89,34 +72,34 @@ pub fn get_subsup_shifts<T, S: MathShaper>(subscript: &MathBox<T>,
 }
 
 // TODO: needs tests
-pub fn get_attachment_kern<T, S: MathShaper>(nucleus: &MathBox<T>,
-                                             attachment: &MathBox<T>,
-                                             attachment_position: CornerPosition,
-                                             attachment_shift: Position,
-                                             shaper: &S)
-                                             -> Position {
+pub fn get_attachment_kern<'a, T: 'a>(nucleus: &MathBox<'a, T>,
+                                      attachment: &MathBox<'a, T>,
+                                      attachment_position: CornerPosition,
+                                      attachment_shift: Position,
+                                      shaper: &MathShaper)
+                                      -> Position {
     let mut kerning = 0;
 
     let nucleus_glyph = if attachment_position.is_left() {
-        get_last_glyph(nucleus)
+        nucleus.last_glyph()
     } else {
-        get_first_glyph(nucleus)
+        nucleus.first_glyph()
     };
 
     if let Some(nucleus_glyph) = nucleus_glyph {
         let attachment_glyph = if attachment_position.is_left() {
-            get_last_glyph(attachment)
+            attachment.last_glyph()
         } else {
-            get_first_glyph(attachment)
+            attachment.first_glyph()
         };
         if let Some(attachment_glyph) = attachment_glyph {
             let (bch, ach) = if attachment_position.is_top() {
-                let base_correction_height = attachment_shift - attachment.ink_extents.descent;
-                let attachment_correction_height = nucleus.ink_extents.ascent - attachment_shift;
+                let base_correction_height = attachment_shift - attachment.descent();
+                let attachment_correction_height = nucleus.ascent() - attachment_shift;
                 (base_correction_height, attachment_correction_height)
             } else {
-                let base_correction_height = -attachment_shift + attachment.ink_extents.ascent;
-                let attachment_correction_height = attachment_shift - nucleus.ink_extents.descent;
+                let base_correction_height = -attachment_shift + attachment.ascent();
+                let attachment_correction_height = attachment_shift - nucleus.descent();
                 (base_correction_height, attachment_correction_height)
             };
             kerning += shaper.math_kerning(nucleus_glyph, attachment_position, bch);

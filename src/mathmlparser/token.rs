@@ -3,12 +3,11 @@ use std::borrow::Cow;
 use std::io::BufRead;
 
 use super::operator;
-use super::quick_xml;
 use super::error::ParsingError;
 use super::{Result, ResultPos, MathmlElement, XmlReader, Event, MExpression, MathmlInfo,
             parse_length, parse_bool};
 
-use types::{Field, MathItem, MathExpression};
+use types::{Field, MathItem};
 use super::escape::unescape;
 use unicode_math::{Family, convert_character_to_family};
 
@@ -218,26 +217,22 @@ pub fn parse<'a, R: BufRead, A>(parser: &mut XmlReader<R>,
     let mut fields = parse_token_contents(parser, elem, token_style)?;
     let item = if fields.len() == 1 {
         let field = fields.remove(0);
+        if let Some(ref mut op_attrs) = op_attrs {
+            op_attrs.character = try_extract_char(&field);
+        }
         MathItem::Field(field)
     } else {
         let list = fields.into_iter()
             .map(|field| {
-                MathExpression {
+                MExpression {
                     content: MathItem::Field(field),
                     user_info: Default::default(),
                 }
-            });
-        MathItem::List(list.collect())
+            }).collect();
+        MathItem::List(list)
     };
-    if let Some(ref mut op_attrs) = op_attrs {
-        op_attrs.character = if let MathItem::Field(ref field) = item {
-            try_extract_char(field)
-        } else {
-            None
-        };
-    }
-    Ok(MathExpression {
+    Ok(MExpression {
         content: item,
-        user_info: MathmlInfo { operator_attrs: op_attrs },
+        user_info: MathmlInfo { operator_attrs: op_attrs, ..Default::default() },
     })
 }
