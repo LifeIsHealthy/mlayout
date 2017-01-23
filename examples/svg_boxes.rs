@@ -13,9 +13,10 @@ use svg::node::{Node, Text};
 
 use freetype::{face, Vector};
 use freetype::face::Face as FT_Face;
+use freetype::error::FtResult;
 use freetype::outline::Curve;
 
-use math_render::font::harfbuzz_rs::{Face};
+use math_render::font::harfbuzz_rs::{Face, FontFuncsBuilder, FontFuncsImpl};
 
 macro_rules! render_test {
     ( $y:expr, $( $x:expr ),+ ) => (
@@ -28,8 +29,8 @@ macro_rules! render_test {
 
 fn main() {
 
-    // let font = include_bytes!("/Users/mr/Library/Fonts/latinmodern-math.otf");
-    let font = include_bytes!("/Library/Fonts/Microsoft/Cambria Math.ttf");
+    let font = include_bytes!("/Users/mr/Library/Fonts/latinmodern-math.otf");
+    // let font = include_bytes!("/Library/Fonts/Microsoft/Cambria Math.ttf");
     // let font = include_bytes!("/Users/mr/Library/Fonts/Asana-Math-2.otf");
     // let font = include_bytes!("/Users/mr/Library/Fonts/texgyreschola-math.otf");
     // let font = include_bytes!("/Users/mr/Library/Fonts/xits-math.otf");
@@ -54,9 +55,25 @@ fn main() {
 fn render_mathml(file: &[u8], font_bytes: &[u8], output_name: &str) {
     let list = mathmlparser::parse(&file[..]).expect("invalid parse");
 
+    let mut font_funcs = FontFuncsBuilder::new();
+    font_funcs.set_glyph_extents_func(|_, ft_face, glyph| {
+        let result = FT_Face::load_glyph(ft_face, glyph, face::NO_SCALE);
+        if result.is_err() {
+            return None
+        }
+        let metrics = ft_face.glyph().metrics();
+        Some(GlyphExtents {
+            width: metrics.width as i32,
+            height: -metrics.height as i32,
+            x_bearing: metrics.horiBearingX as i32,
+            y_bearing: metrics.horiBearingY as i32,
+        })
+    });
+    let font_funcs = font_funcs.finish();
     let library = freetype::Library::init().unwrap();
     let face = library.new_memory_face(font_bytes, 0).unwrap();
-    let font = Face::new(font_bytes, 0).create_font();
+    let mut font = Face::new(font_bytes, 0).create_font().create_sub_font();
+    font.set_font_funcs(&font_funcs, &face);
     let shaper = HarfbuzzShaper::new(font);
 
     let parsed_box = math_render::layout(list, &shaper);
@@ -64,7 +81,7 @@ fn render_mathml(file: &[u8], font_bytes: &[u8], output_name: &str) {
     render_box(parsed_box, &shaper, &face, output_name);
 }
 
-fn render_box<T>(math_box: MathBox<T>, shaper: &HarfbuzzShaper, font: &FT_Face, output_name: &str) {
+fn render_box<T>(math_box: MathBox<T>, _: &HarfbuzzShaper, font: &FT_Face, output_name: &str) {
     let logical_extents = math_box.logical_extents;
 
     let mut document = Document::new();
