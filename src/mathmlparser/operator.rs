@@ -1,7 +1,7 @@
 use std::str::FromStr;
 use std::ops::Not;
 
-use types::{Length, MathSpace, MathItem, StretchConstraints, Operator, Field};
+use types::{Length, MathSpace, MathItem, StretchConstraints, Operator};
 
 use super::{MExpression, MathmlInfo};
 use super::operator_dict;
