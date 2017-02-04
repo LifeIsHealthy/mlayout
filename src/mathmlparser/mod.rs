@@ -238,7 +238,7 @@ fn parse_fixed_arguments<'a, R: BufRead>(parser: &mut XmlReader<R>,
         if args.len() == num_args as usize {
             Ok(args)
         } else {
-            Err(ParsingError::from_string(parser, "wrong number of arguments"))
+            Err(ParsingError::from_string(parser, "Wrong number of arguments in element."))
         }
     } else {
         unreachable!();
