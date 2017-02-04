@@ -2,7 +2,7 @@
   <msub>
     <mo>&conint;</mo>
     <mrow>
-      <mo>&part;</mo><mi>S</mi>
+      <mi>&part;</mi><mi>S</mi>
     </mrow>
   </msub>
   <mi mathvariant='bold'>F</mi>

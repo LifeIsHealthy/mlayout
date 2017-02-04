@@ -1,9 +1,9 @@
 use std::str::FromStr;
 use std::ops::Not;
 
-use types::{Length, MathSpace, MathItem, Stretchable};
+use types::{Length, MathSpace, MathItem, StretchConstraints, Operator, Field};
 
-use super::MExpression;
+use super::{MExpression, MathmlInfo};
 use super::operator_dict;
 
 bitflags! {
@@ -162,23 +162,35 @@ fn guess_operator_attributes(elem: &mut MExpression) {
                            (!operator_attrs.user_overrides & entry.flags);
 }
 
+fn find_core_operator(embellished_op: &mut MExpression) -> Option<&mut MathItem<MathmlInfo>> {
+    match embellished_op.content {
+        MathItem::Field(_) => Some(&mut embellished_op.content),
+        MathItem::Atom(ref mut atom) => find_core_operator(&mut atom.nucleus),
+        MathItem::OverUnder(ref mut ou) => find_core_operator(&mut ou.nucleus),
+        MathItem::GeneralizedFraction(ref mut frac) => find_core_operator(&mut frac.numerator),
+        _ => None,
+    }
+}
+
 fn make_stretchy(elem: &mut MExpression) {
     let flags = elem.user_info.operator_attrs.unwrap().flags;
-        println!("{:?}", elem);
-    if flags.contains(STRETCHY) || flags.contains(LARGEOP) {
-        let new_item = if let MExpression { content: MathItem::Field(ref field), .. } = *elem {
-            let new_elem = Stretchable {
-                field: field.clone(),
-                symmetric: flags.contains(SYMMETRIC),
-                is_display_operator: flags.contains(LARGEOP),
-                ..Default::default()
-            };
-            Some(MathItem::Stretchy(new_elem))
+
+    if let Some(item) = find_core_operator(elem) {
+        let stretch_constraints = if flags.contains(STRETCHY) {
+            Some(StretchConstraints { symmetric: flags.contains(SYMMETRIC), ..Default::default() })
         } else {
             None
         };
-        if let Some(new_item) = new_item {
-            elem.content = new_item
-        }
+        let field = match *item {
+            MathItem::Field(ref field) => field.clone(),
+            _ => unreachable!()
+        };
+        let new_elem = Operator {
+            stretch_constraints: stretch_constraints,
+            field: field,
+            is_large_op: flags.contains(LARGEOP),
+            ..Default::default()
+        };
+        ::std::mem::replace(item, MathItem::Operator(new_elem));
     }
 }

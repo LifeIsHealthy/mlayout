@@ -25,6 +25,14 @@ impl<T: Debug> MathExpression<T> {
             false
         }
     }
+
+    pub fn as_option(self) -> Option<Self> {
+        if self.is_empty() {
+            None
+        } else {
+            Some(self)
+        }
+    }
 }
 
 /// A `MathItem` is the abstract representation of mathematical notation that manages the layout
@@ -49,7 +57,7 @@ pub enum MathItem<T: Debug> {
     Root(Box<Root<T>>),
     /// A symbol that can grow horizontally or vertically to match the size of its surrounding
     /// elements.
-    Stretchy(Stretchable),
+    Operator(Operator),
     /// A list of math items to be layed out sequentially.
     List(Vec<MathExpression<T>>),
 }
@@ -99,6 +107,13 @@ impl Field {
     /// ```
     pub fn is_empty(&self) -> bool {
         *self == Field::Empty
+    }
+
+    pub fn into_option(self) -> Option<Field> {
+        match self {
+            Field::Empty => None,
+            _ => Some(self),
+        }
     }
 }
 
@@ -174,12 +189,17 @@ pub struct Root<T: Debug> {
     pub degree: MathExpression<T>,
 }
 
-#[derive(Debug, Default)]
-pub struct Stretchable {
+#[derive(Debug, Default, Copy, Clone)]
+pub struct StretchConstraints {
     pub min_size: Option<Length>,
     pub max_size: Option<Length>,
     pub symmetric: bool,
-    pub is_display_operator: bool,
+}
+
+#[derive(Debug, Default)]
+pub struct Operator {
+    pub stretch_constraints: Option<StretchConstraints>,
+    pub is_large_op: bool,
     pub field: Field,
 }
 

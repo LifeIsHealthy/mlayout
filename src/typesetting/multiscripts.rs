@@ -109,3 +109,34 @@ pub fn get_attachment_kern<'a, T: 'a>(nucleus: &MathBox<'a, T>,
     };
     kerning
 }
+
+pub fn position_attachment<'a, T: 'a>(attachment: &mut MathBox<'a, T>,
+                                      nucleus: &mut MathBox<'a, T>,
+                                      nucleus_is_largeop: bool,
+                                      attachment_position: CornerPosition,
+                                      attachment_vert_shift: i32,
+                                      shaper: &MathShaper) {
+    let shift = attachment_vert_shift;
+
+    let kern = get_attachment_kern(nucleus, attachment, attachment_position, shift, shaper);
+
+    let italic_correction = match (nucleus_is_largeop, attachment_position.is_top()) {
+        (true, false) => -nucleus.italic_correction(),
+        (false, true) => nucleus.italic_correction(),
+        _ => 0,
+    };
+
+    if attachment_position.is_left() {
+        attachment.origin.x -= kern;
+        unimplemented!();
+    } else {
+        attachment.origin.x = nucleus.origin.x + nucleus.width() + italic_correction;
+        attachment.origin.x += kern;
+    }
+
+    if attachment_position.is_top() {
+        attachment.origin.y -= shift;
+    } else {
+        attachment.origin.y += shift;
+    }
+}

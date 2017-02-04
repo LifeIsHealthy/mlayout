@@ -328,7 +328,19 @@ fn parse_fixed_schema<'a, A>(mut content: Vec<MExpression>,
         }
         _ => unimplemented!(),
     };
-    Ok(MExpression { content: result, ..Default::default() })
+    let info = MathmlInfo {
+        operator_attrs: match result {
+            MathItem::Atom(ref atom) => atom.nucleus.user_info.operator_attrs,
+            MathItem::OverUnder(ref ou) => ou.nucleus.user_info.operator_attrs,
+            MathItem::GeneralizedFraction(ref frac) => frac.numerator.user_info.operator_attrs,
+            _ => None,
+        },
+        ..Default::default()
+    };
+    Ok(MExpression {
+        content: result,
+        user_info: info,
+    })
 }
 
 
