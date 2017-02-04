@@ -7,7 +7,7 @@ use std::fs::File;
 use std::io::Write;
 use std::path::Path;
 
-pub struct EntityData<'a>  {
+pub struct EntityData<'a> {
     name: &'a str,
     character: &'a str,
 }
@@ -24,13 +24,19 @@ fn main() {
     let mut entities = Vec::new();
     for (key, value) in map {
         let value = value.as_string().unwrap();
-        let new_entity = EntityData { name: key, character: &value };
+        let new_entity = EntityData {
+            name: key,
+            character: &value,
+        };
         entities.push(new_entity);
     }
 
     let mut f = File::create(&dest_path).unwrap();
 
-    write!(f, "pub static ENTITIES: [(&'static str, &'static str); {:?}] = [", entities.len()).unwrap();
+    write!(f,
+           "pub static ENTITIES: [(&'static str, &'static str); {:?}] = [",
+           entities.len())
+        .unwrap();
     for EntityData { name, character } in entities {
         write!(f, "({:?}, {:?}),\n", name, character).unwrap();
     }
