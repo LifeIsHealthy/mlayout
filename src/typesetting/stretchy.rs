@@ -1,16 +1,36 @@
 use super::*;
 
-use super::layout::StretchSize;
+use super::layout::{StretchSize, OperatorProperties};
 use std::fmt::Debug;
 use types::MathExpression;
+use math_box::Extents;
 
 fn indices_of_stretchy_elements<'a, T: Debug>(list: &[MathExpression<T>],
                                               options: LayoutOptions<'a>)
                                               -> Vec<usize> {
     list.iter()
         .enumerate()
-        .filter_map(|(index, elem)| elem.stretch_properties(options).map(|_| index))
+        .filter_map(|(index, elem)| {
+            elem.operator_properties(options).and_then(|x| x.intrinsic_size).map(|_| index)
+        })
         .collect()
+}
+
+pub fn layout_list_element<'a, T: 'a + Debug>(item: MathExpression<T>,
+                                              options: LayoutOptions<'a>)
+                                              -> MathBox<'a, T> {
+    if let Some(OperatorProperties { leading_space, trailing_space, .. }) =
+        item.operator_properties(options) {
+        if options.style.math_style == MathStyle::Display {
+            let left_space = MathBox::empty(Extents::new(leading_space, 0, 0));
+            let mut elem = item.layout(options);
+            elem.origin.x += leading_space;
+            let mut right_space = MathBox::empty(Extents::new(trailing_space, 0, 0));
+            right_space.origin.x += leading_space + elem.width();
+            return MathBox::with_vec(vec![left_space, elem, right_space]);
+        }
+    }
+    item.layout(options)
 }
 
 
@@ -20,8 +40,7 @@ pub fn layout_strechy_list<'a, T: 'a + Debug>(list: Vec<MathExpression<T>>,
     let stretchy_indices = indices_of_stretchy_elements(&list, options);
 
     if stretchy_indices.is_empty() {
-        let iter = list.into_iter().map(move |item| item.layout(options));
-        return Box::new(iter);
+        return Box::new(list.into_iter().map(move |item| layout_list_element(item, options)));
     }
 
     let mut stretchy_elems = Vec::with_capacity(stretchy_indices.len());
@@ -29,11 +48,12 @@ pub fn layout_strechy_list<'a, T: 'a + Debug>(list: Vec<MathExpression<T>>,
 
     let mut max_intrinsic_size = 0;
     for elem in list {
-        if let Some(size) = elem.stretch_properties(options) {
+        if let Some(OperatorProperties { intrinsic_size: Some(size), .. }) =
+            elem.operator_properties(options) {
             stretchy_elems.push(elem);
-            max_intrinsic_size = ::std::cmp::max(max_intrinsic_size, size.intrinsic_size);
+            max_intrinsic_size = ::std::cmp::max(max_intrinsic_size, size);
         } else {
-            let math_box = elem.layout(options);
+            let math_box = layout_list_element(elem, options);
             non_stretchy_elems.push(math_box);
         }
     }

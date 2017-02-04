@@ -1,7 +1,7 @@
 use std::str::FromStr;
 use std::ops::Not;
 
-use types::{Length, MathSpace, MathItem, StretchConstraints, Operator};
+use types::{Length, MathItem, StretchConstraints, Operator};
 
 use super::{MExpression, MathmlInfo};
 use super::operator_dict;
@@ -74,29 +74,6 @@ impl Attributes {
     }
 }
 
-pub fn insert_space_for_operator(list: &mut Vec<MExpression>, mut index: usize) {
-    let operator_attrs = list[index].user_info.operator_attrs.unwrap();
-    let lspace = operator_attrs.lspace.expect("operator has no lspace");
-    let rspace = operator_attrs.rspace.expect("operator has no rspace");
-    if !lspace.is_null() {
-        let left_space = MathSpace { width: lspace, ..Default::default() };
-        let left_space = MExpression {
-            content: MathItem::Space(left_space),
-            user_info: Default::default(),
-        };
-        list.insert(index, left_space);
-        index += 1;
-    }
-    if !rspace.is_null() {
-        let right_space = MathSpace { width: rspace, ..Default::default() };
-        let right_space = MExpression {
-            content: MathItem::Space(right_space),
-            user_info: Default::default(),
-        };
-        list.insert(index + 1, right_space);
-    }
-}
-
 // (Embellished) operators are treated specially because their default attribute values depend
 // on the surrounding elements.
 pub fn process_operators(list: &mut Vec<MExpression>) {
@@ -128,11 +105,6 @@ pub fn process_operators(list: &mut Vec<MExpression>) {
         set_default_form(elem, Form::Infix);
         guess_operator_attributes(elem);
         make_operator(elem);
-    }
-
-    let iterator = operator_indices.iter();
-    for index in iterator.rev() {
-        insert_space_for_operator(list, *index);
     }
 }
 
@@ -173,7 +145,8 @@ fn find_core_operator(embellished_op: &mut MExpression) -> Option<&mut MathItem<
 }
 
 fn make_operator(elem: &mut MExpression) {
-    let flags = elem.user_info.operator_attrs.unwrap().flags;
+    let operator_attrs = elem.user_info.operator_attrs.unwrap();
+    let flags = operator_attrs.flags;
 
     if let Some(item) = find_core_operator(elem) {
         let stretch_constraints = if flags.contains(STRETCHY) {
@@ -189,6 +162,8 @@ fn make_operator(elem: &mut MExpression) {
             stretch_constraints: stretch_constraints,
             field: field,
             is_large_op: flags.contains(LARGEOP),
+            leading_space: operator_attrs.lspace.expect("operator has no lspace"),
+            trailing_space: operator_attrs.rspace.expect("operator has no rspace"),
             ..Default::default()
         };
         ::std::mem::replace(item, MathItem::Operator(new_elem));

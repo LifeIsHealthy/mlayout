@@ -22,9 +22,11 @@ pub struct LayoutOptions<'a> {
     pub stretch_size: Option<StretchSize>,
 }
 
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
-pub struct StretchProperties {
-    pub intrinsic_size: u32,
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Default)]
+pub struct OperatorProperties {
+    pub intrinsic_size: Option<u32>,
+    pub leading_space: i32,
+    pub trailing_space: i32,
 }
 
 impl Length {
@@ -60,20 +62,6 @@ fn clamp<T: Ord, U: Into<Option<T>>>(value: T, min: U, max: U) -> T {
     value
 }
 
-// fn calculate_stretch_size<T, U: Debug>(item: &Stretchable<T, U>,
-//                                        mut max_ascent: i32,
-//                                        mut max_descent: i32)
-//                                        -> StretchSize {
-//     let axis = 0;
-//     if item.symmetric {
-//         max_ascent = max((max_ascent - axis), (max_descent + axis)) + axis;
-//         max_descent = max((max_ascent - axis), (max_descent + axis)) - axis;
-//     }
-//
-//     let height = max_ascent + max_descent;
-//     unimplemented!()
-// }
-
 fn math_box_from_shaped_glyphs<'a, T: 'a, I>(glyphs: I, shaper: &'a MathShaper) -> MathBox<'a, T>
     where I: 'a + IntoIterator<Item = ShapedGlyph>
 {
@@ -93,7 +81,7 @@ fn math_box_from_shaped_glyphs<'a, T: 'a, I>(glyphs: I, shaper: &'a MathShaper) 
 /// layed out.
 pub trait MathBoxLayout<'a, T> {
     fn layout(self, options: LayoutOptions<'a>) -> MathBox<'a, T>;
-    fn stretch_properties(&self, options: LayoutOptions<'a>) -> Option<StretchProperties> {
+    fn operator_properties(&self, options: LayoutOptions<'a>) -> Option<OperatorProperties> {
         None
     }
 }
@@ -127,7 +115,6 @@ impl<'a, T: 'a + Debug> MathBoxLayout<'a, T> for Vec<MathExpression<T>> {
             math_box
         });
         MathBox::with_iter(Box::new(layouted))
-
     }
 }
 
@@ -143,7 +130,6 @@ impl<'a, T: 'a + Debug> MathBoxLayout<'a, T> for Atom<T> {
             MathItem::Operator(Operator { is_large_op, .. }) => is_large_op,
             _ => false,
         };
-        println!("{:?}, {:?}", nucleus_is_largeop, self.nucleus);
         let nucleus = self.nucleus.layout(options);
 
         layout_sub_superscript(subscript,
@@ -152,6 +138,10 @@ impl<'a, T: 'a + Debug> MathBoxLayout<'a, T> for Atom<T> {
                                nucleus_is_largeop,
                                options.shaper,
                                options.style)
+    }
+
+    fn operator_properties(&self, options: LayoutOptions<'a>) -> Option<OperatorProperties> {
+        self.nucleus.operator_properties(options)
     }
 }
 
@@ -248,6 +238,10 @@ impl<'a, T: 'a + Debug> MathBoxLayout<'a, T> for OverUnder<T> {
         } else {
             nucleus
         }
+    }
+
+    fn operator_properties(&self, options: LayoutOptions<'a>) -> Option<OperatorProperties> {
+        self.nucleus.operator_properties(options)
     }
 }
 
@@ -376,6 +370,10 @@ impl<'a, T: 'a + Debug> MathBoxLayout<'a, T> for GeneralizedFraction<T> {
         let fraction_rule = MathBox::with_line(origin, target, default_thickness as u32);
 
         MathBox::with_vec(vec![numerator, fraction_rule, denominator])
+    }
+
+    fn operator_properties(&self, options: LayoutOptions<'a>) -> Option<OperatorProperties> {
+        self.numerator.operator_properties(options)
     }
 }
 
@@ -514,8 +512,12 @@ impl<'a, T: 'a + Debug> MathBoxLayout<'a, T> for Operator {
         }
     }
 
-    fn stretch_properties(&self, options: LayoutOptions<'a>) -> Option<StretchProperties> {
-        self.stretch_constraints.as_ref().map(|_| StretchProperties { intrinsic_size: 0 })
+    fn operator_properties(&self, options: LayoutOptions<'a>) -> Option<OperatorProperties> {
+        Some(OperatorProperties {
+            intrinsic_size: self.stretch_constraints.as_ref().map(|_| 0),
+            leading_space: self.leading_space.to_font_units(options.shaper),
+            trailing_space: self.trailing_space.to_font_units(options.shaper),
+        })
     }
 }
 
@@ -537,8 +539,8 @@ impl<'a, T: 'a + Debug> MathBoxLayout<'a, T> for MathExpression<T> {
         math_box
     }
 
-    fn stretch_properties(&self, options: LayoutOptions<'a>) -> Option<StretchProperties> {
-        self.content.stretch_properties(options)
+    fn operator_properties(&self, options: LayoutOptions<'a>) -> Option<OperatorProperties> {
+        self.content.operator_properties(options)
     }
 }
 
@@ -556,21 +558,21 @@ impl<'a, T: 'a + Debug> MathBoxLayout<'a, T> for MathItem<T> {
         }
     }
 
-    fn stretch_properties(&self, options: LayoutOptions<'a>) -> Option<StretchProperties> {
+    fn operator_properties(&self, options: LayoutOptions<'a>) -> Option<OperatorProperties> {
         match *self {
             MathItem::Field(ref field) => {
-                MathBoxLayout::<'a, T>::stretch_properties(field, options)
+                MathBoxLayout::<'a, T>::operator_properties(field, options)
             }
             MathItem::Space(ref space) => {
-                MathBoxLayout::<'a, T>::stretch_properties(space, options)
+                MathBoxLayout::<'a, T>::operator_properties(space, options)
             }
-            MathItem::Atom(ref atom) => atom.stretch_properties(options),
-            MathItem::GeneralizedFraction(ref frac) => frac.stretch_properties(options),
-            MathItem::OverUnder(ref over_under) => over_under.stretch_properties(options),
-            MathItem::List(ref list) => list.stretch_properties(options),
-            MathItem::Root(ref root) => root.stretch_properties(options),
+            MathItem::Atom(ref atom) => atom.operator_properties(options),
+            MathItem::GeneralizedFraction(ref frac) => frac.operator_properties(options),
+            MathItem::OverUnder(ref over_under) => over_under.operator_properties(options),
+            MathItem::List(ref list) => list.operator_properties(options),
+            MathItem::Root(ref root) => root.operator_properties(options),
             MathItem::Operator(ref operator) => {
-                MathBoxLayout::<'a, T>::stretch_properties(operator, options)
+                MathBoxLayout::<'a, T>::operator_properties(operator, options)
             }
         }
     }

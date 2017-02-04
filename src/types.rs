@@ -161,6 +161,13 @@ pub struct OverUnder<T: Debug> {
     pub over_is_accent: bool,
     /// the `under` element should be rendered as an accent
     pub under_is_accent: bool,
+    /// If set to true the layout will not change when the current math style is `DisplayStyle` but
+    /// when the current math style is `TextStyle` the `OverUnder` will be rendered as an `Atom`
+    /// where the over is mapped to the top_right and the under is mapped to the bottom_right in
+    /// left to right contexts.
+    ///
+    /// The main use of this is to display limits on large operators.
+    pub as_limits: bool,
 }
 
 /// A structure describing a generalized fraction.
@@ -196,10 +203,12 @@ pub struct StretchConstraints {
     pub symmetric: bool,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct Operator {
     pub stretch_constraints: Option<StretchConstraints>,
     pub is_large_op: bool,
+    pub leading_space: Length,
+    pub trailing_space: Length,
     pub field: Field,
 }
 
