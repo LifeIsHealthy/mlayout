@@ -362,59 +362,75 @@ mod tests {
     use super::operator::Form;
     use types::*;
 
-    #[test]
-    fn operator_test() {
-        let xml = "<mo>+</mo>";
-        let expr = parse(xml.as_bytes()).unwrap();
-        let operator = match expr.content {
+    fn find_operator(expr: MExpression) -> MExpression {
+        match expr.content {
             MathItem::List(list) => {
-                list.into_iter().filter(|expr| expr.user_info.is_operator()).next().unwrap()
+                list.into_iter()
+                    .filter(|expr| expr.user_info.is_operator())
+                    .next()
+                    .expect("List contains no operator.")
             }
-            MathItem::Field(_) => expr,
-            _ => panic!(),
-        };
-        assert!(operator.user_info.is_operator());
-        match operator.content {
-            MathItem::Field(Field::Unicode(text)) => assert_eq!(text, "+"),
-            _ => panic!(),
+            MathItem::Operator(_) => expr,
+            other_item => panic!("Expected list or Operator. Found {:?}", other_item),
         }
     }
 
     #[test]
-    fn prefix_operator_test() {
+    fn test_operator() {
+        let xml = "<mo>+</mo>";
+        let expr = parse(xml.as_bytes()).unwrap();
+        let operator = find_operator(expr);
+        assert!(operator.user_info.is_operator());
+        match operator.content {
+            MathItem::Operator(Operator { field: Field::Unicode(text), .. }) => {
+                assert_eq!(text, "+")
+            }
+            other_item => panic!("Expected MathItem::Operator. Found {:?}.", other_item),
+        }
+    }
+
+    #[test]
+    fn test_prefix_operator() {
         let xml = "<mo>-</mo><mi>x</mi>";
         let expr = parse(xml.as_bytes()).unwrap();
-        let operator = match expr.content {
-            MathItem::List(list) => {
-                list.into_iter().filter(|expr| expr.user_info.is_operator()).next().unwrap()
-            }
-            MathItem::Field(_) => expr,
-            _ => panic!(),
-        };
+        let operator = find_operator(expr);
         assert_eq!(operator.user_info.operator_attrs.unwrap().form.unwrap(),
                    Form::Prefix);
         match operator.content {
-            MathItem::Field(Field::Unicode(text)) => assert_eq!(text, "-"),
-            _ => panic!(),
+            MathItem::Operator(Operator { field: Field::Unicode(text), .. }) => {
+                assert_eq!(text, "-")
+            }
+            other_item => panic!("Expected MathItem::Operator. Found {:?}.", other_item),
         }
     }
 
     #[test]
-    fn postfix_operator_test() {
+    fn test_infix_operator() {
+        let xml = "<mi>x</mi><mo>=</mo><mi>y</mi>";
+        let expr = parse(xml.as_bytes()).unwrap();
+        let operator = find_operator(expr);
+        assert_eq!(operator.user_info.operator_attrs.unwrap().form.unwrap(),
+                   Form::Infix);
+        match operator.content {
+            MathItem::Operator(Operator { field: Field::Unicode(text), .. }) => {
+                assert_eq!(text, "=")
+            }
+            other_item => panic!("Expected MathItem::Operator. Found {:?}.", other_item),
+        }
+    }
+
+    #[test]
+    fn test_postfix_operator() {
         let xml = "<mi>x</mi><mo>!</mo>";
         let expr = parse(xml.as_bytes()).unwrap();
-        let operator = match expr.content {
-            MathItem::List(list) => {
-                list.into_iter().filter(|expr| expr.user_info.is_operator()).next().unwrap()
-            }
-            MathItem::Field(_) => expr,
-            _ => panic!(),
-        };
+        let operator = find_operator(expr);
         assert_eq!(operator.user_info.operator_attrs.unwrap().form.unwrap(),
                    Form::Postfix);
         match operator.content {
-            MathItem::Field(Field::Unicode(text)) => assert_eq!(text, "!"),
-            _ => panic!(),
+            MathItem::Operator(Operator { field: Field::Unicode(text), .. }) => {
+                assert_eq!(text, "!")
+            }
+            other_item => panic!("Expected MathItem::Operator. Found {:?}.", other_item),
         }
     }
 }

@@ -127,7 +127,7 @@ pub fn process_operators(list: &mut Vec<MExpression>) {
         }
         set_default_form(elem, Form::Infix);
         guess_operator_attributes(elem);
-        make_stretchy(elem);
+        make_operator(elem);
     }
 
     let iterator = operator_indices.iter();
@@ -172,7 +172,7 @@ fn find_core_operator(embellished_op: &mut MExpression) -> Option<&mut MathItem<
     }
 }
 
-fn make_stretchy(elem: &mut MExpression) {
+fn make_operator(elem: &mut MExpression) {
     let flags = elem.user_info.operator_attrs.unwrap().flags;
 
     if let Some(item) = find_core_operator(elem) {
