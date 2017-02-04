@@ -1,4 +1,4 @@
-#![allow(unused_variables, dead_code, needless_lifetimes)]
+#![allow(unused_variables, dead_code)]
 use types::*;
 use std::iter::IntoIterator;
 use std::cmp::{max, min};
@@ -7,11 +7,12 @@ use std::fmt::Debug;
 use super::shaper::{MathShaper, MathConstant, ShapedGlyph};
 use super::math_box::{MathBox, Extents, Point};
 use super::multiscripts::*;
+use super::stretchy::*;
 
 #[derive(Clone, Copy, Default)]
 pub struct StretchSize {
-    ascent: i32,
-    descent: i32,
+    pub ascent: i32,
+    pub descent: i32,
 }
 
 #[derive(Copy, Clone)]
@@ -21,13 +22,29 @@ pub struct LayoutOptions<'a> {
     pub stretch_size: Option<StretchSize>,
 }
 
-fn to_font_units(size: Length, default: i32, shaper: &MathShaper) -> i32 {
-    match size {
-        Length::Em(val) => (shaper.em_size() as f32 * val) as i32,
-        Length::Points(val) => unimplemented!(),
-        Length::Relative(val) => (val * default as f32) as i32,
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+pub struct StretchProperties {
+    pub intrinsic_size: u32,
+}
+
+impl Length {
+    fn to_font_units(self, shaper: &MathShaper) -> i32 {
+        if self.is_null() {
+            return 0;
+        }
+        match self.unit {
+            LengthUnit::Em => (shaper.em_size() as f32 * self.value) as i32,
+            LengthUnit::Point => {
+                Length::em(self.value / shaper.ppem().0 as f32).to_font_units(shaper)
+            }
+            LengthUnit::DisplayOperatorMinHeight => {
+                (shaper.math_constant(MathConstant::DisplayOperatorMinHeight) as f32 *
+                 self.value) as i32
+            }
+        }
     }
 }
+
 
 fn clamp<T: Ord, U: Into<Option<T>>>(value: T, min: U, max: U) -> T {
     if let Some(min) = min.into() {
@@ -61,11 +78,12 @@ fn math_box_from_shaped_glyphs<'a, T: 'a, I>(glyphs: I, shaper: &'a MathShaper) 
     where I: 'a + IntoIterator<Item = ShapedGlyph>
 {
     let mut cursor = Point { x: 0, y: 0 };
-    let iterator = glyphs.into_iter().map(move |ShapedGlyph { origin, advance, glyph }| {
+    let iterator = glyphs.into_iter().map(move |ShapedGlyph { mut origin, advance, glyph }| {
         let mut math_box = MathBox::with_glyph(glyph, shaper);
+        origin.y = -origin.y;
         math_box.origin = origin + cursor;
         cursor.x += advance.x;
-        cursor.y -= advance.y;
+        cursor.y += advance.y;
         math_box
     });
     MathBox::with_iter(Box::new(iterator))
@@ -75,6 +93,9 @@ fn math_box_from_shaped_glyphs<'a, T: 'a, I>(glyphs: I, shaper: &'a MathShaper) 
 /// layed out.
 pub trait MathBoxLayout<'a, T> {
     fn layout(self, options: LayoutOptions<'a>) -> MathBox<'a, T>;
+    fn stretch_properties(&self, options: LayoutOptions<'a>) -> Option<StretchProperties> {
+        None
+    }
 }
 
 impl<'a, T: 'a + Debug> MathBoxLayout<'a, T> for Field {
@@ -90,14 +111,13 @@ impl<'a, T: 'a + Debug> MathBoxLayout<'a, T> for Field {
     }
 }
 
-impl<'a, I, T: 'a + Debug> MathBoxLayout<'a, T> for I
-    where I: 'a + IntoIterator<Item = MathExpression<T>>
-{
+impl<'a, T: 'a + Debug> MathBoxLayout<'a, T> for Vec<MathExpression<T>> {
     fn layout(self, options: LayoutOptions<'a>) -> MathBox<'a, T> {
+        let boxes = layout_strechy_list(self, options);
+
         let mut cursor = 0i32;
         let mut previout_italic_correction = 0;
-        let layouted = self.into_iter().map(move |item| {
-            let mut math_box = item.layout(options);
+        let layouted = boxes.map(move |mut math_box| {
             if math_box.italic_correction() == 0 {
                 cursor += previout_italic_correction;
             }
@@ -107,6 +127,7 @@ impl<'a, I, T: 'a + Debug> MathBoxLayout<'a, T> for I
             math_box
         });
         MathBox::with_iter(Box::new(layouted))
+
     }
 }
 
@@ -463,22 +484,85 @@ impl<'a, T: 'a + Debug> MathBoxLayout<'a, T> for Root<T> {
     }
 }
 
-impl<'a, T: 'a + Debug> MathBoxLayout<'a, T> for Stretchable<T> {
+impl Stretchable {
+    fn layout_stretchy<'a, T: 'a + Debug>(self,
+                                          needed_height: u32,
+                                          options: LayoutOptions<'a>)
+                                          -> MathBox<'a, T> {
+        match self.field {
+            Field::Unicode(ref string) => {
+                let result = (options.shaper)
+                    .shape_stretchy(string, false, needed_height, options.style);
+                let mut math_box = math_box_from_shaped_glyphs(result, options.shaper);
+                if self.symmetric {
+                    let axis_height = options.shaper.math_constant(MathConstant::AxisHeight);
+                    let shift_up = (math_box.descent() - math_box.ascent()) / 2 + axis_height;
+                    math_box.origin.y -= shift_up;
+                } else {
+                    let stretch_size = options.stretch_size.unwrap_or_default();
+                    let excess_ascent = math_box.ascent() - stretch_size.ascent;
+                    let excess_descent = math_box.descent() - stretch_size.descent;
+                    math_box.origin.y += (excess_ascent - excess_descent) / 2;
+                }
+                math_box
+            }
+            _ => unimplemented!(),
+        }
+    }
+}
+
+impl<'a, T: 'a + Debug> MathBoxLayout<'a, T> for Stretchable {
     fn layout(self, options: LayoutOptions<'a>) -> MathBox<'a, T> {
-        let intrinsic_size = unimplemented!();
-        let size = match (self.max_size, self.min_size) {
-            (Some(max_size), Some(min_size)) => {}
-            _ => {}
-        };
+        let mut min_size = self.min_size.map(|size| size.to_font_units(options.shaper));
+        let max_size = self.max_size.map(|size| size.to_font_units(options.shaper));
+        if self.is_display_operator && options.style.math_style == MathStyle::Display {
+            let display_min_height = options.shaper.math_constant(MathConstant::DisplayOperatorMinHeight);
+            let mut set_min_size = true;
+            if let Some(max_size) = max_size {
+                if max_size < display_min_height {
+                    set_min_size = false;
+                }
+            }
+            if set_min_size {
+                min_size = Some(max(min_size.unwrap_or_default(), display_min_height));
+                println!("new min_size {:?}", min_size);
+            }
+        }
+        match options.stretch_size {
+            Some(stretch_size) => {
+                let mut needed_height = if self.symmetric {
+                    let axis_height = options.shaper.math_constant(MathConstant::AxisHeight);
+                    max(stretch_size.ascent - axis_height,
+                        axis_height + stretch_size.descent) * 2
+                } else {
+                    (stretch_size.ascent + stretch_size.descent)
+                };
+                needed_height = clamp(needed_height, min_size, max_size);
+                let needed_height = max(0, needed_height) as u32;
+                self.layout_stretchy(needed_height, options)
+            }
+            None => {
+                if let Some(min_size) = min_size {
+                    let min_size = max(0, min_size) as u32;
+                    self.layout_stretchy(min_size, options)
+                } else {
+                    self.field.layout(options)
+                }
+            }
+        }
+    }
+
+    fn stretch_properties(&self, options: LayoutOptions<'a>) -> Option<StretchProperties> {
+        Some(StretchProperties { intrinsic_size: 0 })
     }
 }
 
 impl<'a, T: 'a + Debug> MathBoxLayout<'a, T> for MathSpace {
     fn layout(self, options: LayoutOptions<'a>) -> MathBox<'a, T> {
         let extents = Extents {
-            width: to_font_units(self.width, 0, options.shaper),
-            ascent: to_font_units(self.ascent, 0, options.shaper),
-            descent: to_font_units(self.descent, 0, options.shaper),
+            width: self.width.to_font_units(options.shaper),
+            ascent: self.ascent.to_font_units(options.shaper),
+            descent: self.descent.to_font_units(options.shaper),
         };
         MathBox::empty(extents)
     }
@@ -490,26 +574,42 @@ impl<'a, T: 'a + Debug> MathBoxLayout<'a, T> for MathExpression<T> {
         math_box.user_info = Some(self.user_info);
         math_box
     }
+
+    fn stretch_properties(&self, options: LayoutOptions<'a>) -> Option<StretchProperties> {
+        self.content.stretch_properties(options)
+    }
 }
 
 impl<'a, T: 'a + Debug> MathBoxLayout<'a, T> for MathItem<T> {
     fn layout(self, options: LayoutOptions<'a>) -> MathBox<'a, T> {
         match self {
             MathItem::Field(field) => field.layout(options),
-            MathItem::Space(MathSpace { width, ascent, descent }) => {
-                let extents = Extents {
-                    width: to_font_units(width, 0, options.shaper),
-                    ascent: to_font_units(ascent, 0, options.shaper),
-                    descent: to_font_units(descent, 0, options.shaper),
-                };
-                MathBox::empty(extents)
-            }
+            MathItem::Space(space) => space.layout(options),
             MathItem::Atom(atom) => atom.layout(options),
             MathItem::GeneralizedFraction(frac) => frac.layout(options),
             MathItem::OverUnder(over_under) => over_under.layout(options),
-            MathItem::List(list) => list.into_iter().layout(options),
+            MathItem::List(list) => list.layout(options),
             MathItem::Root(root) => root.layout(options),
             MathItem::Stretchy(stretchable) => stretchable.layout(options),
+        }
+    }
+
+    fn stretch_properties(&self, options: LayoutOptions<'a>) -> Option<StretchProperties> {
+        match *self {
+            MathItem::Field(ref field) => {
+                MathBoxLayout::<'a, T>::stretch_properties(field, options)
+            }
+            MathItem::Space(ref space) => {
+                MathBoxLayout::<'a, T>::stretch_properties(space, options)
+            }
+            MathItem::Atom(ref atom) => atom.stretch_properties(options),
+            MathItem::GeneralizedFraction(ref frac) => frac.stretch_properties(options),
+            MathItem::OverUnder(ref over_under) => over_under.stretch_properties(options),
+            MathItem::List(ref list) => list.stretch_properties(options),
+            MathItem::Root(ref root) => root.stretch_properties(options),
+            MathItem::Stretchy(ref stretchable) => {
+                MathBoxLayout::<'a, T>::stretch_properties(stretchable, options)
+            }
         }
     }
 }

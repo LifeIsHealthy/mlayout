@@ -23,33 +23,41 @@ struct Color3f {
 impl Add<Color3f> for Color3f {
     type Output = Color3f;
     fn add(self, _rhs: Color3f) -> Color3f {
-        Color3f { r: self.r + _rhs.r,
-                  g: self.g + _rhs.g,
-                  b: self.b + _rhs.b }
+        Color3f {
+            r: self.r + _rhs.r,
+            g: self.g + _rhs.g,
+            b: self.b + _rhs.b,
+        }
     }
 }
 impl Add<f32> for Color3f {
     type Output = Color3f;
     fn add(self, _rhs: f32) -> Color3f {
-        Color3f { r: self.r + _rhs,
-                  g: self.g + _rhs,
-                  b: self.b + _rhs }
+        Color3f {
+            r: self.r + _rhs,
+            g: self.g + _rhs,
+            b: self.b + _rhs,
+        }
     }
 }
 impl Mul<Color3f> for Color3f {
     type Output = Color3f;
     fn mul(self, _rhs: Color3f) -> Color3f {
-        Color3f { r: self.r * _rhs.r,
-                  g: self.g * _rhs.g,
-                  b: self.b * _rhs.b }
+        Color3f {
+            r: self.r * _rhs.r,
+            g: self.g * _rhs.g,
+            b: self.b * _rhs.b,
+        }
     }
 }
 impl Mul<f32> for Color3f {
     type Output = Color3f;
     fn mul(self, _rhs: f32) -> Color3f {
-        Color3f { r: self.r * _rhs,
-                  g: self.g * _rhs,
-                  b: self.b * _rhs }
+        Color3f {
+            r: self.r * _rhs,
+            g: self.g * _rhs,
+            b: self.b * _rhs,
+        }
     }
 }
 impl MulAssign<f32> for Color3f {
@@ -63,9 +71,11 @@ impl MulAssign<f32> for Color3f {
 impl Div<f32> for Color3f {
     type Output = Color3f;
     fn div(self, _rhs: f32) -> Color3f {
-        Color3f { r: self.r / _rhs,
-                  g: self.g / _rhs,
-                  b: self.b / _rhs }
+        Color3f {
+            r: self.r / _rhs,
+            g: self.g / _rhs,
+            b: self.b / _rhs,
+        }
     }
 }
 
@@ -80,9 +90,11 @@ impl Sub<Color3f> for f32 {
     type Output = Color3f;
 
     fn sub(self, _rhs: Color3f) -> Color3f {
-        Color3f { r: self-_rhs.r,
-                  g: self-_rhs.g,
-                  b: self-_rhs.b }
+        Color3f {
+            r: self - _rhs.r,
+            g: self - _rhs.g,
+            b: self - _rhs.b,
+        }
     }
 }
 
@@ -96,14 +108,22 @@ struct Color4 {
 impl Color4 {
     fn from_color3f(mut color3: Color3f, alpha: f32) -> Color4 {
         color3 *= 255f32;
-        Color4 { r: color3.r as u8, g: color3.g as u8, b: color3.b as u8, alpha: (alpha * 255f32) as u8 }
+        Color4 {
+            r: color3.r as u8,
+            g: color3.g as u8,
+            b: color3.b as u8,
+            alpha: (alpha * 255f32) as u8,
+        }
     }
 }
 impl IntoIterator for Color4 {
     type Item = u8;
     type IntoIter = ColorIter<Color4>;
     fn into_iter(self) -> ColorIter<Color4> {
-        ColorIter{ color: self, state: 0 }
+        ColorIter {
+            color: self,
+            state: 0,
+        }
     }
 }
 struct ColorIter<C> {
@@ -141,46 +161,61 @@ impl Renderer {
 
         //hb::hb_o
 
-        Renderer { lib: lib, ft_face: face }
+        Renderer {
+            lib: lib,
+            ft_face: face,
+        }
     }
 
-    fn render_glyph(&self, glyph: u32) -> (Vec<u8>, i32, i32)  {
-        self.ft_face.load_glyph(glyph, LoadFlag::from_bits_truncate( FT_LOAD_TARGET_LCD )).unwrap();
+    fn render_glyph(&self, glyph: u32) -> (Vec<u8>, i32, i32) {
+        self.ft_face.load_glyph(glyph, LoadFlag::from_bits_truncate(FT_LOAD_TARGET_LCD)).unwrap();
         //self.ft_face.load_glyph(glyph, LoadFlag::empty()).unwrap();
 
         let glyph = self.ft_face.glyph();
         glyph.render_glyph(RenderMode::Lcd).unwrap();
         //glyph.render_glyph(RenderMode::Normal);
         let bitmap = glyph.bitmap();
-        println!("{:?}, pitch {:?}", bitmap.pixel_mode().unwrap(), bitmap.pitch()-bitmap.width());
+        println!("{:?}, pitch {:?}",
+                 bitmap.pixel_mode().unwrap(),
+                 bitmap.pitch() - bitmap.width());
 
         let mut pixel_num = 0u32;
         let pitch = bitmap.pitch() as u32;
         let width = bitmap.width() as u32;
         let height = bitmap.rows() as u32;
         let buffer = bitmap.buffer();
-        let iterator = std::iter::repeat([100u8, 0u8, 0u8, 255u8]).take((width*height/3) as usize).flat_map(|t| {
-            let mut index = pixel_num + (pixel_num / width) * (pitch - width);
-            pixel_num += 1;
-            let red1: f32 = (buffer[index as usize] as f32)/255f32;
-            index = pixel_num + (pixel_num / width) * (pitch - width);
-            pixel_num += 1;
-            let green1: f32 = (buffer[index as usize] as f32)/255f32;
-            index = pixel_num + (pixel_num / width) * (pitch - width);
-            pixel_num += 1;
-            let blue1: f32 = (buffer[index as usize] as f32)/255f32;
+        let iterator = std::iter::repeat([100u8, 0u8, 0u8, 255u8])
+            .take((width * height / 3) as usize)
+            .flat_map(|t| {
+                let mut index = pixel_num + (pixel_num / width) * (pitch - width);
+                pixel_num += 1;
+                let red1: f32 = (buffer[index as usize] as f32) / 255f32;
+                index = pixel_num + (pixel_num / width) * (pitch - width);
+                pixel_num += 1;
+                let green1: f32 = (buffer[index as usize] as f32) / 255f32;
+                index = pixel_num + (pixel_num / width) * (pitch - width);
+                pixel_num += 1;
+                let blue1: f32 = (buffer[index as usize] as f32) / 255f32;
 
-            let new_alpha: f32 = red1.max(green1.max(blue1));
+                let new_alpha: f32 = red1.max(green1.max(blue1));
 
-            let mut mask = Color3f{ r: red1, g: green1, b: blue1 };
-            mask /= new_alpha;
+                let mut mask = Color3f {
+                    r: red1,
+                    g: green1,
+                    b: blue1,
+                };
+                mask /= new_alpha;
 
-            let mut src = Color3f{ r: t[0] as f32, g: t[1] as f32, b: t[2] as f32 };
-            src /= 255f32;
+                let mut src = Color3f {
+                    r: t[0] as f32,
+                    g: t[1] as f32,
+                    b: t[2] as f32,
+                };
+                src /= 255f32;
 
-            let blend = 1f32 - mask + mask * src;
-            Color4::from_color3f(blend, new_alpha)
-        });
+                let blend = 1f32 - mask + mask * src;
+                Color4::from_color3f(blend, new_alpha)
+            });
         (iterator.collect(), bitmap.width(), bitmap.rows())
     }
 }
@@ -188,6 +223,14 @@ impl Renderer {
 fn main() {
     let renderer = Renderer::new();
     let (buffer, width, height) = renderer.render_glyph(22);
-    println!("lenth {:?}, width {:?}, height {:?}", buffer.len(), width, height);
-    image::save_buffer(&Path::new("image.png"), &buffer, (width/3i32) as u32, height as u32, image::RGBA(8)).unwrap();
+    println!("lenth {:?}, width {:?}, height {:?}",
+             buffer.len(),
+             width,
+             height);
+    image::save_buffer(&Path::new("image.png"),
+                       &buffer,
+                       (width / 3i32) as u32,
+                       height as u32,
+                       image::RGBA(8))
+        .unwrap();
 }

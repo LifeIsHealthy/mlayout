@@ -43,7 +43,8 @@ pub fn unescape(s: &str) -> Result<Cow<str>> {
     if escapes.is_empty() {
         Ok(Cow::Borrowed(s))
     } else {
-        let len = escapes.iter().fold(s.len(), |acc, &(_, ref replacement)| acc + replacement.len());
+        let len = escapes.iter().fold(s.len(),
+                                      |acc, &(_, ref replacement)| acc + replacement.len());
         let mut res = String::with_capacity(len);
         let mut start = 0;
         for (range, replacement) in escapes {

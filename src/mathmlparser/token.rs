@@ -25,9 +25,9 @@ impl std::default::Default for TextDirection {
 
 #[derive(Debug, Default)]
 struct TokenStyle {
-    // If `math_variant` is None the family of the glyph depends on whether the element consists
-    // of a single glyph or multiple glyphs. A single glyph is layed out in italic style.
-    // Multiple glyphs would be layed out in normal style.
+    // If `math_variant` is None the family of the glyph depends on whether the element consists of
+    // a single glyph or multiple glyphs. A single glyph is layed out in italic style. Multiple
+    // glyphs would be layed out in normal style.
     math_variant: Option<Family>,
     // TODO: missing math_size
     direction: TextDirection,
@@ -145,8 +145,8 @@ fn try_extract_char(field: &Field) -> Option<char> {
 }
 
 fn parse_operator_attribute(op_attrs: Option<operator::Attributes>,
-                                new_attr: &(&[u8], &str))
-                                -> Option<operator::Attributes> {
+                            new_attr: &(&[u8], &str))
+                            -> Option<operator::Attributes> {
     let mut op_attrs = if op_attrs.is_none() {
         return None;
     } else {
@@ -211,8 +211,7 @@ pub fn parse<'a, R: BufRead, A>(parser: &mut XmlReader<R>,
         .filter(|attr| std::str::from_utf8(&attr.1).is_ok())
         .fold((token_style, op_attrs), |(ts, oa), attr| {
             let attr = (attr.0, unsafe { std::str::from_utf8_unchecked(&attr.1) });
-            (parse_token_attribute(ts, elem.identifier, &attr),
-             parse_operator_attribute(oa, &attr))
+            (parse_token_attribute(ts, elem.identifier, &attr), parse_operator_attribute(oa, &attr))
         });
     let mut fields = parse_token_contents(parser, elem, token_style)?;
     let item = if fields.len() == 1 {
@@ -228,7 +227,8 @@ pub fn parse<'a, R: BufRead, A>(parser: &mut XmlReader<R>,
                     content: MathItem::Field(field),
                     user_info: Default::default(),
                 }
-            }).collect();
+            })
+            .collect();
         MathItem::List(list)
     };
     Ok(MExpression {

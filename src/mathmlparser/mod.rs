@@ -116,7 +116,7 @@ fn match_math_element(identifier: &str) -> Option<MathmlElement> {
 #[derive(Debug, Default, Copy, Clone)]
 pub struct MathmlInfo {
     operator_attrs: Option<operator::Attributes>,
-    pub is_space: bool
+    pub is_space: bool,
 }
 
 impl MathmlInfo {
@@ -233,7 +233,7 @@ fn parse_fixed_arguments<'a, R: BufRead>(parser: &mut XmlReader<R>,
                                          elem: MathmlElement)
                                          -> Result<Vec<MExpression>> {
     if let ElementType::LayoutSchema { args: ArgumentRequirements::RequiredArguments(num_args) } =
-           elem.elem_type {
+        elem.elem_type {
         let args = parse_element_list(parser, elem)?;
         if args.len() == num_args as usize {
             Ok(args)
@@ -379,7 +379,8 @@ mod tests {
             MathItem::Field(_) => expr,
             _ => panic!(),
         };
-        assert_eq!(operator.user_info.operator_attrs.unwrap().form.unwrap(), Form::Prefix);
+        assert_eq!(operator.user_info.operator_attrs.unwrap().form.unwrap(),
+                   Form::Prefix);
         match operator.content {
             MathItem::Field(Field::Unicode(text)) => assert_eq!(text, "-"),
             _ => panic!(),
@@ -397,7 +398,8 @@ mod tests {
             MathItem::Field(_) => expr,
             _ => panic!(),
         };
-        assert_eq!(operator.user_info.operator_attrs.unwrap().form.unwrap(), Form::Postfix);
+        assert_eq!(operator.user_info.operator_attrs.unwrap().form.unwrap(),
+                   Form::Postfix);
         match operator.content {
             MathItem::Field(Field::Unicode(text)) => assert_eq!(text, "!"),
             _ => panic!(),

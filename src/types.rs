@@ -47,9 +47,9 @@ pub enum MathItem<T: Debug> {
     GeneralizedFraction(Box<GeneralizedFraction<T>>),
     /// A expression inside a radical symbol with an optional degree.
     Root(Box<Root<T>>),
-    /// A expression that can grow horizontally or vertically to match the size of its surrounding
+    /// A symbol that can grow horizontally or vertically to match the size of its surrounding
     /// elements.
-    Stretchy(Box<Stretchable<T>>),
+    Stretchy(Stretchable),
     /// A list of math items to be layed out sequentially.
     List(Vec<MathExpression<T>>),
 }
@@ -72,7 +72,7 @@ impl<T: Debug> Default for MathItem<T> {
 /// There is also a third option to create an empty field. This should be used if for some reason
 /// you don't actually want to draw anything but still get an empty 'marker'-box in the output.
 /// This can be used e.g. to denote the cursor position in an equation editor.
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub enum Field {
     /// Nothing. This will not show in typesetted output.
     Empty,
@@ -175,41 +175,54 @@ pub struct Root<T: Debug> {
 }
 
 #[derive(Debug, Default)]
-pub struct Stretchable<T: Debug> {
+pub struct Stretchable {
     pub min_size: Option<Length>,
     pub max_size: Option<Length>,
     pub symmetric: bool,
-    pub expr: MathExpression<T>,
-    pub before: MathExpression<T>,
-    pub after: MathExpression<T>,
+    pub is_display_operator: bool,
+    pub field: Field,
 }
 
-/// Lenghts can be specified either by absolute point values or relative em values that depend on
-/// the font size.
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+pub enum LengthUnit {
+    /// A point traditionally equals 1/72 of an inch.
+    Point,
+    /// Current EM-Size.
+    Em,
+    /// The minimum height to display a display operator.
+    DisplayOperatorMinHeight,
+}
+
+/// Lenghts are specified with a numeric value an a unit.
 #[derive(Debug, Copy, Clone, PartialEq)]
-pub enum Length {
-    /// A `Length` given in Points. A point traditionally equals 1/72 of an inch.
-    Points(f32),
-    /// A `Length` relative to the font size. The `f32` acts as a multiplier on the current
-    /// EM-Size.
-    Em(f32),
-    /// A `Length` relative to the default value.
-    Relative(f32),
+pub struct Length {
+    pub value: f32,
+    pub unit: LengthUnit,
 }
 
 impl Length {
-    pub fn is_null(self) -> bool {
-        match self {
-            Length::Points(val) => val == 0.0f32,
-            Length::Em(val) => val == 0.0f32,
-            Length::Relative(val) => val == 0.0f32,
+    pub fn new(val: f32, unit: LengthUnit) -> Self {
+        Length {
+            value: val,
+            unit: unit,
         }
+    }
+
+    pub fn is_null(self) -> bool {
+        self.value == 0.0
+    }
+
+    pub fn em(val: f32) -> Self {
+        Length::new(val, LengthUnit::Em)
     }
 }
 
 impl Default for Length {
     fn default() -> Length {
-        Length::Em(0.0)
+        Length {
+            value: 0.0,
+            unit: LengthUnit::Point,
+        }
     }
 }
 

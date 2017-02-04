@@ -1,7 +1,7 @@
 use std::str::FromStr;
 use std::ops::Not;
 
-use types::{Length, MathSpace, MathItem};
+use types::{Length, MathSpace, MathItem, Stretchable};
 
 use super::MExpression;
 use super::operator_dict;
@@ -74,17 +74,12 @@ impl Attributes {
     }
 }
 
-pub fn insert_space_for_operator(list: &mut Vec<MExpression>,
-                                                          mut index: usize) {
+pub fn insert_space_for_operator(list: &mut Vec<MExpression>, mut index: usize) {
     let operator_attrs = list[index].user_info.operator_attrs.unwrap();
     let lspace = operator_attrs.lspace.expect("operator has no lspace");
     let rspace = operator_attrs.rspace.expect("operator has no rspace");
     if !lspace.is_null() {
-        let left_space = MathSpace {
-            width: lspace,
-            ascent: Length::Em(0f32),
-            descent: Length::Em(0f32),
-        };
+        let left_space = MathSpace { width: lspace, ..Default::default() };
         let left_space = MExpression {
             content: MathItem::Space(left_space),
             user_info: Default::default(),
@@ -93,11 +88,7 @@ pub fn insert_space_for_operator(list: &mut Vec<MExpression>,
         index += 1;
     }
     if !rspace.is_null() {
-        let right_space = MathSpace {
-            width: rspace,
-            ascent: Length::Em(0f32),
-            descent: Length::Em(0f32),
-        };
+        let right_space = MathSpace { width: rspace, ..Default::default() };
         let right_space = MExpression {
             content: MathItem::Space(right_space),
             user_info: Default::default(),
@@ -121,7 +112,6 @@ pub fn process_operators(list: &mut Vec<MExpression>) {
             last_non_ws_index = index;
         })
         .filter(|&(_, ref elem)| elem.user_info.is_operator())
-        .by_ref()
         .map(|(index, _)| index)
         .collect::<Vec<_>>();
 
@@ -136,11 +126,12 @@ pub fn process_operators(list: &mut Vec<MExpression>) {
             }
         }
         set_default_form(elem, Form::Infix);
-        guess_operator_space(elem);
+        guess_operator_attributes(elem);
+        make_stretchy(elem);
     }
 
-    let mut iterator = operator_indices.iter();
-    while let Some(index) = iterator.next_back() {
+    let iterator = operator_indices.iter();
+    for index in iterator.rev() {
         insert_space_for_operator(list, *index);
     }
 }
@@ -152,11 +143,8 @@ fn set_default_form(elem: &mut MExpression, form: Form) {
         .map(|op_attrs| op_attrs.form = op_attrs.form.or(Some(form)));
 }
 
-fn guess_operator_space(elem: &mut MExpression) {
+fn guess_operator_attributes(elem: &mut MExpression) {
     let operator_attrs = elem.user_info.operator_attrs.as_mut().unwrap();
-    if operator_attrs.lspace.and(operator_attrs.rspace).is_some() {
-        return;
-    }
 
     let form = operator_attrs.form.expect("operator has no form");
     let entry = operator_attrs.character
@@ -164,12 +152,33 @@ fn guess_operator_space(elem: &mut MExpression) {
         .unwrap_or_default();
 
     if operator_attrs.lspace.is_none() {
-        operator_attrs.lspace = Some(Length::Em(entry.lspace as f32 / 18.0f32));
+        operator_attrs.lspace = Some(Length::em(entry.lspace as f32 / 18.0f32));
     }
     if operator_attrs.rspace.is_none() {
-        operator_attrs.rspace = Some(Length::Em(entry.rspace as f32 / 18.0f32));
+        operator_attrs.rspace = Some(Length::em(entry.rspace as f32 / 18.0f32));
     }
 
     operator_attrs.flags = (operator_attrs.user_overrides & operator_attrs.flags) |
                            (!operator_attrs.user_overrides & entry.flags);
+}
+
+fn make_stretchy(elem: &mut MExpression) {
+    let flags = elem.user_info.operator_attrs.unwrap().flags;
+        println!("{:?}", elem);
+    if flags.contains(STRETCHY) || flags.contains(LARGEOP) {
+        let new_item = if let MExpression { content: MathItem::Field(ref field), .. } = *elem {
+            let new_elem = Stretchable {
+                field: field.clone(),
+                symmetric: flags.contains(SYMMETRIC),
+                is_display_operator: flags.contains(LARGEOP),
+                ..Default::default()
+            };
+            Some(MathItem::Stretchy(new_elem))
+        } else {
+            None
+        };
+        if let Some(new_item) = new_item {
+            elem.content = new_item
+        }
+    }
 }

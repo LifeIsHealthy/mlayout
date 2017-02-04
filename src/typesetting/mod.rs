@@ -5,7 +5,8 @@ pub mod shaper;
 pub mod math_box;
 mod multiscripts;
 pub mod unicode_math;
-mod lazy_vec;
+pub mod lazy_vec;
+mod stretchy;
 
 use types::*;
 pub use self::layout::{MathBoxLayout, LayoutOptions};

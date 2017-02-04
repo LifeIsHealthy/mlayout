@@ -1178,5 +1178,9 @@ mod tests {
         assert_eq!(find_entry('+', Form::Infix).unwrap().form, Form::Infix);
         assert_eq!(find_entry('+', Form::Prefix).unwrap().form, Form::Prefix);
         assert_eq!(find_entry('+', Form::Postfix).unwrap().form, Form::Infix);
+        assert!(find_entry('\u{2211}', Form::Postfix)
+            .unwrap()
+            .flags
+            .contains(Flags::from_bits(LARGEOP).unwrap()));
     }
 }

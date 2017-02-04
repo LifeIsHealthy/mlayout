@@ -5,10 +5,10 @@ use super::shaper::{MathShaper, MathConstant, Position};
 use super::math_box::MathBox;
 
 pub fn get_superscript_shift_up<'a, T: 'a>(superscript: &MathBox<'a, T>,
-                                   nucleus: &MathBox<'a, T>,
-                                   shaper: &MathShaper,
-                                   style: LayoutStyle)
-                                   -> Position {
+                                           nucleus: &MathBox<'a, T>,
+                                           shaper: &MathShaper,
+                                           style: LayoutStyle)
+                                           -> Position {
     let std_shift_up = shaper.math_constant(if style.is_cramped {
         MathConstant::SuperscriptShiftUpCramped
     } else {
@@ -28,9 +28,9 @@ pub fn get_superscript_shift_up<'a, T: 'a>(superscript: &MathBox<'a, T>,
 }
 
 pub fn get_subscript_shift_dn<'a, T: 'a>(subscript: &MathBox<'a, T>,
-                                 nucleus: &MathBox<'a, T>,
-                                 shaper: &MathShaper)
-                                 -> Position {
+                                         nucleus: &MathBox<'a, T>,
+                                         shaper: &MathShaper)
+                                         -> Position {
     let min_shift_dn_from_baseline_drop =
         nucleus.descent() + shaper.math_constant(MathConstant::SubscriptBaselineDropMin);
 
@@ -42,11 +42,11 @@ pub fn get_subscript_shift_dn<'a, T: 'a>(subscript: &MathBox<'a, T>,
 }
 
 pub fn get_subsup_shifts<'a, T: 'a>(subscript: &MathBox<'a, T>,
-                            superscript: &MathBox<'a, T>,
-                            nucleus: &MathBox<'a, T>,
-                            shaper: &MathShaper,
-                            style: LayoutStyle)
-                            -> (Position, Position) {
+                                    superscript: &MathBox<'a, T>,
+                                    nucleus: &MathBox<'a, T>,
+                                    shaper: &MathShaper,
+                                    style: LayoutStyle)
+                                    -> (Position, Position) {
     let mut super_shift = get_superscript_shift_up(superscript, nucleus, shaper, style);
     let mut sub_shift = get_subscript_shift_dn(subscript, nucleus, shaper);
 

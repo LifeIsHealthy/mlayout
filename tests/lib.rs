@@ -56,7 +56,7 @@ fn fraction_centering_test() {
         println!("{:?}", result);
         let content = result.content();
         let boxes = assume_boxes(assume_boxes(content)[0].content());
-        
+
         // test that the second box has a greater x-value than the right edge of the first box
         // with a somewhat big error margin
         let fraction_bar = &boxes[1];

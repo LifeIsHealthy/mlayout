@@ -1,0 +1,29 @@
+<mi>k</mi>
+<mo>+</mo>
+<mo>(</mo>
+<mfrac>
+    <mi>a</mi>
+    <mrow>
+        <mi>b</mi>
+        <mo>+</mo>
+        <mfrac>
+            <mi>c</mi>
+            <mi>d</mi>
+        </mfrac>
+    </mrow>
+</mfrac>
+<mo>)</mo>
+<mo>+</mo>
+<mo symmetric="false">(</mo>
+<mfrac>
+    <mi>a</mi>
+    <mrow>
+        <mi>b</mi>
+        <mo>+</mo>
+        <mfrac>
+            <mi>c</mi>
+            <mi>d</mi>
+        </mfrac>
+    </mrow>
+</mfrac>
+<mo symmetric="false">)</mo>

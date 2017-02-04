@@ -77,7 +77,7 @@ pub enum MathConstant {
 pub struct ShapedGlyph {
     pub origin: Point<i32>,
     pub advance: Point<i32>,
-    pub glyph: Glyph
+    pub glyph: Glyph,
 }
 
 pub trait MathShaper {
@@ -190,12 +190,18 @@ impl<'a> HarfbuzzShaper<'a> {
                             vert: scale,
                         },
                     };
-                    let origin = Point { x: pos.x_offset, y: pos.y_offset };
-                    let advance = Point { x: pos.x_advance, y: pos.y_advance };
+                    let origin = Point {
+                        x: pos.x_offset,
+                        y: pos.y_offset,
+                    };
+                    let advance = Point {
+                        x: pos.x_advance,
+                        y: pos.y_advance,
+                    };
                     ShapedGlyph {
                         origin: origin * scale,
                         advance: advance * scale,
-                        glyph: glyph
+                        glyph: glyph,
                     }
                 })
                 .collect()

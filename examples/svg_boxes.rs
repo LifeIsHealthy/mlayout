@@ -30,11 +30,12 @@ macro_rules! render_test {
 
 fn main() {
 
-    let font = include_bytes!("/Users/mr/Library/Fonts/latinmodern-math.otf");
-    // let font = include_bytes!("/Library/Fonts/Microsoft/Cambria Math.ttf");
+    // let font = include_bytes!("/Users/mr/Library/Fonts/latinmodern-math.otf");
+    let font = include_bytes!("/Library/Fonts/Microsoft/Cambria Math.ttf");
     // let font = include_bytes!("/Users/mr/Library/Fonts/Asana-Math-2.otf");
     // let font = include_bytes!("/Users/mr/Library/Fonts/texgyreschola-math.otf");
     // let font = include_bytes!("/Users/mr/Library/Fonts/xits-math.otf");
+    // let font = include_bytes!("/Users/mr/Library/Fonts/STIX2Math.otf");
 
     render_test!(font,
                  "schrödinger",
@@ -48,7 +49,8 @@ fn main() {
                  "sum",
                  "euler",
                  "limit",
-                 "stokes");
+                 "stokes",
+                 "parentheses");
     // render_test!(font, "pythagoras");
 
     // let library = freetype::Library::init().unwrap();
@@ -296,12 +298,12 @@ fn draw_top_accent_attachment<'a, T: Node, U: 'a>(doc: &mut T, math_box: &MathBo
 }
 
 fn draw_glyph<'a, T: Node, U: 'a>(doc: &mut T, math_box: &MathBox<'a, U>, face: &FT_Face) {
-    let (glyph, scale_x, scale_y) =
-        if let MathBoxContent::Glyph(Glyph { glyph_code, scale }) = math_box.content() {
-            (glyph_code, scale.horiz.as_scale_mult(), scale.vert.as_scale_mult())
-        } else {
-            return;
-        };
+    let (glyph, scale_x, scale_y) = if let MathBoxContent::Glyph(Glyph { glyph_code, scale }) =
+        math_box.content() {
+        (glyph_code, scale.horiz.as_scale_mult(), scale.vert.as_scale_mult())
+    } else {
+        return;
+    };
 
 
 

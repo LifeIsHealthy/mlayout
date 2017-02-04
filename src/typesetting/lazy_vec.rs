@@ -9,7 +9,7 @@ pub enum LazyVecInner<I, T> {
 impl<T, I> LazyVecInner<I, T>
     where I: Iterator<Item = T>
 {
-    // If the content is a `Vec` this must not change self in any way!
+    // If the content is a `Vec` this must not change `self` in any way!
     fn to_vec(&mut self) {
         let vec = if let LazyVecInner::Iter(ref mut iter) = *self {
             iter.collect()
