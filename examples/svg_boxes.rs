@@ -31,11 +31,11 @@ macro_rules! render_test {
 fn main() {
 
     // let font = include_bytes!("/Users/mr/Library/Fonts/latinmodern-math.otf");
-    // let font = include_bytes!("/Library/Fonts/Microsoft/Cambria Math.ttf");
+    let font = include_bytes!("/Library/Fonts/Microsoft/Cambria Math.ttf");
     // let font = include_bytes!("/Users/mr/Library/Fonts/Asana-Math-2.otf");
     // let font = include_bytes!("/Users/mr/Library/Fonts/texgyreschola-math.otf");
     // let font = include_bytes!("/Users/mr/Library/Fonts/xits-math.otf");
-    let font = include_bytes!("/Users/mr/Library/Fonts/STIX2Math.otf");
+    // let font = include_bytes!("/Users/mr/Library/Fonts/STIX2Math.otf");
 
     render_test!(font,
                  "schrödinger",
@@ -51,7 +51,7 @@ fn main() {
                  "limit",
                  "stokes",
                  "parentheses",
-                  "integrals");
+                 "integrals");
     // render_test!(font, "pythagoras");
 
     // let library = freetype::Library::init().unwrap();

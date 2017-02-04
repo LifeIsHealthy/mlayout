@@ -204,7 +204,11 @@ fn layout_sub_superscript<'a, T: 'a>(subscript: Option<MathBox<'a, T>>,
         (None, None) => unreachable!(),
     }
 
-    let space = MathBox::empty(Extents::new(space_after_script, None, None));
+    let mut space = MathBox::empty(Extents::new(space_after_script, None, None));
+    space.origin.x = result.iter()
+        .map(|math_box| math_box.origin.x + math_box.width())
+        .max()
+        .unwrap_or_default();
     result.push(space);
 
     MathBox::with_vec(result)
