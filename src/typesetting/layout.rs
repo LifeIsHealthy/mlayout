@@ -364,7 +364,7 @@ impl<'a, T: 'a + Debug> MathBoxLayout<'a, T> for GeneralizedFraction<T> {
         // the fraction rule
         let origin = Point {
             x: min(numerator.origin.x, denominator.origin.x),
-            y: -axis_height - default_thickness / 2,
+            y: -axis_height,
         };
         let target = Point { x: origin.x + max(numerator.width(), denominator.width()), ..origin };
         let fraction_rule = MathBox::with_line(origin, target, default_thickness as u32);
