@@ -26,13 +26,16 @@ impl<T: Debug> MathExpression<T> {
         }
     }
 
-    pub fn as_option(self) -> Option<Self> {
-        if self.is_empty() {
-            None
-        } else {
-            Some(self)
-        }
+    pub fn into_option(self) -> Option<Self> {
+        if self.is_empty() { None } else { Some(self) }
     }
+
+    // pub fn from_option(opt: Option<Self>) -> Self {
+    //     match opt {
+    //         Some(expr) => expr,
+    //
+    //     }
+    // }
 }
 
 /// A `MathItem` is the abstract representation of mathematical notation that manages the layout
@@ -383,6 +386,31 @@ impl LayoutStyle {
         Default::default()
     }
 
+    pub fn inline_style(self) -> Self {
+        LayoutStyle { math_style: MathStyle::Inline, ..self }
+    }
+
+    pub fn display_style(self) -> Self {
+        LayoutStyle { math_style: MathStyle::Display, ..self }
+    }
+
+    pub fn with_increased_script_level(self) -> Self {
+        LayoutStyle { script_level: self.script_level.saturating_add(1), ..self }
+    }
+
+    pub fn with_decreased_script_level(self) -> Self {
+        LayoutStyle { script_level: self.script_level.saturating_sub(1), ..self }
+    }
+
+    /// Returns a cramped version of the style.
+    ///
+    /// If the style is already cramped it is left unaltered. Cramped styles try to limit vertical
+    /// extent of equations above the text. This is used for example in denominators of fractions or
+    /// subscripts and similar.
+    pub fn cramped_style(self) -> LayoutStyle {
+        LayoutStyle { is_cramped: true, ..self }
+    }
+
     /// Returns the style that the superscript of a base styled with `self` should have.
     pub fn superscript_style(self) -> LayoutStyle {
         LayoutStyle {
@@ -395,19 +423,6 @@ impl LayoutStyle {
     /// Returns the style that the subscript of a base styled with `self` should have.
     pub fn subscript_style(self) -> LayoutStyle {
         self.superscript_style().cramped_style()
-    }
-
-    /// Returns a cramped version of the style.
-    ///
-    /// If the style is already cramped it is left unaltered. Cramped styles try to limit vertical
-    /// extent of equations above the text. This is used for example in denominators of fractions or
-    /// subscripts and similar.
-    pub fn cramped_style(self) -> LayoutStyle {
-        LayoutStyle {
-            math_style: self.math_style,
-            script_level: self.script_level,
-            is_cramped: true,
-        }
     }
 }
 

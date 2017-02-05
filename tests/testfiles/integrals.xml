@@ -1,10 +1,10 @@
 <math xmlns='http://www.w3.org/1998/Math/MathML' display='block'>
     <mrow>
-        <msubsup>
+        <munderover>
             <mo>&int;</mo>
             <mi>a</mi>
             <mi>b</mi>
-        </msubsup>
+        </munderover>
         <mi>f</mi>
         <mrow>
             <mo>(</mo>
