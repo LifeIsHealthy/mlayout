@@ -101,8 +101,7 @@ pub trait MathShaper {
 
     fn shape_stretchy(&self,
                       symbol: &str,
-                      horizontal: bool,
-                      target_size: u32,
+                      target_size: (u32, u32),
                       style: LayoutStyle)
                       -> Box<Iterator<Item = ShapedGlyph>>;
 
@@ -279,16 +278,19 @@ impl<'a> MathShaper for HarfbuzzShaper<'a> {
 
     fn shape_stretchy(&self,
                       string: &str,
-                      horizontal: bool,
-                      target_size: u32,
+                      target_size: (u32, u32),
                       style: LayoutStyle)
                       -> Box<Iterator<Item = ShapedGlyph>> {
         let glyph_buffer = self.shape_with_style(string, style);
         unsafe {
             hb::hb_ot_shape_math_stretchy(self.font.as_raw(),
                                           glyph_buffer.as_raw(),
-                                          horizontal as i32,
-                                          target_size as i32);
+                                          1,
+                                          target_size.0 as i32);
+            hb::hb_ot_shape_math_stretchy(self.font.as_raw(),
+                                          glyph_buffer.as_raw(),
+                                          0,
+                                          target_size.1 as i32);
         }
         self.layout_boxes(style, glyph_buffer)
     }

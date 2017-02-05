@@ -51,7 +51,8 @@ fn main() {
                  "limit",
                  "stokes",
                  "parentheses",
-                 "integrals");
+                 "integrals",
+                 "horizontal_stretch");
     // render_test!(font, "pythagoras");
 
     // let library = freetype::Library::init().unwrap();

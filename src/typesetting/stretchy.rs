@@ -1,6 +1,6 @@
 use super::*;
 
-use super::layout::{StretchSize, OperatorProperties};
+use super::layout::OperatorProperties;
 use std::fmt::Debug;
 use types::MathExpression;
 use math_box::Extents;
@@ -11,7 +11,7 @@ fn indices_of_stretchy_elements<'a, T: Debug>(list: &[MathExpression<T>],
     list.iter()
         .enumerate()
         .filter_map(|(index, elem)| {
-            elem.operator_properties(options).and_then(|x| x.intrinsic_size).map(|_| index)
+            elem.operator_properties(options).and_then(|x| x.stretch_properties).map(|_| index)
         })
         .collect()
 }
@@ -48,10 +48,10 @@ pub fn layout_strechy_list<'a, T: 'a + Debug>(list: Vec<MathExpression<T>>,
 
     let mut max_intrinsic_size = 0;
     for elem in list {
-        if let Some(OperatorProperties { intrinsic_size: Some(size), .. }) =
+        if let Some(OperatorProperties { stretch_properties: Some(stretch_props), .. }) =
             elem.operator_properties(options) {
             stretchy_elems.push(elem);
-            max_intrinsic_size = ::std::cmp::max(max_intrinsic_size, size);
+            max_intrinsic_size = ::std::cmp::max(max_intrinsic_size, stretch_props.intrinsic_size);
         } else {
             let math_box = layout_list_element(elem, options);
             non_stretchy_elems.push(math_box);
@@ -64,7 +64,8 @@ pub fn layout_strechy_list<'a, T: 'a + Debug>(list: Vec<MathExpression<T>>,
     let max_descent = non_stretchy_elems.iter().map(|math_box| math_box.descent()).max();
 
     let options = LayoutOptions {
-        stretch_size: Some(StretchSize {
+        stretch_size: Some(Extents {
+            width: 0,
             ascent: max_ascent.unwrap_or_default(),
             descent: max_descent.unwrap_or_default(),
         }),

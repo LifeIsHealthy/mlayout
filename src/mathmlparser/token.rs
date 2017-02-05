@@ -101,28 +101,26 @@ fn parse_token_contents<R: BufRead>(parser: &mut XmlReader<R>,
     let mut fields: Vec<Field> = Vec::new();
 
     while let Some(event) = parser.next() {
-        let result = match event? {
+        match event? {
             Event::Text(text) => {
                 let text = std::str::from_utf8(text.content())?;
                 let text = unescape(text)?;
                 let string = adapt_to_family(text.into_owned(), style.math_variant);
-                Ok(Field::Unicode(string))
+                fields.push(Field::Unicode(string));
             }
             Event::Start(elem) => {
                 match elem.name() {
                     b"mglyph" | b"malignmark" => unimplemented!(),
-                    _ => Err(ParsingError::from_string(parser, "Unexpected new element.")),
+                    _ => Err(ParsingError::from_string(parser, "Unexpected new element."))?,
                 }
             }
             Event::End(ref end_elem) => {
                 if elem.identifier.as_bytes() == end_elem.name() {
                     break;
                 }
-                continue;
             }
-            _ => Err(ParsingError::from("Unknown error.")),
-        };
-        fields.push(result?);
+            _ => {},
+        }
     }
     Ok(fields)
 }
