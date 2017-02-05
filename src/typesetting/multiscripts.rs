@@ -102,9 +102,12 @@ pub fn get_attachment_kern<'a, T: 'a>(nucleus: &MathBox<'a, T>,
                 let attachment_correction_height = attachment_shift - nucleus.descent();
                 (base_correction_height, attachment_correction_height)
             };
-            kerning += shaper.math_kerning(nucleus_glyph, attachment_position, bch);
-            kerning +=
-                shaper.math_kerning(attachment_glyph, attachment_position.diagonal_mirror(), ach);
+            let bch = bch / nucleus_glyph.scale.vert;
+            let ach = ach / attachment_glyph.scale.vert;
+            kerning += shaper.math_kerning(nucleus_glyph.glyph_code, attachment_position, bch);
+            kerning += shaper.math_kerning(attachment_glyph.glyph_code,
+                                           attachment_position.diagonal_mirror(),
+                                           ach);
         }
     };
     kerning

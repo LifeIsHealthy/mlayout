@@ -94,7 +94,6 @@ pub fn process_operators(list: &mut Vec<MExpression>) {
 
     for index in &operator_indices {
         let elem = &mut list[*index];
-        elem.user_info.operator_attrs = elem.user_info.operator_attrs.or(Some(Default::default()));
         if first_non_ws_index as usize != last_non_ws_index {
             if *index == first_non_ws_index as usize {
                 set_default_form(elem, Form::Prefix);
@@ -108,6 +107,13 @@ pub fn process_operators(list: &mut Vec<MExpression>) {
     }
 }
 
+pub fn guess_if_operator_with_form(mut elem: MExpression, form: Form) -> MExpression {
+    set_default_form(&mut elem, form);
+    guess_operator_attributes(&mut elem);
+    make_operator(&mut elem);
+    elem
+}
+
 fn set_default_form(elem: &mut MExpression, form: Form) {
     elem.user_info
         .operator_attrs
@@ -116,6 +122,9 @@ fn set_default_form(elem: &mut MExpression, form: Form) {
 }
 
 fn guess_operator_attributes(elem: &mut MExpression) {
+    if elem.user_info.operator_attrs.is_none() {
+        return
+    }
     let operator_attrs = elem.user_info.operator_attrs.as_mut().unwrap();
 
     let form = operator_attrs.form.expect("operator has no form");
@@ -157,6 +166,9 @@ fn set_movable_limits(embellished_op: &mut MExpression) {
 }
 
 fn make_operator(elem: &mut MExpression) {
+    if elem.user_info.operator_attrs.is_none() {
+        return
+    }
     let operator_attrs = elem.user_info.operator_attrs.unwrap();
     let flags = operator_attrs.flags;
 

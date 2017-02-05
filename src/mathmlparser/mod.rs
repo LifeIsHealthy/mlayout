@@ -14,6 +14,7 @@ use types::{Atom, OverUnder, GeneralizedFraction, Root, Length, MathExpression, 
 
 pub use self::quick_xml::{XmlReader, Event, Element};
 pub use self::quick_xml::error::ResultPos;
+use self::operator::{guess_if_operator_with_form, Form};
 
 pub use self::error::*;
 
@@ -209,9 +210,14 @@ fn parse_list_schema<'a, A>(content: Vec<MExpression>,
                             -> Result<MExpression>
     where A: Iterator<Item = ResultPos<(&'a [u8], Cow<'a, [u8]>)>>
 {
-    let content = MExpression {
-        content: MathItem::List(content),
-        user_info: Default::default(),
+    // a mrow with a single element is strictly equivalent to the element
+    let content = if content.len() == 1 {
+        content.into_iter().next().unwrap()
+    } else {
+        MExpression {
+            content: MathItem::List(content),
+            user_info: Default::default(),
+        }
     };
     if elem.elem_type == ElementType::MathmlRoot {
         return Ok(content);
@@ -251,7 +257,7 @@ fn parse_fixed_schema<'a, A>(mut content: Vec<MExpression>,
                              -> Result<MExpression>
     where A: Iterator<Item = ResultPos<(&'a [u8], Cow<'a, [u8]>)>>
 {
-    let mut arguments = content.drain(..);
+    let mut arguments = content.into_iter();
     let result = match elem.identifier {
         "mfrac" => {
             let frac = GeneralizedFraction {
@@ -271,7 +277,7 @@ fn parse_fixed_schema<'a, A>(mut content: Vec<MExpression>,
         "msub" => {
             let atom = Atom {
                 nucleus: arguments.next().unwrap(),
-                bottom_right: arguments.next().unwrap(),
+                bottom_right: guess_if_operator_with_form(arguments.next().unwrap(), Form::Postfix),
                 ..Default::default()
             };
             MathItem::Atom(Box::new(atom))
@@ -279,7 +285,7 @@ fn parse_fixed_schema<'a, A>(mut content: Vec<MExpression>,
         "msup" => {
             let atom = Atom {
                 nucleus: arguments.next().unwrap(),
-                top_right: arguments.next().unwrap(),
+                top_right: guess_if_operator_with_form(arguments.next().unwrap(), Form::Postfix),
                 ..Default::default()
             };
             MathItem::Atom(Box::new(atom))
@@ -287,8 +293,8 @@ fn parse_fixed_schema<'a, A>(mut content: Vec<MExpression>,
         "msubsup" => {
             let atom = Atom {
                 nucleus: arguments.next().unwrap(),
-                bottom_right: arguments.next().unwrap(),
-                top_right: arguments.next().unwrap(),
+                bottom_right: guess_if_operator_with_form(arguments.next().unwrap(), Form::Postfix),
+                top_right: guess_if_operator_with_form(arguments.next().unwrap(), Form::Postfix),
                 ..Default::default()
             };
             MathItem::Atom(Box::new(atom))
@@ -303,7 +309,7 @@ fn parse_fixed_schema<'a, A>(mut content: Vec<MExpression>,
             }
             let item = OverUnder {
                 nucleus: arguments.next().unwrap(),
-                over: arguments.next().unwrap(),
+                over: guess_if_operator_with_form(arguments.next().unwrap(), Form::Postfix),
                 over_is_accent: as_accent,
                 ..Default::default()
             };
@@ -312,7 +318,7 @@ fn parse_fixed_schema<'a, A>(mut content: Vec<MExpression>,
         "munder" => {
             let item = OverUnder {
                 nucleus: arguments.next().unwrap(),
-                under: arguments.next().unwrap(),
+                under: guess_if_operator_with_form(arguments.next().unwrap(), Form::Postfix),
                 ..Default::default()
             };
             MathItem::OverUnder(Box::new(item))
@@ -320,8 +326,8 @@ fn parse_fixed_schema<'a, A>(mut content: Vec<MExpression>,
         "munderover" => {
             let item = OverUnder {
                 nucleus: arguments.next().unwrap(),
-                under: arguments.next().unwrap(),
-                over: arguments.next().unwrap(),
+                under: guess_if_operator_with_form(arguments.next().unwrap(), Form::Postfix),
+                over: guess_if_operator_with_form(arguments.next().unwrap(), Form::Postfix),
                 ..Default::default()
             };
             MathItem::OverUnder(Box::new(item))

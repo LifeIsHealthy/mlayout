@@ -89,6 +89,10 @@ fn render_mathml(file: &[u8], font_bytes: &[u8], output_name: &str) {
     font.set_font_funcs(&font_funcs, &face);
     let shaper = HarfbuzzShaper::new(font);
 
+    if output_name == "svg_images/horizontal_stretch.svg" {
+        println!("{:#?}", list);
+    }
+
     let parsed_box = math_render::layout(list, &shaper);
 
     render_box(parsed_box, &shaper, &face, output_name);

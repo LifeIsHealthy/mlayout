@@ -233,7 +233,9 @@ impl<'a, T: 'a> MathBoxContent<Boxes<'a, T>, (Glyph, &'a MathShaper)> {
     fn width(&self) -> i32 {
         match *self {
             MathBoxContent::Empty => 0,
-            MathBoxContent::Glyph((ref glyph, ref shaper)) => shaper.glyph_advance(*glyph),
+            MathBoxContent::Glyph((ref glyph, ref shaper)) => {
+                shaper.glyph_advance(glyph.glyph_code) * glyph.scale.horiz
+            }
             MathBoxContent::Line { ref vector, .. } => vector.x,
             MathBoxContent::Boxes(ref boxes) => {
                 boxes.as_slice()
@@ -248,7 +250,10 @@ impl<'a, T: 'a> MathBoxContent<Boxes<'a, T>, (Glyph, &'a MathShaper)> {
     fn vertical_metrics(&self) -> (i32, i32) {
         match *self {
             MathBoxContent::Empty => (0, 0),
-            MathBoxContent::Glyph((ref glyph, ref shaper)) => shaper.glyph_extents(*glyph),
+            MathBoxContent::Glyph((ref glyph, ref shaper)) => {
+                let (ascent, descent) = shaper.glyph_extents(glyph.glyph_code);
+                (ascent * glyph.scale.vert, descent * glyph.scale.vert)
+            }
             MathBoxContent::Line { ref vector, .. } => {
                 if vector.y.is_positive() {
                     (0, vector.y)
@@ -267,7 +272,9 @@ impl<'a, T: 'a> MathBoxContent<Boxes<'a, T>, (Glyph, &'a MathShaper)> {
     fn italic_correction(&self) -> i32 {
         match *self {
             MathBoxContent::Empty => 0,
-            MathBoxContent::Glyph((ref glyph, ref shaper)) => shaper.italic_correction(*glyph),
+            MathBoxContent::Glyph((ref glyph, ref shaper)) => {
+                shaper.italic_correction(glyph.glyph_code) * glyph.scale.horiz
+            }
             MathBoxContent::Line { .. } => 0,
             MathBoxContent::Boxes(ref boxes) => {
                 boxes.as_slice()
@@ -280,7 +287,9 @@ impl<'a, T: 'a> MathBoxContent<Boxes<'a, T>, (Glyph, &'a MathShaper)> {
 
     fn top_accent_attachment(&self) -> i32 {
         let value = match *self {
-            MathBoxContent::Glyph((ref glyph, ref shaper)) => shaper.top_accent_attachment(*glyph),
+            MathBoxContent::Glyph((ref glyph, ref shaper)) => {
+                shaper.top_accent_attachment(glyph.glyph_code) * glyph.scale.horiz
+            }
             MathBoxContent::Boxes(ref boxes) if boxes.as_slice().len() == 1 => {
                 boxes.as_slice()
                     .first()

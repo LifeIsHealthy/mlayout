@@ -338,6 +338,19 @@ impl Div<PercentScale> for i32 {
     }
 }
 
+impl Div<PercentScale> for u32 {
+    type Output = u32;
+
+    fn div(self, _rhs: PercentScale) -> u32 {
+        if _rhs.percent == 100 {
+            self
+        } else {
+            let value = self * 100u32;
+            value / (_rhs.percent as u32)
+        }
+    }
+}
+
 /// Combines a horizontal and a vertical `PercentScale` value for direction-dependent scaling.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct PercentScale2D {

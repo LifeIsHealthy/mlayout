@@ -62,12 +62,25 @@ fn clamp<T: Ord, U: Into<Option<T>>>(value: T, min: U, max: U) -> T {
     value
 }
 
-fn math_box_from_shaped_glyphs<'a, T: 'a, I>(glyphs: I, shaper: &'a MathShaper) -> MathBox<'a, T>
+fn math_box_from_shaped_glyphs<'a, T: 'a, I>(glyphs: I,
+                                             options: LayoutOptions<'a>)
+                                             -> MathBox<'a, T>
     where I: 'a + IntoIterator<Item = ShapedGlyph>
 {
     let mut cursor = Point { x: 0, y: 0 };
-    let iterator = glyphs.into_iter().map(move |ShapedGlyph { mut origin, advance, glyph }| {
-        let mut math_box = MathBox::with_glyph(glyph, shaper);
+    let scale = options.shaper.scale_factor_for_script_level(options.style.script_level);
+    let scale = PercentScale2D {
+        horiz: scale,
+        vert: scale,
+    };
+    let iterator = glyphs.into_iter().map(move |ShapedGlyph { mut origin, mut advance, glyph }| {
+        let glyph = Glyph {
+            glyph_code: glyph,
+            scale: scale,
+        };
+        origin = origin * scale;
+        advance = advance * scale;
+        let mut math_box = MathBox::with_glyph(glyph, options.shaper);
         origin.y = -origin.y;
         math_box.origin = origin + cursor;
         cursor.x += advance.x;
@@ -98,7 +111,7 @@ impl<'a, T: 'a + Debug> MathBoxLayout<'a, T> for Field {
             Field::Glyph(glyph) => MathBox::with_glyph(glyph, options.shaper),
             Field::Unicode(content) => {
                 let shaper = options.shaper;
-                math_box_from_shaped_glyphs(shaper.shape_string(&content, options.style), shaper)
+                math_box_from_shaped_glyphs(shaper.shape_string(&content, options.style), options)
             }
         }
     }
@@ -226,11 +239,19 @@ impl<'a, T: 'a + Debug> MathBoxLayout<'a, T> for OverUnder<T> {
             _ => false,
         };
 
-        let mut over_options = LayoutOptions { style: options.style.inline_style(), ..options };
+        let mut over_options = LayoutOptions {
+            style: options.style.inline_style(),
+            stretch_size: None,
+            ..options
+        };
         if !self.over_is_accent {
             over_options.style = over_options.style.superscript_style();
         }
-        let mut under_options = LayoutOptions { style: options.style.inline_style(), ..options };
+        let mut under_options = LayoutOptions {
+            style: options.style.inline_style(),
+            stretch_size: None,
+            ..options
+        };
         if !self.under_is_accent {
             under_options.style = under_options.style.subscript_style();
         }
@@ -248,10 +269,15 @@ impl<'a, T: 'a + Debug> MathBoxLayout<'a, T> for OverUnder<T> {
             }
         }
         // get the maximal width of the non-stretchy items
-        let max_width = boxes.iter()
+        let mut max_width = boxes.iter()
             .map(|math_box| math_box.as_ref().map(|x| x.width()).unwrap_or_default())
             .max()
             .unwrap_or_default();
+
+        // the OverUnder has to stretch to at least the current stretch size
+        if let Some(Extents { width: stretch_width, .. }) = options.stretch_size {
+            max_width = max(max_width, stretch_width);
+        }
 
         // layout the rest
         for (index, &mut (ref mut expr, mut options)) in expressions.iter_mut().enumerate() {
@@ -470,7 +496,7 @@ impl<'a, T: 'a + Debug> MathBoxLayout<'a, T> for Root<T> {
             }
             None => Box::new(::std::iter::empty()),
         };
-        let mut surd = math_box_from_shaped_glyphs(surd, options.shaper);
+        let mut surd = math_box_from_shaped_glyphs(surd, options);
 
         // raise the surd so that its ascent is at least the radicand's ascender plus the radical
         // gap plus the line thickness of the radical rule
@@ -535,6 +561,10 @@ impl Operator {
                                           -> MathBox<'a, T> {
         match self.field {
             Field::Unicode(ref string) => {
+                let scale = options.shaper
+                    .scale_factor_for_script_level(options.style.script_level);
+                let needed_height = needed_height / scale;
+                let needed_width = needed_width / scale;
                 let mut shape_result = options.shaper.shape_string(string, options.style);
                 let first_glyph = shape_result.next();
                 if needed_height > 0 {
@@ -542,7 +572,7 @@ impl Operator {
                         options.shaper.stretch_glyph(shaped_glyph.glyph, false, needed_height)
                     });
                     if let Some(stretched) = stretched {
-                        let mut math_box = math_box_from_shaped_glyphs(stretched, options.shaper);
+                        let mut math_box = math_box_from_shaped_glyphs(stretched, options);
 
                         if let Some(stretch_constraints) = self.stretch_constraints {
                             if stretch_constraints.symmetric {
@@ -567,11 +597,11 @@ impl Operator {
                         options.shaper.stretch_glyph(shaped_glyph.glyph, true, needed_width)
                     });
                     if let Some(stretched) = stretched {
-                        return math_box_from_shaped_glyphs(stretched, options.shaper);
+                        return math_box_from_shaped_glyphs(stretched, options);
                     }
                 }
 
-                math_box_from_shaped_glyphs(first_glyph, options.shaper)
+                math_box_from_shaped_glyphs(first_glyph, options)
             }
             _ => unimplemented!(),
         }
