@@ -73,7 +73,8 @@ pub fn layout_strechy_list<'a, T: 'a + Debug>(list: Vec<MathExpression<T>>,
     };
 
     for (index, stretchy) in stretchy_indices.iter().zip(stretchy_elems.into_iter()) {
-        non_stretchy_elems.insert(*index, stretchy.layout(options));
+        let math_box = layout_list_element(stretchy, options);
+        non_stretchy_elems.insert(*index, math_box);
     }
 
     Box::new(non_stretchy_elems.into_iter())
