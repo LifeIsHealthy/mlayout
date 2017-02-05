@@ -120,24 +120,7 @@ impl<'a, T: 'a + Debug> MathBoxLayout<'a, T> for Vec<MathExpression<T>> {
 
 impl<'a, T: 'a + Debug> MathBoxLayout<'a, T> for Atom<T> {
     fn layout(self, options: LayoutOptions<'a>) -> MathBox<'a, T> {
-        let mut subscript_options = options;
-        subscript_options.style = options.style.subscript_style();
-        let mut superscript_options = options;
-        superscript_options.style = options.style.superscript_style();
-        let subscript = self.bottom_right.as_option().map(|x| x.layout(subscript_options));
-        let superscript = self.top_right.as_option().map(|x| x.layout(superscript_options));
-        let nucleus_is_largeop = match self.nucleus.content {
-            MathItem::Operator(Operator { is_large_op, .. }) => is_large_op,
-            _ => false,
-        };
-        let nucleus = self.nucleus.layout(options);
-
-        layout_sub_superscript(subscript,
-                               superscript,
-                               nucleus,
-                               nucleus_is_largeop,
-                               options.shaper,
-                               options.style)
+        layout_sub_superscript(self.bottom_right, self.top_right, self.nucleus, options)
     }
 
     fn operator_properties(&self, options: LayoutOptions<'a>) -> Option<OperatorProperties> {
@@ -145,14 +128,24 @@ impl<'a, T: 'a + Debug> MathBoxLayout<'a, T> for Atom<T> {
     }
 }
 
-fn layout_sub_superscript<'a, T: 'a>(subscript: Option<MathBox<'a, T>>,
-                                     superscript: Option<MathBox<'a, T>>,
-                                     mut nucleus: MathBox<'a, T>,
-                                     nucleus_is_largeop: bool,
-                                     shaper: &MathShaper,
-                                     style: LayoutStyle)
-                                     -> MathBox<'a, T> {
-    let space_after_script = shaper.math_constant(MathConstant::SpaceAfterScript);
+fn layout_sub_superscript<'a, T: 'a + Debug>(subscript: MathExpression<T>,
+                                             superscript: MathExpression<T>,
+                                             nucleus: MathExpression<T>,
+                                             options: LayoutOptions<'a>)
+                                             -> MathBox<'a, T> {
+    let mut subscript_options = options;
+    subscript_options.style = options.style.subscript_style();
+    let mut superscript_options = options;
+    superscript_options.style = options.style.superscript_style();
+    let subscript = subscript.as_option().map(|x| x.layout(subscript_options));
+    let superscript = superscript.as_option().map(|x| x.layout(superscript_options));
+    let nucleus_is_largeop = match nucleus.content {
+        MathItem::Operator(Operator { is_large_op, .. }) => is_large_op,
+        _ => false,
+    };
+    let mut nucleus = nucleus.layout(options);
+
+    let space_after_script = options.shaper.math_constant(MathConstant::SpaceAfterScript);
 
     if subscript.is_none() && superscript.is_none() {
         return nucleus;
@@ -161,43 +154,47 @@ fn layout_sub_superscript<'a, T: 'a>(subscript: Option<MathBox<'a, T>>,
     let mut result = Vec::with_capacity(4);
     match (subscript, superscript) {
         (Some(mut subscript), Some(mut superscript)) => {
-            let (sub_shift, super_shift) =
-                get_subsup_shifts(&subscript, &superscript, &nucleus, shaper, style);
+            let (sub_shift, super_shift) = get_subsup_shifts(&subscript,
+                                                             &superscript,
+                                                             &nucleus,
+                                                             options.shaper,
+                                                             options.style);
             position_attachment(&mut subscript,
                                 &mut nucleus,
                                 nucleus_is_largeop,
                                 CornerPosition::BottomRight,
                                 sub_shift,
-                                shaper);
+                                options.shaper);
             position_attachment(&mut superscript,
                                 &mut nucleus,
                                 nucleus_is_largeop,
                                 CornerPosition::TopRight,
                                 super_shift,
-                                shaper);
+                                options.shaper);
             result.push(nucleus);
             result.push(subscript);
             result.push(superscript);
         }
         (Some(mut subscript), None) => {
-            let sub_shift = get_subscript_shift_dn(&subscript, &nucleus, shaper);
+            let sub_shift = get_subscript_shift_dn(&subscript, &nucleus, options.shaper);
             position_attachment(&mut subscript,
                                 &mut nucleus,
                                 nucleus_is_largeop,
                                 CornerPosition::BottomRight,
                                 sub_shift,
-                                shaper);
+                                options.shaper);
             result.push(nucleus);
             result.push(subscript);
         }
         (None, Some(mut superscript)) => {
-            let super_shift = get_superscript_shift_up(&superscript, &nucleus, shaper, style);
+            let super_shift =
+                get_superscript_shift_up(&superscript, &nucleus, options.shaper, options.style);
             position_attachment(&mut superscript,
                                 &mut nucleus,
                                 nucleus_is_largeop,
                                 CornerPosition::TopRight,
                                 super_shift,
-                                shaper);
+                                options.shaper);
             result.push(nucleus);
             result.push(superscript);
         }
@@ -216,6 +213,13 @@ fn layout_sub_superscript<'a, T: 'a>(subscript: Option<MathBox<'a, T>>,
 
 impl<'a, T: 'a + Debug> MathBoxLayout<'a, T> for OverUnder<T> {
     fn layout(self, options: LayoutOptions<'a>) -> MathBox<'a, T> {
+        if self.is_limits && options.style.math_style == MathStyle::Inline {
+            return layout_sub_superscript(self.under, self.over, self.nucleus, options)
+        }
+        let nucleus_is_largeop = match self.nucleus.content {
+            MathItem::Operator(Operator { is_large_op, .. }) => is_large_op,
+            _ => false,
+        };
         let nucleus = self.nucleus.layout(options);
         let nucleus = if !self.over.is_empty() {
             let mut over_options = options;
@@ -225,7 +229,12 @@ impl<'a, T: 'a + Debug> MathBoxLayout<'a, T> for OverUnder<T> {
             let shaper = options.shaper;
             let style = options.style;
             let over = self.over.layout(over_options);
-            layout_over(over, nucleus, shaper, style, self.over_is_accent)
+            layout_over(over,
+                        nucleus,
+                        shaper,
+                        style,
+                        self.over_is_accent,
+                        nucleus_is_largeop)
         } else {
             nucleus
         };
@@ -238,7 +247,12 @@ impl<'a, T: 'a + Debug> MathBoxLayout<'a, T> for OverUnder<T> {
             let shaper = options.shaper;
             let style = options.style;
             let under = self.under.layout(under_options);
-            layout_under(under, nucleus, shaper, style, self.under_is_accent)
+            layout_under(under,
+                         nucleus,
+                         shaper,
+                         style,
+                         self.under_is_accent,
+                         nucleus_is_largeop)
         } else {
             nucleus
         }
@@ -253,7 +267,8 @@ fn layout_over<'a, T: 'a>(mut over: MathBox<'a, T>,
                           mut nucleus: MathBox<'a, T>,
                           shaper: &MathShaper,
                           style: LayoutStyle,
-                          as_accent: bool)
+                          as_accent: bool,
+                          nucleus_is_large_op: bool)
                           -> MathBox<'a, T> {
     let over_gap = if as_accent {
         let accent_base_height = shaper.math_constant(MathConstant::AccentBaseHeight);
@@ -282,6 +297,11 @@ fn layout_over<'a, T: 'a>(mut over: MathBox<'a, T>,
         over.origin.x += center_difference;
     }
 
+    // LargeOp italic correction
+    if nucleus_is_large_op {
+        over.origin.x += nucleus.italic_correction() / 2;
+    }
+
     // over extra ascender
     let over_extra_ascender = shaper.math_constant(MathConstant::OverbarExtraAscender);
     // over.logical_extents.ascent += over_extra_ascender;
@@ -294,7 +314,8 @@ fn layout_under<'a, T: 'a>(mut under: MathBox<'a, T>,
                            mut nucleus: MathBox<'a, T>,
                            shaper: &MathShaper,
                            style: LayoutStyle,
-                           as_accent: bool)
+                           as_accent: bool,
+                           nucleus_is_large_op: bool)
                            -> MathBox<'a, T> {
     let under_gap = shaper.math_constant(MathConstant::UnderbarVerticalGap);
     let under_shift = under_gap + nucleus.descent() + under.ascent();
@@ -308,6 +329,11 @@ fn layout_under<'a, T: 'a>(mut under: MathBox<'a, T>,
         under.origin.x += width_difference / 2;
     }
 
+    // LargeOp italic correction
+    if nucleus_is_large_op {
+        under.origin.x -= nucleus.italic_correction() / 2;
+    }
+
     // under extra descender
     let under_extra_descender = shaper.math_constant(MathConstant::UnderbarExtraDescender);
     // under.logical_extents.descent += under_extra_descender;
@@ -318,8 +344,15 @@ fn layout_under<'a, T: 'a>(mut under: MathBox<'a, T>,
 
 impl<'a, T: 'a + Debug> MathBoxLayout<'a, T> for GeneralizedFraction<T> {
     fn layout(self, options: LayoutOptions<'a>) -> MathBox<'a, T> {
-        let denominator_options = LayoutOptions { style: options.style.cramped_style(), ..options };
-        let mut numerator = self.numerator.layout(options);
+        let mut numerator_options = options;
+        if options.style.math_style == MathStyle::Display {
+            numerator_options.style.math_style = MathStyle::Inline;
+        } else {
+            numerator_options.style.script_level += 1;
+        }
+        let denominator_options =
+            LayoutOptions { style: numerator_options.style.cramped_style(), ..options };
+        let mut numerator = self.numerator.layout(numerator_options);
         let mut denominator = self.denominator.layout(denominator_options);
         let shaper = &options.shaper;
 

@@ -2,11 +2,8 @@
     <mrow>
         <msubsup>
             <mo>&int;</mo>
-            <mrow>
-                <mo>&minus;</mo>
-                <mi>&infin;</mi>
-            </mrow>
-            <mi>&infin;</mi>
+            <mi>a</mi>
+            <mi>b</mi>
         </msubsup>
         <mi>f</mi>
         <mrow>
@@ -18,22 +15,23 @@
         <mi>x</mi>
     </mrow>
     <mo>=</mo>
-    <mrow>
-        <munderover>
-            <mo>&int;</mo>
-            <mrow>
-                <mo>&minus;</mo>
-                <mi>&infin;</mi>
-            </mrow>
-            <mi>&infin;</mi>
-        </munderover>
-        <mi>f</mi>
+    <mfrac>
+        <mn>1</mn>
         <mrow>
-            <mo>(</mo>
+            <mo>&minus;</mo>
+            <munderover>
+                <mo>&Product;</mo>
+                <mi>b</mi>
+                <mi>a</mi>
+            </munderover>
+            <mi>f</mi>
+            <mrow>
+                <mo>(</mo>
+                <mi>x</mi>
+                <mo>)</mo>
+            </mrow>
+            <mi>d</mi>
             <mi>x</mi>
-            <mo>)</mo>
         </mrow>
-        <mi>d</mi>
-        <mi>x</mi>
-    </mrow>
+    </mfrac>
 </math>

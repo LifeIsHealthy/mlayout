@@ -144,9 +144,25 @@ fn find_core_operator(embellished_op: &mut MExpression) -> Option<&mut MathItem<
     }
 }
 
+fn set_movable_limits(embellished_op: &mut MExpression) {
+    match embellished_op.content {
+        MathItem::Atom(ref mut atom) => set_movable_limits(&mut atom.nucleus),
+        MathItem::OverUnder(ref mut ou) => {
+            ou.is_limits = true;
+            set_movable_limits(&mut ou.nucleus)
+        },
+        MathItem::GeneralizedFraction(ref mut frac) => set_movable_limits(&mut frac.numerator),
+        _ => {},
+    }
+}
+
 fn make_operator(elem: &mut MExpression) {
     let operator_attrs = elem.user_info.operator_attrs.unwrap();
     let flags = operator_attrs.flags;
+
+    if flags.contains(MOVABLE_LIMITS) {
+        set_movable_limits(elem);
+    }
 
     if let Some(item) = find_core_operator(elem) {
         let stretch_constraints = if flags.contains(STRETCHY) {

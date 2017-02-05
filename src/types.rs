@@ -167,7 +167,7 @@ pub struct OverUnder<T: Debug> {
     /// left to right contexts.
     ///
     /// The main use of this is to display limits on large operators.
-    pub as_limits: bool,
+    pub is_limits: bool,
 }
 
 /// A structure describing a generalized fraction.
