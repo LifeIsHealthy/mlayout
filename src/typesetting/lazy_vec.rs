@@ -10,7 +10,7 @@ impl<T, I> LazyVecInner<I, T>
     where I: Iterator<Item = T>
 {
     // If the content is a `Vec` this must not change `self` in any way!
-    fn to_vec(&mut self) {
+    fn replace_with_vec(&mut self) {
         let vec = if let LazyVecInner::Iter(ref mut iter) = *self {
             iter.collect()
         } else {
@@ -35,7 +35,7 @@ impl<I, T> LazyVec<I, T>
 
     pub fn as_slice(&self) -> &[T] {
         let mut inner = unsafe { &mut *self.0.get() };
-        inner.to_vec();
+        inner.replace_with_vec();
         match *inner {
             LazyVecInner::Iter(_) => panic!("LazyVec is in inconsistent state."),
             LazyVecInner::Vec(ref vec) => &vec[..],
@@ -44,7 +44,7 @@ impl<I, T> LazyVec<I, T>
 
     pub fn as_mut_vec(&mut self) -> &mut Vec<T> {
         let mut inner = unsafe { &mut *self.0.get() };
-        inner.to_vec();
+        inner.replace_with_vec();
         match *inner {
             LazyVecInner::Iter(_) => panic!("LazyVec is in inconsistent state."),
             LazyVecInner::Vec(ref mut vec) => vec,
@@ -53,7 +53,7 @@ impl<I, T> LazyVec<I, T>
 
     pub fn into_vec(self) -> Vec<T> {
         let mut inner = unsafe { self.0.into_inner() };
-        inner.to_vec();
+        inner.replace_with_vec();
         match inner {
             LazyVecInner::Iter(_) => panic!("LazyVec is in inconsistent state."),
             LazyVecInner::Vec(vec) => vec,

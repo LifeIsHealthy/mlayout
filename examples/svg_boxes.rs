@@ -31,11 +31,11 @@ macro_rules! render_test {
 fn main() {
 
     let font = include_bytes!("/Users/mr/Library/Fonts/latinmodern-math.otf");
-    // let font = include_bytes!("/Library/Fonts/Microsoft/Cambria Math.ttf");
-    // let font = include_bytes!("/Users/mr/Library/Fonts/Asana-Math-2.otf");
-    // let font = include_bytes!("/Users/mr/Library/Fonts/texgyreschola-math.otf");
-    // let font = include_bytes!("/Users/mr/Library/Fonts/xits-math.otf");
-    // let font = include_bytes!("/Users/mr/Library/Fonts/STIX2Math.otf");
+//    let font = include_bytes!("/Library/Fonts/Microsoft/Cambria Math.ttf");
+//    let font = include_bytes!("/Users/mr/Library/Fonts/Asana-Math-2.otf");
+//    let font = include_bytes!("/Users/mr/Library/Fonts/texgyreschola-math.otf");
+//    let font = include_bytes!("/Users/mr/Library/Fonts/xits-math.otf");
+//    let font = include_bytes!("/Users/mr/Library/Fonts/STIX2Math.otf");
 
     render_test!(font,
                  "schrödinger",
@@ -88,10 +88,6 @@ fn render_mathml(file: &[u8], font_bytes: &[u8], output_name: &str) {
     let mut font = Face::new(font_bytes, 0).create_font().create_sub_font();
     font.set_font_funcs(&font_funcs, &face);
     let shaper = HarfbuzzShaper::new(font);
-
-    if output_name == "svg_images/horizontal_stretch.svg" {
-        println!("{:#?}", list);
-    }
 
     let parsed_box = math_render::layout(list, &shaper);
 

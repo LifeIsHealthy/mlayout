@@ -302,7 +302,7 @@ fn parse_fixed_schema<'a, A>(mut content: Vec<MExpression>,
         "mover" => {
             let mut as_accent = false;
             for attrib in attributes {
-                let (ident, value) = try!(attrib);
+                let (ident, value) = attrib?;
                 if ident == b"accent" && &value as &[u8] == b"true" {
                     as_accent = true;
                 }
