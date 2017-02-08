@@ -40,7 +40,7 @@ fn no_scale_division_test() {
         let result = math_render::layout(list, font);
         println!("{:#?}", &result);
         let content = result.content();
-        let boxes = assume_boxes(assume_boxes(content)[0].content());
+        let boxes = assume_boxes(content);
         // test that the second box has a greater x-value than the right edge of the first box
         // with a somewhat big error margin
         assert!(boxes[1].origin.x > (boxes[0].origin.x + (boxes[0].width() as f32 * 0.8) as i32));
@@ -55,7 +55,7 @@ fn fraction_centering_test() {
         let result = math_render::layout(list, font);
         println!("{:?}", result);
         let content = result.content();
-        let boxes = assume_boxes(assume_boxes(content)[0].content());
+        let boxes = assume_boxes(content);
 
         // test that the second box has a greater x-value than the right edge of the first box
         // with a somewhat big error margin
