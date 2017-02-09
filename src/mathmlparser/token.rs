@@ -5,7 +5,8 @@ use std::io::BufRead;
 use super::operator;
 use super::error::ParsingError;
 use super::{Result, ResultPos, MathmlElement, XmlReader, Event, MExpression, MathmlInfo,
-            parse_length, parse_bool};
+            FromXmlAttribute};
+use mathmlparser::AttributeParse;
 
 use types::{Field, MathItem};
 use super::escape::unescape;
@@ -17,78 +18,96 @@ enum TextDirection {
     Rtl,
 }
 
+impl FromXmlAttribute for TextDirection {
+    type Err = ();
+    fn from_xml_attr(bytes: &[u8]) -> std::result::Result<Self, Self::Err> {
+        if bytes == b"rtl" {
+            Ok(TextDirection::Rtl)
+        } else {
+            Ok(TextDirection::Ltr)
+        }
+    }
+}
+
 impl std::default::Default for TextDirection {
     fn default() -> TextDirection {
         TextDirection::Ltr
     }
 }
 
+impl FromXmlAttribute for Family {
+    type Err = ();
+    fn from_xml_attr(bytes: &[u8]) -> std::result::Result<Self, Self::Err> {
+        match bytes {
+            b"normal" => Ok(Family::Normal),
+            b"bold" => Ok(Family::Bold),
+            b"italic" => Ok(Family::Italics),
+            b"bold-italic" => Ok(Family::BoldItalics),
+            b"double-struck" => Ok(Family::DoubleStruck),
+            b"bold-fraktur" => Ok(Family::BoldFraktur),
+            b"script" => Ok(Family::Script),
+            b"bold-script" => Ok(Family::BoldScript),
+            b"fraktur" => Ok(Family::Fraktur),
+            b"sans-serif" => Ok(Family::SansSerif),
+            b"bold-sans-serif" => Ok(Family::SansSerifBold),
+            b"sans-serif-italic" => Ok(Family::SansSerifItalics),
+            b"sans-serif-bold-italic" => Ok(Family::SansSerifBoldItalics),
+            b"monospace" => Ok(Family::Monospace),
+            _ => Err(()),
+        }
+    }
+}
+
 #[derive(Debug, Default)]
 struct TokenStyle {
     // If `math_variant` is None the family of the glyph depends on whether the element consists of
-    // a single glyph or multiple glyphs. A single glyph is layed out in italic style. Multiple
+    // a single glyph or multiple glyphs. A single glyph is laid out in italic style. Multiple
     // glyphs would be layed out in normal style.
     math_variant: Option<Family>,
     // TODO: missing math_size
     direction: TextDirection,
 }
 
-fn variant_parse(bytes: &str) -> Option<Family> {
-    match bytes {
-        "normal" => Some(Family::Normal),
-        "bold" => Some(Family::Bold),
-        "italic" => Some(Family::Italics),
-        "bold-italic" => Some(Family::BoldItalics),
-        "double-struck" => Some(Family::DoubleStruck),
-        "bold-fraktur" => Some(Family::BoldFraktur),
-        "script" => Some(Family::Script),
-        "bold-script" => Some(Family::BoldScript),
-        "fraktur" => Some(Family::Fraktur),
-        "sans-serif" => Some(Family::SansSerif),
-        "bold-sans-serif" => Some(Family::SansSerifBold),
-        "sans-serif-italic" => Some(Family::SansSerifItalics),
-        "sans-serif-bold-italic" => Some(Family::SansSerifBoldItalics),
-        "monospace" => Some(Family::Monospace),
-        _ => None,
-    }
-}
-
 #[allow(match_same_arms)]
-fn parse_token_attribute<'a>(mut style: TokenStyle,
+fn parse_token_attribute<'a>(style: &mut TokenStyle,
                              element_identifier: &str,
-                             new_attribute: &(&'a [u8], &'a str))
-                             -> TokenStyle {
+                             new_attribute: &(&'a [u8], &'a [u8]))
+                             -> bool {
     match *new_attribute {
-        (b"mathvariant", variant) => style.math_variant = variant_parse(variant),
-        (b"dir", dir) => {
-            if dir == "rtl" {
-                style.direction = TextDirection::Rtl
-            } else {
-                style.direction = TextDirection::Ltr
-            }
-        }
-        _ => {}
+        (b"mathvariant", variant) => style.math_variant = variant.parse_xml().ok(),
+        (b"dir", dir) => style.direction = dir.parse_xml().unwrap(),
+        _ => return false,
     }
     match (element_identifier, style.math_variant) {
         ("mi", None) => {}
         (_, None) => style.math_variant = Some(Family::Normal),
         _ => {}
     }
-    style
+    true
 }
 
-fn adapt_to_family(text: String, family: Option<Family>) -> String {
+fn adapt_to_family(text: &str, family: Option<Family>) -> Cow<str> {
     if family.is_none() {
         if text.len() == 1 {
             let conv = convert_character_to_family(text.chars().next().unwrap(), Family::Italics);
-            conv.to_string()
+            conv.to_string().into()
         } else {
-            text
+            text.into()
         }
     } else {
         let family = family.unwrap();
-        text.chars().map(|chr| convert_character_to_family(chr, family)).collect()
+        text.chars().map(|chr| convert_character_to_family(chr, family)).collect::<String>().into()
     }
+}
+
+fn replace_anomalous_characters(text: &str, elem: MathmlElement) -> String {
+    text.chars().map(|chr| match chr {
+        '-' if elem.identifier == "mo" => '\u{2212}', // Minus Sign
+        '-' => '\u{2010}', // Hyphen
+        '\u{0027}' => '\u{2023}', // Prime
+        chr => chr
+
+    }).collect()
 }
 
 // invoked after a token expression
@@ -105,12 +124,18 @@ fn parse_token_contents<R: BufRead>(parser: &mut XmlReader<R>,
             Event::Text(text) => {
                 let text = std::str::from_utf8(text.content())?;
                 let text = unescape(text)?;
-                let string = adapt_to_family(text.into_owned(), style.math_variant);
+                let string = adapt_to_family(&text, style.math_variant);
+                let string = replace_anomalous_characters(&string, elem);
                 fields.push(Field::Unicode(string));
             }
             Event::Start(elem) => {
                 match elem.name() {
-                    b"mglyph" | b"malignmark" => unimplemented!(),
+                    b"mglyph" | b"malignmark" => {
+                        Err(ParsingError::from_string(parser,
+                                                      format!("{:?} element is currently not \
+                                                               implemented.",
+                                                              elem.name())))?
+                    }
                     _ => Err(ParsingError::from_string(parser, "Unexpected new element."))?,
                 }
             }
@@ -119,7 +144,7 @@ fn parse_token_contents<R: BufRead>(parser: &mut XmlReader<R>,
                     break;
                 }
             }
-            _ => {},
+            _ => {}
         }
     }
     Ok(fields)
@@ -142,75 +167,72 @@ fn try_extract_char(field: &Field) -> Option<char> {
     }
 }
 
-fn parse_operator_attribute(op_attrs: Option<operator::Attributes>,
-                            new_attr: &(&[u8], &str))
-                            -> Option<operator::Attributes> {
-    let mut op_attrs = if op_attrs.is_none() {
-        return None;
-    } else {
-        op_attrs.unwrap()
+fn parse_operator_attribute(op_attrs: Option<&mut operator::Attributes>,
+                            new_attr: &(&[u8], &[u8]))
+                            -> bool {
+    let mut op_attrs = match op_attrs {
+        Some(op_attrs) => op_attrs,
+        None => return true,
     };
     match *new_attr {
-        (b"form", form_str) => op_attrs.form = form_str.parse().ok(),
+        (b"form", form_str) => op_attrs.form = form_str.parse_xml().ok(),
         (b"lspace", lspace) => {
-            op_attrs.lspace = parse_length(lspace).ok();
+            op_attrs.lspace = lspace.parse_xml().ok();
         }
         (b"rspace", rspace) => {
-            op_attrs.rspace = parse_length(rspace).ok();
+            op_attrs.rspace = rspace.parse_xml().ok();
         }
         (b"fence", is_fence) => {
-            if let Ok(is_fence) = parse_bool(is_fence) {
+            if let Ok(is_fence) = is_fence.parse_xml() {
                 op_attrs.set_user_override(operator::FENCE, is_fence);
             }
         }
         (b"symmetric", is_symmetric) => {
-            if let Ok(is_symmetric) = parse_bool(is_symmetric) {
+            if let Ok(is_symmetric) = is_symmetric.parse_xml() {
                 op_attrs.set_user_override(operator::SYMMETRIC, is_symmetric);
             }
         }
         (b"stretchy", is_stretchy) => {
-            if let Ok(is_stretchy) = parse_bool(is_stretchy) {
+            if let Ok(is_stretchy) = is_stretchy.parse_xml() {
                 op_attrs.set_user_override(operator::STRETCHY, is_stretchy);
             }
         }
         (b"largeop", is_largeop) => {
-            if let Ok(is_largeop) = parse_bool(is_largeop) {
+            if let Ok(is_largeop) = is_largeop.parse_xml() {
                 op_attrs.set_user_override(operator::LARGEOP, is_largeop);
             }
         }
         (b"movablelimits", has_movable_limits) => {
-            if let Ok(has_movable_limits) = parse_bool(has_movable_limits) {
+            if let Ok(has_movable_limits) = has_movable_limits.parse_xml() {
                 op_attrs.set_user_override(operator::MOVABLE_LIMITS, has_movable_limits);
             }
         }
         (b"accent", is_accent) => {
-            if let Ok(is_accent) = parse_bool(is_accent) {
+            if let Ok(is_accent) = is_accent.parse_xml() {
                 op_attrs.set_user_override(operator::ACCENT, is_accent);
             }
         }
-        _ => {}
+        _ => return false,
     }
-    Some(op_attrs)
+    true
 }
 
 pub fn parse<'a, R: BufRead, A>(parser: &mut XmlReader<R>,
                                 elem: MathmlElement,
                                 attributes: A)
                                 -> Result<MExpression>
-    where A: Iterator<Item = ResultPos<(&'a [u8], Cow<'a, [u8]>)>>
+    where A: Iterator<Item = ResultPos<(&'a [u8], &'a [u8])>>
 {
-    let token_style = TokenStyle::default();
-    let op_attrs: Option<operator::Attributes> = if elem.identifier == "mo" {
+    let mut token_style = TokenStyle::default();
+    let mut op_attrs: Option<operator::Attributes> = if elem.identifier == "mo" {
         Some(Default::default())
     } else {
         None
     };
-    let (token_style, mut op_attrs) = attributes.filter_map(|attr| attr.ok())
-        .filter(|attr| std::str::from_utf8(&attr.1).is_ok())
-        .fold((token_style, op_attrs), |(ts, oa), attr| {
-            let attr = (attr.0, unsafe { std::str::from_utf8_unchecked(&attr.1) });
-            (parse_token_attribute(ts, elem.identifier, &attr), parse_operator_attribute(oa, &attr))
-        });
+    attributes.filter_map(|attr| attr.ok())
+        .filter(|attr| parse_token_attribute(&mut token_style, elem.identifier, &attr))
+        .filter(|attr| parse_operator_attribute(op_attrs.as_mut(), &attr))
+        .fold((), |_, _| {});
     let mut fields = parse_token_contents(parser, elem, token_style)?;
     let item = if fields.len() == 1 {
         let field = fields.remove(0);

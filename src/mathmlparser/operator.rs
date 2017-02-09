@@ -3,7 +3,7 @@ use std::ops::Not;
 
 use types::{Length, MathItem, StretchConstraints, Operator};
 
-use super::{MExpression, MathmlInfo};
+use super::{MExpression, MathmlInfo, FromXmlAttribute};
 use super::operator_dict;
 
 bitflags! {
@@ -41,14 +41,14 @@ impl Default for Form {
     }
 }
 
-impl FromStr for Form {
+impl FromXmlAttribute for Form {
     type Err = FormParsingError;
-    fn from_str(s: &str) -> Result<Form, FormParsingError> {
+    fn from_xml_attr(s: &[u8]) -> Result<Form, FormParsingError> {
         match s {
-            "prefix" => Ok(Form::Prefix),
-            "infix" => Ok(Form::Infix),
-            "postfix" => Ok(Form::Postfix),
-            _ => Err(FormParsingError { unknown_str: s.to_string() }),
+            b"prefix" => Ok(Form::Prefix),
+            b"infix" => Ok(Form::Infix),
+            b"postfix" => Ok(Form::Postfix),
+            _ => Err(FormParsingError { unknown_str: String::from_utf8_lossy(s).into_owned() }),
         }
     }
 }

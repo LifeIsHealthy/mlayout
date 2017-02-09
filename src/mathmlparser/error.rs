@@ -11,10 +11,10 @@ pub struct ParsingError {
     pub error_type: ErrorType,
 }
 impl ParsingError {
-    pub fn from_string<B: BufRead>(parser: &XmlReader<B>, string: &str) -> ParsingError {
+    pub fn from_string<B: BufRead, S: ToString>(parser: &XmlReader<B>, string: S) -> ParsingError {
         ParsingError {
             position: Some(parser.buffer_position()),
-            error_type: ErrorType::OtherError(string.into()),
+            error_type: ErrorType::OtherError(string.to_string()),
         }
     }
 
@@ -30,6 +30,7 @@ impl ParsingError {
 pub enum ErrorType {
     UnknownElement(String),
     UnexpectedEndOfInput,
+    WrongEndElement(String),
     XmlError(quick_xml::error::Error),
     OtherError(String),
 }
@@ -39,8 +40,13 @@ impl fmt::Display for ParsingError {
         match self.error_type {
             ErrorType::UnknownElement(ref name) => write!(f, "Unknown Element: \"{}\"", name),
             ErrorType::UnexpectedEndOfInput => write!(f, "Unexpected end of input."),
+            ErrorType::WrongEndElement(ref name) => {
+                write!(f,
+                       "Unexpected end element \"<{}>\" without corresponding start element.",
+                       name)
+            }
             ErrorType::OtherError(ref string) => write!(f, "Error: {}", string),
-            ErrorType::XmlError(ref error) => error.fmt(f),
+            ErrorType::XmlError(ref error) => write!(f, "XML error: {}", error),
         }
     }
 }
@@ -49,6 +55,7 @@ impl std::error::Error for ParsingError {
         match self.error_type {
             ErrorType::UnknownElement(..) => "Encountered unknown element.",
             ErrorType::UnexpectedEndOfInput => "Unexpected end of input.",
+            ErrorType::WrongEndElement(_) => "Unexpected end elemet",
             ErrorType::OtherError(ref msg) => msg,
             ErrorType::XmlError(_) => "Error while reading xml.",
         }
