@@ -172,7 +172,7 @@ fn parse_operator_attribute(op_attrs: Option<&mut operator::Attributes>,
                             -> bool {
     let mut op_attrs = match op_attrs {
         Some(op_attrs) => op_attrs,
-        None => return true,
+        None => return false,
     };
     match *new_attr {
         (b"form", form_str) => op_attrs.form = form_str.parse_xml().ok(),
@@ -224,14 +224,14 @@ pub fn parse<'a, R: BufRead, A>(parser: &mut XmlReader<R>,
     where A: Iterator<Item = ResultPos<(&'a [u8], &'a [u8])>>
 {
     let mut token_style = TokenStyle::default();
-    let mut op_attrs: Option<operator::Attributes> = if elem.identifier == "mo" {
-        Some(Default::default())
+    let mut op_attrs = if elem.identifier == "mo" {
+        Some(operator::Attributes::default())
     } else {
         None
     };
     attributes.filter_map(|attr| attr.ok())
-        .filter(|attr| parse_token_attribute(&mut token_style, elem.identifier, &attr))
-        .filter(|attr| parse_operator_attribute(op_attrs.as_mut(), &attr))
+        .filter(|attr| !parse_token_attribute(&mut token_style, elem.identifier, &attr))
+        .filter(|attr| !parse_operator_attribute(op_attrs.as_mut(), &attr))
         .fold((), |_, _| {});
     let mut fields = parse_token_contents(parser, elem, token_style)?;
     let item = if fields.len() == 1 {
@@ -255,4 +255,37 @@ pub fn parse<'a, R: BufRead, A>(parser: &mut XmlReader<R>,
         content: item,
         user_info: MathmlInfo { operator_attrs: op_attrs, ..Default::default() },
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use super::super::match_math_element;
+    use super::super::Event;
+    use super::super::operator::Flags;
+
+    fn test_operator_flag_parse(attr_name: &str, flag: operator::Flags) {
+        let xml = format!("<mo {}=\"true\">a</mo>", attr_name);
+        let mut parser = XmlReader::from(&xml as &str).trim_text(true);
+
+        let elem = match parser.next().unwrap().unwrap() {
+            Event::Start(elem) => elem,
+            _ => panic!("Expected mo element"),
+        };
+        let mathml_elem = match_math_element(elem.name()).unwrap();
+        let attributes = elem.attributes();
+
+        let mexpression = parse(&mut parser, mathml_elem, attributes).unwrap();
+
+        let operator_attrs = mexpression.user_info.operator_attrs.unwrap();
+        assert!(operator_attrs.flags.contains(flag));
+    }
+
+    #[test]
+    fn test_parse_operator_attributes() {
+        test_operator_flag_parse("symmetric", operator::SYMMETRIC);
+        test_operator_flag_parse("fence", operator::FENCE);
+        test_operator_flag_parse("largeop", operator::LARGEOP);
+        test_operator_flag_parse("stretchy", operator::STRETCHY);
+    }
 }
