@@ -13,9 +13,8 @@
     <mi>&#x0302;</mi>
 </mover>
 
-<mi>V&#x0302;</mi>
-
-<mover accent="false">
-    <mi>V</mi>
-    <mi>&#x0302;</mi>
+<mover accent="true">
+<mi>V</mi>
+<mo stretchy="true">&#x0302;</mo>
 </mover>
+

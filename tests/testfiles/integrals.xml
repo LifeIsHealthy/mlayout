@@ -18,7 +18,7 @@
     <mfrac>
         <mn>1</mn>
         <mrow>
-            <mo>&minus;</mo>
+            <mo>-</mo>
             <munderover>
                 <mo>&Product;</mo>
                 <mi>b</mi>

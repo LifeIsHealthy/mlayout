@@ -431,7 +431,7 @@ mod tests {
                    Form::Prefix);
         match operator.content {
             MathItem::Operator(Operator { field: Field::Unicode(text), .. }) => {
-                assert_eq!(text, "-")
+                assert_eq!(text, "\u{2212}") // MINUS SIGN
             }
             other_item => panic!("Expected MathItem::Operator. Found {:?}.", other_item),
         }

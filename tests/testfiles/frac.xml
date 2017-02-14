@@ -1,5 +1,5 @@
 <mfrac>
-    <mi>i</mi>
+    <msubsup><mi>x</mi><mn>0</mn><mo>&#x2032;<!--PRIME--></mo></msubsup>
     <mi>V</mi>
 </mfrac>
 <mo>&sdot;</mo>

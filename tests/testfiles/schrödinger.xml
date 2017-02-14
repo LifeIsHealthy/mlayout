@@ -31,8 +31,8 @@
 </mfrac>
 <msup title="Laplacian">
     <mover accent="true">
-        <mo>&#8711;</mo>
-        <mo>&#x20D7;</mo>
+        <mo>&#8711;<!--NABLA--></mo>
+        <mo stretchy="false">&#x20D7;<!--COMBINING RIGHT ARROW ABOVE--></mo>
     </mover>
     <mn>2</mn>
 </msup>
@@ -43,7 +43,7 @@
 <mo form="infix">+</mo>
 <mover title="Potential energy" accent="true">
     <mi>V</mi>
-    <mi>&#x0302;</mi>
+    <mo stretchy="false">&#x0302;<!--COMBINING CIRCUMFLEX--></mo>
 </mover>
 <msub>
     <mn title="Wavefunction">&#936;</mn>
