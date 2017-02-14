@@ -26,6 +26,7 @@ pub fn layout<'a, T: 'a + Debug, S: MathShaper>(expression: MathExpression<T>,
             is_cramped: false,
         },
         stretch_size: None,
+        as_accent: false,
     };
 
     expression.layout(options)

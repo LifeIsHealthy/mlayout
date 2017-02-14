@@ -22,11 +22,11 @@ pub fn layout_list_element<'a, T: 'a + Debug>(item: MathExpression<T>,
     if let Some(OperatorProperties { leading_space, trailing_space, .. }) =
         item.operator_properties(options) {
         if options.style.math_style == MathStyle::Display {
-            let left_space = MathBox::empty(Extents::new(leading_space, 0, 0));
+            let left_space = MathBox::empty(Extents::new(0, leading_space, 0, 0));
             let mut elem = item.layout(options);
             elem.origin.x += leading_space;
-            let mut right_space = MathBox::empty(Extents::new(trailing_space, 0, 0));
-            right_space.origin.x += leading_space + elem.width();
+            let mut right_space = MathBox::empty(Extents::new(0, trailing_space, 0, 0));
+            right_space.origin.x += leading_space + elem.advance_width();
             return MathBox::with_vec(vec![left_space, elem, right_space]);
         }
     }
@@ -60,11 +60,12 @@ pub fn layout_strechy_list<'a, T: 'a + Debug>(list: Vec<MathExpression<T>>,
 
     assert_eq!(stretchy_indices.len(), stretchy_elems.len());
 
-    let max_ascent = non_stretchy_elems.iter().map(|math_box| math_box.ascent()).max();
-    let max_descent = non_stretchy_elems.iter().map(|math_box| math_box.descent()).max();
+    let max_ascent = non_stretchy_elems.iter().map(|math_box| math_box.extents().ascent).max();
+    let max_descent = non_stretchy_elems.iter().map(|math_box| math_box.extents().descent).max();
 
     let options = LayoutOptions {
         stretch_size: Some(Extents {
+            left_side_bearing: 0,
             width: 0,
             ascent: max_ascent.unwrap_or_default(),
             descent: max_descent.unwrap_or_default(),

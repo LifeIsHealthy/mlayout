@@ -14,6 +14,7 @@ pub struct LayoutOptions<'a> {
     pub shaper: &'a MathShaper,
     pub style: LayoutStyle,
     pub stretch_size: Option<Extents<i32>>,
+    pub as_accent: bool,
 }
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Default)]
@@ -91,7 +92,7 @@ fn math_box_from_shaped_glyphs<'a, T: 'a, I>(glyphs: I,
 }
 
 /// The trait that every Item in a math list satisfies so that the entire math list can be
-/// layed out.
+/// laid out.
 pub trait MathBoxLayout<'a, T> {
     fn layout(self, options: LayoutOptions<'a>) -> MathBox<'a, T>;
     fn operator_properties(&self, options: LayoutOptions<'a>) -> Option<OperatorProperties> {
@@ -124,11 +125,12 @@ impl<'a, T: 'a + Debug> MathBoxLayout<'a, T> for Vec<MathExpression<T>> {
         let mut cursor = 0i32;
         let mut previout_italic_correction = 0;
         let layouted = boxes.map(move |mut math_box| {
+            // apply italic correction if current glyph is upright
             if math_box.italic_correction() == 0 {
                 cursor += previout_italic_correction;
             }
             math_box.origin.x += cursor;
-            cursor += math_box.width();
+            cursor += math_box.advance_width();
             previout_italic_correction = math_box.italic_correction();
             math_box
         });
@@ -219,9 +221,9 @@ fn layout_sub_superscript<'a, T: 'a + Debug>(subscript: MathExpression<T>,
         (None, None) => unreachable!(),
     }
 
-    let mut space = MathBox::empty(Extents::new(space_after_script, None, None));
+    let mut space = MathBox::empty(Extents::new(0, space_after_script, 0, 0));
     space.origin.x = result.iter()
-        .map(|math_box| math_box.origin.x + math_box.width())
+        .map(|math_box| math_box.origin.x + math_box.advance_width())
         .max()
         .unwrap_or_default();
     result.push(space);
@@ -238,6 +240,7 @@ impl<'a, T: 'a + Debug> MathBoxLayout<'a, T> for OverUnder<T> {
             MathItem::Operator(Operator { is_large_op, .. }) => is_large_op,
             _ => false,
         };
+        let nucleus_is_horizontally_stretchy = self.nucleus.can_stretch(options);
 
         let mut over_options = LayoutOptions {
             style: options.style.inline_style(),
@@ -255,22 +258,20 @@ impl<'a, T: 'a + Debug> MathBoxLayout<'a, T> for OverUnder<T> {
         if !self.under_is_accent {
             under_options.style = under_options.style.subscript_style();
         }
-        let mut expressions = [(self.nucleus.into_option(), options),
-                               (self.over.into_option(), over_options),
-                               (self.under.into_option(), under_options)];
+        let mut expressions = [(self.nucleus.into_option(), options, false),
+                               (self.over.into_option(), over_options, self.over_is_accent),
+                               (self.under.into_option(), under_options, self.under_is_accent)];
         let mut boxes = [None, None, None];
 
-        for (index, &mut (ref mut expr, options)) in expressions.iter_mut().enumerate() {
+        for (index, &mut (ref mut expr, options, ..)) in expressions.iter_mut().enumerate() {
             // first take and layout non-stretchy subexpressions
-            if !expr.as_ref().map(|x| x.can_stretch(options)).unwrap_or_default() {
+            if !expr.as_ref().map(|x| x.can_stretch(options)).unwrap_or(false) {
                 boxes[index] = expr.take().map(|expr| expr.layout(options));
-            } else {
-                println!("This can stretch: {:?}", expr);
             }
         }
         // get the maximal width of the non-stretchy items
         let mut max_width = boxes.iter()
-            .map(|math_box| math_box.as_ref().map(|x| x.width()).unwrap_or_default())
+            .map(|math_box| math_box.as_ref().map(|x| x.extents().width).unwrap_or_default())
             .max()
             .unwrap_or_default();
 
@@ -280,10 +281,10 @@ impl<'a, T: 'a + Debug> MathBoxLayout<'a, T> for OverUnder<T> {
         }
 
         // layout the rest
-        for (index, &mut (ref mut expr, mut options)) in expressions.iter_mut().enumerate() {
-            options.stretch_size = options.stretch_size
-                .map(|size| Extents { width: max_width, ..size })
-                .or(Some(Extents { width: max_width, ..Default::default() }));
+        for (index, &mut (ref mut expr, mut options, as_accent)) in expressions.iter_mut().enumerate() {
+            options.stretch_size = options.stretch_size.or(Some(Default::default()))
+                .map(|size| Extents { width: max_width, ..size });
+            options.as_accent = as_accent;
             if let Some(stretched_box) = expr.take().map(|expr| expr.layout(options)) {
                 boxes[index] = Some(stretched_box);
             }
@@ -291,25 +292,29 @@ impl<'a, T: 'a + Debug> MathBoxLayout<'a, T> for OverUnder<T> {
 
         let nucleus = boxes[0].take().unwrap_or_default();
         let nucleus = if let Some(over) = boxes[1].take() {
-            let (_, LayoutOptions { style, shaper, .. }) = expressions[1];
-            layout_over(over,
-                        nucleus,
-                        shaper,
-                        style,
-                        self.over_is_accent,
-                        nucleus_is_largeop)
+            let (_, LayoutOptions { style, shaper, .. }, ..) = expressions[1];
+            layout_over_or_under(over,
+                                 nucleus,
+                                 shaper,
+                                 style,
+                                 true,
+                                 self.over_is_accent,
+                                 nucleus_is_largeop,
+                                 nucleus_is_horizontally_stretchy)
         } else {
             nucleus
         };
 
         if let Some(under) = boxes[2].take() {
-            let (_, LayoutOptions { style, shaper, .. }) = expressions[2];
-            layout_under(under,
-                         nucleus,
-                         shaper,
-                         style,
-                         self.under_is_accent,
-                         nucleus_is_largeop)
+            let (_, LayoutOptions { style, shaper, .. }, ..) = expressions[2];
+            layout_over_or_under(under,
+                                 nucleus,
+                                 shaper,
+                                 style,
+                                 false,
+                                 self.under_is_accent,
+                                 nucleus_is_largeop,
+                                 nucleus_is_horizontally_stretchy)
         } else {
             nucleus
         }
@@ -320,83 +325,90 @@ impl<'a, T: 'a + Debug> MathBoxLayout<'a, T> for OverUnder<T> {
     }
 }
 
-fn layout_over<'a, T: 'a>(mut over: MathBox<'a, T>,
-                          mut nucleus: MathBox<'a, T>,
-                          shaper: &MathShaper,
-                          style: LayoutStyle,
-                          as_accent: bool,
-                          nucleus_is_large_op: bool)
-                          -> MathBox<'a, T> {
-    let over_gap = if as_accent {
-        let accent_base_height = shaper.math_constant(MathConstant::AccentBaseHeight);
-        if nucleus.ascent() <= accent_base_height {
-            accent_base_height - nucleus.ascent()
+fn layout_over_or_under<'a, T: 'a>(mut attachment: MathBox<'a, T>,
+                                   mut nucleus: MathBox<'a, T>,
+                                   shaper: &MathShaper,
+                                   style: LayoutStyle,
+                                   as_over: bool,
+                                   as_accent: bool,
+                                   nucleus_is_large_op: bool,
+                                   nucleus_is_horizontally_stretchy: bool)
+                                   -> MathBox<'a, T> {
+    let mut gap = 0;
+    let mut shift = 0;
+    if nucleus_is_large_op {
+        if as_over {
+            gap = shaper.math_constant(MathConstant::UpperLimitGapMin);
+            shift = shaper.math_constant(MathConstant::UpperLimitBaselineRiseMin) +
+                    nucleus.extents().ascent;
         } else {
-            -over.descent() - accent_base_height
+            gap = shaper.math_constant(MathConstant::LowerLimitGapMin);
+            shift = shaper.math_constant(MathConstant::LowerLimitBaselineDropMin) +
+                    nucleus.extents().descent;
+        }
+    } else if nucleus_is_horizontally_stretchy {
+        if as_over {
+            gap = shaper.math_constant(MathConstant::StretchStackGapBelowMin);
+            shift = shaper.math_constant(MathConstant::StretchStackTopShiftUp);
+        } else {
+            gap = shaper.math_constant(MathConstant::StretchStackGapAboveMin);
+            shift = shaper.math_constant(MathConstant::StretchStackBottomShiftDown);
+        }
+    } else if !as_accent {
+        gap = if as_over {
+            shaper.math_constant(MathConstant::OverbarVerticalGap)
+        } else {
+            shaper.math_constant(MathConstant::UnderbarVerticalGap)
+        };
+        shift = gap;
+    }
+
+    let baseline_offset = if as_accent {
+        if as_over {
+            let accent_base_height = shaper.math_constant(MathConstant::AccentBaseHeight);
+            -max(nucleus.extents().ascent - accent_base_height, 0)
+        } else {
+            nucleus.extents().descent
         }
     } else {
-        shaper.math_constant(MathConstant::OverbarVerticalGap)
+        if as_over {
+            -max(shift,
+                 nucleus.extents().ascent + gap + attachment.extents().descent)
+        } else {
+            max(shift,
+                nucleus.extents().descent + gap + attachment.extents().ascent)
+        }
     };
-    let over_shift = over_gap + nucleus.ascent() + over.descent();
 
-    over.origin.y -= over_shift;
+
+    attachment.origin.y += nucleus.origin.y;
+    attachment.origin.y += baseline_offset;
 
     // centering
-    let center_difference = if as_accent {
-        nucleus.top_accent_attachment() + nucleus.origin.x - over.top_accent_attachment() -
-        over.origin.x
+    let center_difference = if as_accent && as_over {
+        (nucleus.origin.x + nucleus.top_accent_attachment()) -
+        (attachment.origin.x + attachment.top_accent_attachment())
     } else {
-        (nucleus.width() - over.width()) / 2
+        (nucleus.origin.x + nucleus.extents().center()) -
+        (attachment.origin.x + attachment.extents().center())
     };
     if center_difference < 0 {
         nucleus.origin.x -= center_difference;
     } else {
-        over.origin.x += center_difference;
+        attachment.origin.x += center_difference;
     }
 
     // LargeOp italic correction
     if nucleus_is_large_op {
-        over.origin.x += nucleus.italic_correction() / 2;
+        if as_over {
+            attachment.origin.x += nucleus.italic_correction() / 2;
+        } else {
+            attachment.origin.x -= nucleus.italic_correction() / 2;
+        }
     }
 
-    // over extra ascender
-    let over_extra_ascender = shaper.math_constant(MathConstant::OverbarExtraAscender);
-    // over.logical_extents.ascent += over_extra_ascender;
-
-    // first the over then the nucleus to preserve the italic collection of the latter
-    MathBox::with_vec(vec![over, nucleus])
-}
-
-fn layout_under<'a, T: 'a>(mut under: MathBox<'a, T>,
-                           mut nucleus: MathBox<'a, T>,
-                           shaper: &MathShaper,
-                           style: LayoutStyle,
-                           as_accent: bool,
-                           nucleus_is_large_op: bool)
-                           -> MathBox<'a, T> {
-    let under_gap = shaper.math_constant(MathConstant::UnderbarVerticalGap);
-    let under_shift = under_gap + nucleus.descent() + under.ascent();
-    under.origin.y += under_shift;
-
-    // centering
-    let width_difference = nucleus.width() - under.width();
-    if width_difference < 0 {
-        nucleus.origin.x -= width_difference / 2;
-    } else {
-        under.origin.x += width_difference / 2;
-    }
-
-    // LargeOp italic correction
-    if nucleus_is_large_op {
-        under.origin.x -= nucleus.italic_correction() / 2;
-    }
-
-    // under extra descender
-    let under_extra_descender = shaper.math_constant(MathConstant::UnderbarExtraDescender);
-    // under.logical_extents.descent += under_extra_descender;
-
-    // first the under then the nucleus to preserve the italic collection of the latter
-    MathBox::with_vec(vec![under, nucleus])
+    // first the attachment then the nucleus to preserve the italic collection of the latter
+    MathBox::with_vec(vec![attachment, nucleus])
 }
 
 impl<'a, T: 'a + Debug> MathBoxLayout<'a, T> for GeneralizedFraction<T> {
@@ -436,10 +448,10 @@ impl<'a, T: 'a + Debug> MathBoxLayout<'a, T> for GeneralizedFraction<T> {
 
         let numerator_shift_up = max(numerator_shift_up - axis_height,
                                      numerator_gap_min + default_thickness / 2 +
-                                     numerator.descent());
+                                     numerator.extents().descent);
         let denominator_shift_dn = max(denominator_shift_dn + axis_height,
                                        denominator_gap_min + default_thickness / 2 +
-                                       denominator.ascent());
+                                       denominator.extents().ascent);
 
         numerator.origin.y -= axis_height;
         denominator.origin.y -= axis_height;
@@ -448,19 +460,25 @@ impl<'a, T: 'a + Debug> MathBoxLayout<'a, T> for GeneralizedFraction<T> {
         denominator.origin.y += denominator_shift_dn;
 
         // centering
-        let width_difference = numerator.width() - denominator.width();
-        if width_difference < 0 {
-            numerator.origin.x -= width_difference / 2;
+        let center_difference = (numerator.origin.x + numerator.extents().center()) -
+                                (denominator.origin.x + denominator.extents().center());
+        if center_difference < 0 {
+            numerator.origin.x -= center_difference;
         } else {
-            denominator.origin.x += width_difference / 2;
+            denominator.origin.x += center_difference;
         }
 
         // the fraction rule
         let origin = Point {
-            x: min(numerator.origin.x, denominator.origin.x),
+            x: min(numerator.origin.x + numerator.extents().left_side_bearing,
+                   denominator.origin.x + denominator.extents().left_side_bearing),
             y: -axis_height,
         };
-        let target = Point { x: origin.x + max(numerator.width(), denominator.width()), ..origin };
+        let target = Point {
+            x: max(numerator.origin.x + numerator.extents().right_edge(),
+                   denominator.origin.x + denominator.extents().right_edge()),
+            ..origin
+        };
         let fraction_rule = MathBox::with_line(origin, target, default_thickness as u32);
 
         MathBox::with_vec(vec![numerator, fraction_rule, denominator])
@@ -484,14 +502,15 @@ impl<'a, T: 'a + Debug> MathBoxLayout<'a, T> for Root<T> {
 
         // calculate the needed surd height based on the height of the radicand
         let mut radicand = self.radicand.layout(options);
-        let needed_surd_height = (radicand.height() + vertical_gap + line_thickness) as u32;
+        let needed_surd_height = (radicand.extents().height() + vertical_gap + line_thickness) as
+                                 u32;
 
         // draw a stretched version of the surd
         let mut surd = options.shaper.shape_string("√", options.style);
         let surd = match surd.next() {
             Some(shaped_glyph) => {
                 options.shaper
-                    .stretch_glyph(shaped_glyph.glyph, false, needed_surd_height)
+                    .stretch_glyph(shaped_glyph.glyph, false, false, needed_surd_height)
                     .expect("could not stretch surd")
             }
             None => Box::new(::std::iter::empty()),
@@ -500,20 +519,21 @@ impl<'a, T: 'a + Debug> MathBoxLayout<'a, T> for Root<T> {
 
         // raise the surd so that its ascent is at least the radicand's ascender plus the radical
         // gap plus the line thickness of the radical rule
-        let surd_excess_height = surd.height() -
-                                 (radicand.height() + vertical_gap + line_thickness);
+        let surd_excess_height = surd.extents().height() -
+                                 (radicand.extents().height() + vertical_gap + line_thickness);
 
-        surd.origin.y = (radicand.descent() - surd.descent()) + surd_excess_height / 2;
+        surd.origin.y = (radicand.extents().descent - surd.extents().descent) +
+                        surd_excess_height / 2;
 
         // place the radicand after the surd
-        radicand.origin.x += surd.origin.x + surd.width();
+        radicand.origin.x += surd.origin.x + surd.advance_width();
 
         // the radical rule
         let origin = Point {
-            x: surd.origin.x + surd.width(),
-            y: surd.origin.y - surd.ascent() + line_thickness / 2,
+            x: surd.origin.x + surd.advance_width(),
+            y: surd.origin.y - surd.extents().ascent + line_thickness / 2,
         };
-        let target = Point { x: origin.x + radicand.width(), ..origin };
+        let target = Point { x: origin.x + radicand.extents().right_edge(), ..origin };
         let mut radical_rule = MathBox::with_line(origin, target, line_thickness as u32);
 
         let mut boxes = vec![];
@@ -525,8 +545,8 @@ impl<'a, T: 'a + Debug> MathBoxLayout<'a, T> for Root<T> {
             ) as u8);
             let kern_before = shaper.math_constant(MathConstant::RadicalKernBeforeDegree);
             let kern_after = shaper.math_constant(MathConstant::RadicalKernAfterDegree);
-            let surd_height = surd.ascent() + surd.descent();
-            let degree_bottom = surd.origin.y + surd.descent() -
+            let surd_height = surd.extents().ascent + surd.extents().descent;
+            let degree_bottom = surd.origin.y + surd.extents().descent -
                                 surd_height * degree_bottom_raise_percent;
 
             let mut degree_options = options;
@@ -536,7 +556,7 @@ impl<'a, T: 'a + Debug> MathBoxLayout<'a, T> for Root<T> {
             degree.origin.y += degree_bottom;
             degree.origin.x += kern_before;
 
-            let surd_kern = kern_before + degree.width() + kern_after;
+            let surd_kern = kern_before + degree.advance_width() + kern_after;
             surd.origin.x += surd_kern;
             radicand.origin.x += surd_kern;
             radical_rule.origin.x += surd_kern;
@@ -567,38 +587,43 @@ impl Operator {
                 let needed_width = needed_width / scale;
                 let mut shape_result = options.shaper.shape_string(string, options.style);
                 let first_glyph = shape_result.next();
-                if needed_height > 0 {
-                    let stretched = first_glyph.and_then(move |shaped_glyph| {
-                        options.shaper.stretch_glyph(shaped_glyph.glyph, false, needed_height)
-                    });
-                    if let Some(stretched) = stretched {
-                        let mut math_box = math_box_from_shaped_glyphs(stretched, options);
 
-                        if let Some(stretch_constraints) = self.stretch_constraints {
-                            if stretch_constraints.symmetric {
-                                let axis_height = options.shaper
-                                    .math_constant(MathConstant::AxisHeight);
-                                let shift_up = (math_box.descent() - math_box.ascent()) / 2 +
-                                               axis_height;
-                                math_box.origin.y -= shift_up;
-                            } else {
-                                let stretch_size = options.stretch_size.unwrap_or_default();
-                                let excess_ascent = math_box.ascent() - stretch_size.ascent;
-                                let excess_descent = math_box.descent() - stretch_size.descent;
-                                math_box.origin.y += (excess_ascent - excess_descent) / 2;
-                            }
-                        }
-
-                        return math_box;
-                    }
-                }
                 if needed_width > 0 {
                     let stretched = first_glyph.and_then(move |shaped_glyph| {
-                        options.shaper.stretch_glyph(shaped_glyph.glyph, true, needed_width)
+                        options.shaper.stretch_glyph(shaped_glyph.glyph, true, options.as_accent, needed_width)
                     });
                     if let Some(stretched) = stretched {
                         return math_box_from_shaped_glyphs(stretched, options);
                     }
+                }
+
+                if needed_height > 0 {
+                    let stretched = first_glyph.and_then(move |shaped_glyph| {
+                        options.shaper.stretch_glyph(shaped_glyph.glyph, false, false, needed_height)
+                    });
+                    let mut math_box = match stretched {
+                        Some(stretched) => math_box_from_shaped_glyphs(stretched, options),
+                        // no stretched variant available, use the unstretched glyph
+                        None => math_box_from_shaped_glyphs(first_glyph, options)
+                    };
+                    if let Some(stretch_constraints) = self.stretch_constraints {
+                        if stretch_constraints.symmetric {
+                            let axis_height = options.shaper
+                                .math_constant(MathConstant::AxisHeight);
+                            let shift_up =
+                                (math_box.extents().descent - math_box.extents().ascent) / 2 +
+                                axis_height;
+                            math_box.origin.y -= shift_up;
+                        } else {
+                            let stretch_size = options.stretch_size.unwrap_or_default();
+                            let excess_ascent = math_box.extents().ascent - stretch_size.ascent;
+                            let excess_descent = math_box.extents().descent -
+                                                 stretch_size.descent;
+                            math_box.origin.y += (excess_ascent - excess_descent) / 2;
+                        }
+                    }
+
+                    return math_box;
                 }
 
                 math_box_from_shaped_glyphs(first_glyph, options)
@@ -609,7 +634,7 @@ impl Operator {
 }
 
 impl<'a, T: 'a + Debug> MathBoxLayout<'a, T> for Operator {
-    fn layout(self, options: LayoutOptions<'a>) -> MathBox<'a, T> {
+    fn layout(mut self, options: LayoutOptions<'a>) -> MathBox<'a, T> {
         match (options.stretch_size, self.stretch_constraints) {
             (Some(stretch_size), Some(stretch_constraints)) => {
                 let min_size = stretch_constraints.min_size
@@ -631,6 +656,7 @@ impl<'a, T: 'a + Debug> MathBoxLayout<'a, T> for Operator {
                 if self.is_large_op && options.style.math_style == MathStyle::Display {
                     let display_min_height = options.shaper
                         .math_constant(MathConstant::DisplayOperatorMinHeight);
+                    self.stretch_constraints = Some(StretchConstraints{ symmetric: true, ..Default::default() });
                     self.layout_stretchy(display_min_height as u32, 0, options)
                 } else {
                     self.field.layout(options)
@@ -651,6 +677,7 @@ impl<'a, T: 'a + Debug> MathBoxLayout<'a, T> for Operator {
 impl<'a, T: 'a + Debug> MathBoxLayout<'a, T> for MathSpace {
     fn layout(self, options: LayoutOptions<'a>) -> MathBox<'a, T> {
         let extents = Extents {
+            left_side_bearing: 0,
             width: self.width.to_font_units(options.shaper),
             ascent: self.ascent.to_font_units(options.shaper),
             descent: self.descent.to_font_units(options.shaper),

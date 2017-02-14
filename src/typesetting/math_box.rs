@@ -78,6 +78,7 @@ impl Mul<PercentScale2D> for Point<i32> {
 /// Basic Extents of boxes
 #[derive(Debug, Default, PartialEq, Eq, Clone, Copy)]
 pub struct Extents<T> {
+    pub left_side_bearing: T,
     /// Width of the box
     pub width: T,
     /// Maximum extent of box above the baseline.
@@ -86,26 +87,32 @@ pub struct Extents<T> {
     pub descent: T,
 }
 impl Extents<i32> {
-    pub fn new<A, B, C>(width: A, ascent: B, descent: C) -> Self
-        where A: Into<Option<i32>>,
-              B: Into<Option<i32>>,
-              C: Into<Option<i32>>
-    {
+    pub fn new(left_side_bearing: i32, width: i32, ascent: i32, descent: i32) -> Self {
         Extents {
-            width: width.into().unwrap_or_default(),
-            ascent: ascent.into().unwrap_or_default(),
-            descent: descent.into().unwrap_or_default(),
+            left_side_bearing: left_side_bearing,
+            width: width,
+            ascent: ascent,
+            descent: descent,
         }
     }
     /// Returns the height = ascent + descent of the box
     pub fn height(&self) -> i32 {
         self.ascent + self.descent
     }
+
+    pub fn center(&self) -> i32 {
+        (self.left_side_bearing + self.width) / 2
+    }
+
+    pub fn right_edge(&self) -> i32 {
+        self.left_side_bearing + self.width
+    }
 }
 impl Mul<i32> for Extents<i32> {
     type Output = Extents<i32>;
     fn mul(self, _rhs: i32) -> Extents<i32> {
         Extents {
+            left_side_bearing: self.left_side_bearing * _rhs,
             width: self.width * _rhs,
             ascent: self.ascent * _rhs,
             descent: self.descent * _rhs,
@@ -116,6 +123,7 @@ impl Div<i32> for Extents<i32> {
     type Output = Extents<i32>;
     fn div(self, _rhs: i32) -> Extents<i32> {
         Extents {
+            left_side_bearing: self.left_side_bearing / _rhs,
             width: self.width / _rhs,
             ascent: self.ascent / _rhs,
             descent: self.descent / _rhs,
@@ -126,6 +134,7 @@ impl Mul<PercentScale2D> for Extents<i32> {
     type Output = Extents<i32>;
     fn mul(self, _rhs: PercentScale2D) -> Extents<i32> {
         Extents {
+            left_side_bearing: self.left_side_bearing * _rhs.horiz,
             width: self.width * _rhs.horiz,
             ascent: self.ascent * _rhs.vert,
             descent: self.descent * _rhs.vert,
@@ -153,6 +162,7 @@ impl Bounds {
                               other.extents.descent + other.origin.y);
 
         Extents {
+            left_side_bearing: self.extents.left_side_bearing,
             width: max_x - min_x,
             ascent: max_ascent,
             descent: max_descent,
@@ -230,7 +240,7 @@ impl<I, G> Default for MathBoxContent<I, G> {
 }
 
 impl<'a, T: 'a> MathBoxContent<Boxes<'a, T>, (Glyph, &'a MathShaper)> {
-    fn width(&self) -> i32 {
+    fn advance_width(&self) -> i32 {
         match *self {
             MathBoxContent::Empty => 0,
             MathBoxContent::Glyph((ref glyph, ref shaper)) => {
@@ -240,31 +250,50 @@ impl<'a, T: 'a> MathBoxContent<Boxes<'a, T>, (Glyph, &'a MathShaper)> {
             MathBoxContent::Boxes(ref boxes) => {
                 boxes.as_slice()
                     .iter()
-                    .map(|item| item.origin.x + item.width())
+                    .map(|item| item.origin.x + item.advance_width())
                     .max()
                     .unwrap_or_default()
             }
         }
     }
 
-    fn vertical_metrics(&self) -> (i32, i32) {
+    fn extents(&self) -> Extents<i32> {
         match *self {
-            MathBoxContent::Empty => (0, 0),
+            MathBoxContent::Empty => Extents::default(),
             MathBoxContent::Glyph((ref glyph, ref shaper)) => {
-                let (ascent, descent) = shaper.glyph_extents(glyph.glyph_code);
-                (ascent * glyph.scale.vert, descent * glyph.scale.vert)
+                shaper.glyph_extents(glyph.glyph_code) * glyph.scale
             }
             MathBoxContent::Line { ref vector, .. } => {
-                if vector.y.is_positive() {
-                    (0, vector.y)
-                } else {
-                    (-vector.y, 0)
+                Extents {
+                    left_side_bearing: 0,
+                    width: vector.x,
+                    ascent: max(0, -vector.y),
+                    descent: max(0, vector.y),
                 }
             }
             MathBoxContent::Boxes(ref boxes) => {
                 let slice = boxes.as_slice();
-                (slice.iter().map(|item| -item.origin.y + item.ascent()).max().unwrap_or_default(),
-                 slice.iter().map(|item| item.origin.y + item.descent()).max().unwrap_or_default())
+                let max_ascent = slice.iter()
+                    .map(|item| -item.origin.y + item.extents().ascent)
+                    .max()
+                    .unwrap_or_default();
+                let max_descent = slice.iter()
+                    .map(|item| item.origin.y + item.extents().descent)
+                    .max()
+                    .unwrap_or_default();
+                let left_side_bearing = slice[0].extents().left_side_bearing;
+                let width = slice.iter()
+                    .map(|item| {
+                        item.origin.x + item.extents().left_side_bearing + item.extents().width
+                    })
+                    .max()
+                    .unwrap_or_default() - left_side_bearing;
+                Extents {
+                    left_side_bearing: left_side_bearing,
+                    width: width,
+                    ascent: max_ascent,
+                    descent: max_descent,
+                }
             }
         }
     }
@@ -298,14 +327,19 @@ impl<'a, T: 'a> MathBoxContent<Boxes<'a, T>, (Glyph, &'a MathShaper)> {
             }
             _ => 0,
         };
-        if value == 0 { self.width() / 2 } else { value }
+        if value == 0 {
+            self.advance_width() / 2
+        } else {
+            value
+        }
     }
 }
 
 pub struct MathBox<'a, T> {
     content: MathBoxContent<Boxes<'a, T>, (Glyph, &'a MathShaper)>,
     pub origin: Point<i32>,
-    extents: Extents<Cell<i32>>,
+    extents: Cell<Extents<i32>>,
+    advance_width: Cell<i32>,
     italic_correction: Cell<i32>,
     top_accent_attachment: Cell<i32>,
     pub user_info: Option<T>,
@@ -316,6 +350,7 @@ impl<'a, T> Default for MathBox<'a, T> {
         MathBox {
             content: Default::default(),
             origin: Default::default(),
+            advance_width: Default::default(),
             extents: Default::default(),
             italic_correction: Default::default(),
             top_accent_attachment: Default::default(),
@@ -328,6 +363,7 @@ impl<'a, T: 'a> MathBox<'a, T> {
     pub fn empty(extents: Extents<i32>) -> Self {
         let mut math_box = MathBox { content: MathBoxContent::Empty, ..Default::default() };
         math_box.set_extents(extents);
+        math_box.advance_width.set(extents.width);
         math_box
     }
 
@@ -382,35 +418,22 @@ impl<'a, T: 'a> MathBox<'a, T> {
         }
     }
 
-    pub fn width(&self) -> i32 {
-        if self.extents.width.get() == 0 {
-            self.extents.width.set(self.content.width());
+    pub fn advance_width(&self) -> i32 {
+        if self.advance_width.get() == 0 {
+            self.advance_width.set(self.content.advance_width());
         }
-        self.extents.width.get()
+        self.advance_width.get()
     }
 
-    fn cache_vertical_metrics(&self) {
-        let (ascent, descent) = self.content.vertical_metrics();
-        self.extents.ascent.set(ascent);
-        self.extents.descent.set(descent);
+    fn cache_extents(&self) {
+        self.extents.set(self.content.extents());
     }
 
-    pub fn ascent(&self) -> i32 {
-        if self.extents.ascent.get() == 0 {
-            self.cache_vertical_metrics();
+    pub fn extents(&self) -> Extents<i32> {
+        if self.extents.get() == Extents::default() {
+            self.cache_extents();
         }
-        self.extents.ascent.get()
-    }
-
-    pub fn descent(&self) -> i32 {
-        if self.extents.descent.get() == 0 {
-            self.cache_vertical_metrics();
-        }
-        self.extents.descent.get()
-    }
-
-    pub fn height(&self) -> i32 {
-        self.ascent() + self.descent()
+        self.extents.get()
     }
 
     pub fn italic_correction(&self) -> i32 {
@@ -430,18 +453,12 @@ impl<'a, T: 'a> MathBox<'a, T> {
     pub fn bounds(&self) -> Bounds {
         Bounds {
             origin: self.origin,
-            extents: Extents {
-                width: self.width(),
-                ascent: self.ascent(),
-                descent: self.descent(),
-            },
+            extents: self.extents(),
         }
     }
 
     pub fn set_extents(&mut self, extents: Extents<i32>) {
-        self.extents.width.set(extents.width);
-        self.extents.ascent.set(extents.ascent);
-        self.extents.descent.set(extents.descent);
+        self.extents.set(extents)
     }
 
     pub fn first_glyph(&self) -> Option<Glyph> {
@@ -467,14 +484,9 @@ impl<'a, T: 'a> MathBox<'a, T> {
 
 impl<'a, T: 'a> std::fmt::Debug for MathBox<'a, T> {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        let extents = Extents {
-            width: self.extents.width.get(),
-            ascent: self.extents.ascent.get(),
-            descent: self.extents.descent.get(),
-        };
         f.debug_struct("MathBox")
             .field("origin", &self.origin)
-            .field("extents", &extents)
+            .field("extents", &self.extents.get())
             .field("italic_correction", &self.italic_correction.get())
             .field("top_accent_attachment", &self.top_accent_attachment.get())
             .field("content", &self.content())

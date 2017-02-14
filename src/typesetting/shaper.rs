@@ -83,7 +83,7 @@ pub struct ShapedGlyph {
 pub trait MathShaper {
     fn glyph_advance(&self, glyph: u32) -> Position;
 
-    fn glyph_extents(&self, glyph: u32) -> (Position, Position);
+    fn glyph_extents(&self, glyph: u32) -> Extents<i32>;
 
     fn italic_correction(&self, glyph: u32) -> Position;
 
@@ -100,8 +100,9 @@ pub trait MathShaper {
     fn shape_string(&self, string: &str, style: LayoutStyle) -> Box<Iterator<Item = ShapedGlyph>>;
 
     fn stretch_glyph<'a>(&'a self,
-                         symbol: u32,
+                         glyph: u32,
                          horizontal: bool,
+                         as_accent: bool,
                          target_size: u32)
                          -> Option<Box<Iterator<Item = ShapedGlyph> + 'a>>;
 
@@ -160,12 +161,12 @@ impl<'a> HarfbuzzShaper<'a> {
                 end: std::u32::MAX,
             })
         }
-        features.push(hb::hb_feature_t {
-            tag: Tag::new('f', 'l', 'a', 'c').0,
-            value: 1,
-            start: 0,
-            end: std::u32::MAX,
-        });
+        //        features.push(hb::hb_feature_t {
+        //            tag: Tag::new('f', 'l', 'a', 'c').0,
+        //            value: 1,
+        //            start: 0,
+        //            end: std::u32::MAX,
+        //        });
         buffer.add_str(string)
             .set_script(Tag::from_str("Math").unwrap())
             .shape(&self.font, &features)
@@ -197,25 +198,6 @@ impl<'a> HarfbuzzShaper<'a> {
         *self.buffer.borrow_mut() = Some(glyph_buffer.clear());
         let iterator = boxes.into_iter();
         Box::new(iterator)
-    }
-
-    fn glyph_bounds(&self, glyph: u32) -> Bounds {
-        let glyph_extents =
-            self.font.get_glyph_extents(glyph).unwrap_or(unsafe { std::mem::zeroed() });
-        let glyph_offset = self.font.get_glyph_h_origin(glyph).unwrap_or_default();
-        let extents = Extents {
-            width: glyph_extents.width,
-            ascent: glyph_extents.y_bearing,
-            descent: -(glyph_extents.height + glyph_extents.y_bearing),
-        };
-        let pos = Point {
-            x: glyph_offset.0,
-            y: glyph_offset.1,
-        };
-        Bounds {
-            extents: extents,
-            origin: pos,
-        }
     }
 }
 
@@ -250,6 +232,7 @@ fn try_base_glyph<'a>(shaper: &HarfbuzzShaper<'a>,
     }
 }
 
+#[derive(Copy, Clone)]
 struct VariantIterator<'a> {
     shaper: &'a HarfbuzzShaper<'a>,
     glyph: u32,
@@ -283,6 +266,7 @@ impl<'a> Iterator for VariantIterator<'a> {
 fn try_variant<'a>(shaper: &HarfbuzzShaper<'a>,
                    glyph: u32,
                    horizontal: bool,
+                   as_accent: bool,
                    target_size: u32)
                    -> Option<Box<Iterator<Item = ShapedGlyph>>> {
     let direction = if horizontal {
@@ -298,15 +282,27 @@ fn try_variant<'a>(shaper: &HarfbuzzShaper<'a>,
         index: 0,
     };
 
-    iter.find(|glyph_variant| glyph_variant.advance >= target_size as i32)
-        .map(move |glyph_variant| {
-            let glyph = ShapedGlyph {
-                glyph: glyph_variant.glyph,
-                origin: Default::default(),
-                advance: point_with_offset(glyph_variant.advance, horizontal),
-            };
-            Box::new(std::iter::once(glyph)) as Box<Iterator<Item = _>>
-        })
+    let variant = if as_accent {
+        // return the largest variant that is smaller than the target size
+        iter.filter(|&variant| variant.advance <= target_size as i32)
+            .max_by_key(|&variant| variant.advance)
+    } else {
+        // return the smallest variant that is larger than the target size
+        iter.filter(|&variant| variant.advance >= target_size as i32)
+            .min_by_key(|&variant| variant.advance)
+    };
+
+    let mut variant = match variant {
+        Some(variant) => variant,
+        None => return None,
+    };
+
+    let glyph = ShapedGlyph {
+        glyph: variant.glyph,
+        origin: Default::default(),
+        advance: point_with_offset(variant.advance, horizontal),
+    };
+    Some(Box::new(std::iter::once(glyph)))
 }
 
 struct AssemblyIterator<'a> {
@@ -365,10 +361,7 @@ fn try_assembly<'a>(shaper: &'a HarfbuzzShaper<'a>,
     let mut part_count_non_ext: u32 = 0;
     let mut part_count_ext: u32 = 0;
 
-    for part in assembly_iter.by_ref() {
-        if horizontal {
-            println!("part {:?}", part);
-        }
+    for part in &mut assembly_iter {
         if part.flags == hb::HB_MATH_GLYPH_PART_FLAG_EXTENDER {
             full_advance_sum_ext += part.full_advance;
             part_count_ext += 1;
@@ -381,11 +374,12 @@ fn try_assembly<'a>(shaper: &'a HarfbuzzShaper<'a>,
     let a = full_advance_sum_non_ext - min_connector_overlap * (part_count_non_ext as i32 - 1);
     let b = full_advance_sum_ext - min_connector_overlap * part_count_ext as i32;
     if b == 0 {
-        println!("b = {:?} for glyph: {:?}", b, glyph);
+        // there probably is no glyph assembly for this glyph
         return None;
     };
     let repeat_count_ext = ((target_size as i32 - a) as f32 / b as f32).ceil() as u32;
 
+    // Total number of parts needed to assemble the glyph including repetitions of extenders.
     let part_count = part_count_non_ext + part_count_ext * repeat_count_ext;
 
     if part_count == 0 || part_count > 2000 {
@@ -442,7 +436,13 @@ fn try_assembly<'a>(shaper: &'a HarfbuzzShaper<'a>,
         // connector overlap.
         .scan(/* initial offset */ 0, move |current_offset, part| {
             let delta_offset = part.full_advance - connector_overlap;
-            let origin = point_with_offset(*current_offset, horizontal);
+            let mut origin = point_with_offset(*current_offset, horizontal);
+            let extents = shaper.glyph_extents(part.glyph);
+            if horizontal {
+                origin.x -= extents.left_side_bearing;
+            } else {
+                origin.y += extents.descent;
+            }
             let glyph = ShapedGlyph {
                 glyph: part.glyph,
                 origin: origin,
@@ -451,7 +451,7 @@ fn try_assembly<'a>(shaper: &'a HarfbuzzShaper<'a>,
             *current_offset += delta_offset;
             Some((glyph, part.full_advance))
         })
-        // Make sure that the last part's offset is added to the glyph offset.
+        // Make sure that the last part's advance is added to the assembly.
         .enumerate()
         .map(move |(index, (glyph, advance))| if index >= (part_count - 1) as usize {
             ShapedGlyph { advance: point_with_offset(advance, horizontal), ..glyph }
@@ -504,16 +504,23 @@ impl<'a> MathShaper for HarfbuzzShaper<'a> {
     fn stretch_glyph<'b>(&'b self,
                          glyph: u32,
                          horizontal: bool,
+                         as_accent: bool,
                          target_size: u32)
                          -> Option<Box<Iterator<Item = ShapedGlyph> + 'b>> {
         try_base_glyph(self, glyph, horizontal, target_size)
-            .or_else(|| try_variant(self, glyph, horizontal, target_size))
+            .or_else(|| try_variant(self, glyph, horizontal, as_accent, target_size))
             .or_else(|| try_assembly(self, glyph, horizontal, target_size))
     }
 
-    fn glyph_extents(&self, glyph: u32) -> (i32, i32) {
-        let bounds = self.glyph_bounds(glyph);
-        (bounds.extents.ascent, bounds.extents.descent)
+    fn glyph_extents(&self, glyph: u32) -> Extents<i32> {
+        let glyph_extents =
+            self.font.get_glyph_extents(glyph).unwrap_or(unsafe { std::mem::zeroed() });
+        Extents {
+            left_side_bearing: glyph_extents.x_bearing,
+            width: glyph_extents.width,
+            ascent: glyph_extents.y_bearing,
+            descent: -(glyph_extents.height + glyph_extents.y_bearing),
+        }
     }
 
     fn glyph_advance(&self, glyph: u32) -> Position {

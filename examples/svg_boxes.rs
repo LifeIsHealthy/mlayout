@@ -98,14 +98,14 @@ fn render_box<'a, T: 'a>(math_box: MathBox<'a, T>,
                          _: &HarfbuzzShaper,
                          font: &'a FT_Face,
                          output_name: &str) {
-    let logical_extents = math_box.bounds().extents;
+    let logical_extents = math_box.extents();
 
     let mut document = Document::new();
     // let mut group = Group::new();
     document.assign("viewBox",
                     (math_box.origin.x - 10,
-                     math_box.origin.y - logical_extents.ascent - 10,
-                     logical_extents.width + 20,
+                     math_box.origin.y - math_box.extents().ascent - 10,
+                     math_box.advance_width() + 20,
                      logical_extents.descent + logical_extents.ascent + 20));
 
     let mut ink_group = Group::new().set("stroke", "none").set("fill", "#FFE6E6");
@@ -200,9 +200,10 @@ fn draw_filled<'a, T: Node, U: 'a>(doc: &mut T, math_box: &MathBox<'a, U>) {
     if let MathBoxContent::Line { vector, thickness } = math_box.content() {
         let line = Line::new()
             .set("x1", math_box.origin.x)
-            .set("y1", math_box.origin.y - math_box.ascent())
+            .set("y1", math_box.origin.y - math_box.extents().ascent)
             .set("x2", vector.x + math_box.origin.x)
-            .set("y2", math_box.origin.y - math_box.ascent() + vector.y)
+            .set("y2",
+                 math_box.origin.y - math_box.extents().ascent + vector.y)
             .set("stroke-width", thickness)
             .set("stroke", "black")
             .set("z-index", 1);
@@ -212,8 +213,8 @@ fn draw_filled<'a, T: Node, U: 'a>(doc: &mut T, math_box: &MathBox<'a, U>) {
     if let MathBoxContent::Empty = math_box.content() {
         let rect = Rectangle::new()
             .set("x", math_box.origin.x)
-            .set("y", math_box.origin.y - math_box.ascent())
-            .set("width", math_box.width())
+            .set("y", math_box.origin.y - math_box.extents().ascent)
+            .set("width", math_box.extents().width)
             .set("height", 100)
             .set("stroke", "none")
             .set("fill", "red")
@@ -229,7 +230,7 @@ fn draw_ink_rect<'a, T: Node, U: 'a>(group: &mut T, math_box: &MathBox<'a, U>) {
         let ink_bounds = math_box.bounds();
 
         let ink_rect = Rectangle::new()
-            .set("x", ink_bounds.origin.x)
+            .set("x", math_box.extents().left_side_bearing)
             .set("y", ink_bounds.origin.y - ink_bounds.extents.ascent)
             .set("width", ink_bounds.extents.width)
             .set("height",
@@ -247,7 +248,7 @@ fn draw_logical_bounds<'a, T: Node, U: 'a>(group: &mut T, math_box: &MathBox<'a,
             let logical_rect1 = Rectangle::new()
                 .set("x", logical_bounds.origin.x)
                 .set("y", logical_bounds.origin.y - logical_bounds.extents.ascent)
-                .set("width", logical_bounds.extents.width)
+                .set("width", math_box.advance_width())
                 .set("height", logical_bounds.extents.ascent);
             group.append(logical_rect1);
         }
@@ -256,7 +257,7 @@ fn draw_logical_bounds<'a, T: Node, U: 'a>(group: &mut T, math_box: &MathBox<'a,
             let logical_rect2 = Rectangle::new()
                 .set("x", logical_bounds.origin.x)
                 .set("y", logical_bounds.origin.y)
-                .set("width", logical_bounds.extents.width)
+                .set("width", math_box.advance_width())
                 .set("height", logical_bounds.extents.descent);
             group.append(logical_rect2);
         }
@@ -274,10 +275,11 @@ fn draw_italic_correction<'a, T: Node, U: 'a>(doc: &mut T, math_box: &MathBox<'a
         let mut group = Group::new().set("transform",
                                          format!("matrix(1 0 {:?} 1 0 0)",
                                                  -math_box.italic_correction() as f32 /
-                                                 math_box.height() as f32));
+                                                 math_box.extents().height() as f32));
 
         let ink_rect = Rectangle::new()
-            .set("x", ink_bounds.origin.x)
+            .set("x",
+                 ink_bounds.origin.x + ink_bounds.extents.left_side_bearing)
             .set("y", ink_bounds.origin.y - ink_bounds.extents.ascent)
             .set("width",
                  ink_bounds.extents.width - math_box.italic_correction())
@@ -293,9 +295,9 @@ fn draw_italic_correction<'a, T: Node, U: 'a>(doc: &mut T, math_box: &MathBox<'a
 fn draw_top_accent_attachment<'a, T: Node, U: 'a>(doc: &mut T, math_box: &MathBox<'a, U>) {
     let line = Line::new()
         .set("x1", math_box.top_accent_attachment() + math_box.origin.x)
-        .set("y1", math_box.origin.y + math_box.descent() + 200)
+        .set("y1", math_box.origin.y + math_box.extents().descent + 200)
         .set("x2", math_box.top_accent_attachment() + math_box.origin.x)
-        .set("y2", math_box.origin.y - math_box.ascent() - 200);
+        .set("y2", math_box.origin.y - math_box.extents().ascent - 200);
     doc.append(line);
 }
 
