@@ -36,7 +36,7 @@ fn main() {
     write!(f,
            "pub static ENTITIES: [(&'static str, &'static str); {:?}] = [",
            entities.len())
-        .unwrap();
+            .unwrap();
     for EntityData { name, character } in entities {
         write!(f, "({:?}, {:?}),\n", name, character).unwrap();
     }

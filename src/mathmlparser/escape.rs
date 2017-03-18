@@ -43,8 +43,9 @@ pub fn unescape(s: &str) -> Result<Cow<str>> {
     if escapes.is_empty() {
         Ok(Cow::Borrowed(s))
     } else {
-        let len = escapes.iter().fold(s.len(),
-                                      |acc, &(_, ref replacement)| acc + replacement.len());
+        let len =
+            escapes.iter().fold(s.len(),
+                                |acc, &(_, ref replacement)| acc + replacement.len());
         let mut res = String::with_capacity(len);
         let mut start = 0;
         for (range, replacement) in escapes {
@@ -72,17 +73,13 @@ fn parse_numeric_entity(ent: &str) -> Result<char> {
                 let name = &ent[1..];
                 match u32::from_str_radix(name, 16).ok().and_then(std::char::from_u32) {
                     Some(c) => Ok(c),
-                    None => {
-                        Err(ParsingError::from("Invalid hexadecimal character number in an entity"))
-                    }
+                    None => Err(ParsingError::from("Invalid hexadecimal character number in an entity")),
                 }
             } else {
                 let name = &ent[..];
                 match u32::from_str_radix(name, 10).ok().and_then(std::char::from_u32) {
                     Some(c) => Ok(c),
-                    None => {
-                        Err(ParsingError::from("Invalid decimal character number in an entity"))
-                    }
+                    None => Err(ParsingError::from("Invalid decimal character number in an entity")),
                 }
             }
         }
