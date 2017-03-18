@@ -1,47 +1,92 @@
 use std::default::Default;
-use std::fmt::Debug;
 use std::fmt;
 use std::ops::{Mul, Div};
 
 /// An identifier of a glyph inside a font.
 pub type GlyphCode = u32;
 
-/// The main type used for typesetting.
-#[derive(Default, Debug)]
-pub struct MathExpression<T: Debug> {
-    /// The contained `MathItem`.
-    pub content: MathItem<T>,
-    /// User provided information that can be used for fancy rendering (colors, etc.) or matching
-    /// input with output. This will get returned in the `MathBox`es of the layouted content.
-    pub user_info: T,
+#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash)]
+pub struct WithUserData<T, U> {
+    pub inner: T,
+    pub user_data: Option<U>,
 }
 
-impl<T: Debug> MathExpression<T> {
-    /// Returns `true` if the `MathExpression` contains just an empty field.
-    pub fn is_empty(&self) -> bool {
-        if let MathItem::Field(Field::Empty) = self.content {
-            true
-        } else {
-            false
+impl<T: Default, U> Default for WithUserData<T, U> {
+    fn default() -> WithUserData<T, U> {
+        WithUserData {
+            inner: T::default(),
+            user_data: None,
         }
     }
+}
 
-    pub fn into_option(self) -> Option<Self> {
-        if self.is_empty() { None } else { Some(self) }
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Copy, Clone)]
+pub struct Index(isize);
+
+impl ::std::convert::From<usize> for Index {
+    fn from(num: usize) -> Self {
+        Index(num as isize)
+    }
+}
+
+impl ::std::convert::Into<usize> for Index {
+    fn into(self) -> usize {
+        self.0 as usize
+    }
+}
+
+impl Index {
+    pub fn is_none(self) -> bool {
+        self.0 < 0
     }
 
-    // pub fn from_option(opt: Option<Self>) -> Self {
-    //     match opt {
-    //         Some(expr) => expr,
-    //
-    //     }
-    // }
+    pub fn is_some(self) -> bool {
+        !self.is_none()
+    }
+}
+
+impl Default for Index {
+    fn default() -> Index {
+        Index(-1)
+    }
+}
+
+#[derive(Default, Debug, Clone)]
+pub struct MathExpression {
+    entries: Vec<MathItem>,
+    pub root_index: Index,
+}
+
+impl MathExpression {
+    pub fn new() -> MathExpression {
+        MathExpression { entries: Vec::new(), root_index: Index(0) }
+    }
+
+    pub fn add_item(&mut self, item: MathItem) -> Index {
+        let index = Index(self.entries.len() as isize);
+        self.entries.push(item);
+        index
+    }
+
+    pub fn get_item(&self, index: Index) -> Option<&MathItem> {
+        if index.is_none() {
+            return None;
+        }
+        self.entries.get(index.0 as usize)
+    }
+
+    pub fn get_item_mut(&mut self, index: Index) -> Option<&mut MathItem> {
+        if index.is_none() {
+            return None;
+        }
+        self.entries.get_mut(index.0 as usize)
+    }
 }
 
 /// A `MathItem` is the abstract representation of mathematical notation that manages the layout
 /// of its subexpressions.
-#[derive(Debug)]
-pub enum MathItem<T: Debug> {
+#[derive(Debug, Clone, PartialEq)]
+pub enum MathItem {
     /// A simple element displaying a single field without special formatting.
     Field(Field),
     /// A fixed amount of whitespace in the formula. `width` specifies the horizontal space,
@@ -49,24 +94,24 @@ pub enum MathItem<T: Debug> {
     Space(MathSpace),
     /// An expression that consists of a base (called nucleus) and optionally of attachments at
     /// each corner (e.g. subscripts and superscripts).
-    Atom(Box<Atom<T>>),
+    Atom(Atom),
     /// An expression that consists of a base and optionally of attachments that go above or below
     /// the nucleus like e.g. accents.
-    OverUnder(Box<OverUnder<T>>),
+    OverUnder(OverUnder),
     /// A generalized version of a fraction that can ether render as a standard fraction or
     /// as a stack of objects (e.g. for layout of mathematical vectors).
-    GeneralizedFraction(Box<GeneralizedFraction<T>>),
+    GeneralizedFraction(GeneralizedFraction),
     /// A expression inside a radical symbol with an optional degree.
-    Root(Box<Root<T>>),
+    Root(Root),
     /// A symbol that can grow horizontally or vertically to match the size of its surrounding
     /// elements.
     Operator(Operator),
-    /// A list of math items to be layed out sequentially.
-    List(Vec<MathExpression<T>>),
+    /// A list of math items to be laid out sequentially.
+    List(Vec<Index>),
 }
 
-impl<T: Debug> Default for MathItem<T> {
-    fn default() -> MathItem<T> {
+impl Default for MathItem {
+    fn default() -> MathItem {
         MathItem::Field(Field::Empty)
     }
 }
@@ -76,7 +121,7 @@ impl<T: Debug> Default for MathItem<T> {
 ///
 /// You can choose to create fields directly using the font-specific glyph code of the glyph to be
 /// displayed or just create one from just a `String`. Typically you should create Unicode Fields
-/// rather than Glyph fields, as the String will automatically be typesetted using complex text
+/// rather than Glyph fields, as the String will automatically be typeset using complex text
 /// layout and the correct glyphs will be chosen. However if you are absolutely sure that you want
 /// a certain glyph to appear in the output, This can be specified with a Glyph field.
 ///
@@ -85,9 +130,9 @@ impl<T: Debug> Default for MathItem<T> {
 /// This can be used e.g. to denote the cursor position in an equation editor.
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum Field {
-    /// Nothing. This will not show in typesetted output.
+    /// Nothing. This will not show in typeset output.
     Empty,
-    /// Represents some text that should be layed out using complex text layout features of
+    /// Represents some text that should be laid out using complex text layout features of
     /// OpenType.
     Unicode(String),
     /// Represents a specific glyph in the current font.
@@ -120,7 +165,7 @@ impl Field {
     }
 }
 
-#[derive(Copy, Clone, Default, Debug)]
+#[derive(Copy, Clone, Default, Debug, PartialEq)]
 pub struct MathSpace {
     pub width: Length,
     pub ascent: Length,
@@ -135,31 +180,31 @@ impl MathSpace {
 
 /// An expression that consists of a base (called nucleus) and attachments at each corner (e.g.
 /// subscripts and superscripts).
-#[derive(Default, Debug)]
-pub struct Atom<T: Debug> {
+#[derive(Default, Debug, Copy, Clone, PartialEq, Eq)]
+pub struct Atom {
     /// The base of the atom.
-    pub nucleus: MathExpression<T>,
+    pub nucleus: Index,
     /// top left attachment
-    pub top_left: MathExpression<T>,
+    pub top_left: Index,
     /// top right attachment
-    pub top_right: MathExpression<T>,
+    pub top_right: Index,
     /// bottom left attachment
-    pub bottom_left: MathExpression<T>,
+    pub bottom_left: Index,
     /// bottom right attachment
-    pub bottom_right: MathExpression<T>,
+    pub bottom_right: Index,
 }
 
 
 /// An expression that consists of a base (called nucleus) and attachments that go above or below
 /// the nucleus like e.g. accents.
-#[derive(Debug, Default)]
-pub struct OverUnder<T: Debug> {
+#[derive(Debug, Default, Copy, Clone, PartialEq, Eq)]
+pub struct OverUnder {
     /// the base
-    pub nucleus: MathExpression<T>,
+    pub nucleus: Index,
     /// the `Element` to go above the base
-    pub over: MathExpression<T>,
+    pub over: Index,
     /// the `Element` to go below the base
-    pub under: MathExpression<T>,
+    pub under: Index,
     /// the `over` element should be rendered as an accent
     pub over_is_accent: bool,
     /// the `under` element should be rendered as an accent
@@ -178,35 +223,35 @@ pub struct OverUnder<T: Debug> {
 /// This can either be rendered as a fraction (with a line separating the numerator and the
 /// denominator) or as a stack with no separating line (setting the `thickness`-parameter to a
 /// value of 0).
-#[derive(Debug, Default)]
-pub struct GeneralizedFraction<T: Debug> {
+#[derive(Debug, Default, Copy, Clone, PartialEq)]
+pub struct GeneralizedFraction {
     /// The field above the fraction bar.
-    pub numerator: MathExpression<T>,
+    pub numerator: Index,
     /// The field below the fraction bar.
-    pub denominator: MathExpression<T>,
+    pub denominator: Index,
     /// Thickness of the fraction line. If this is zero the fraction is drawn as a stack. If
     /// thickness is None the default fraction thickness is used.
     pub thickness: Option<Length>,
 }
 
 /// An expression consisting of a radical symbol encapsulating the radicand and an optional degree
-/// expression to the left of the radical symbol.
-#[derive(Debug, Default)]
-pub struct Root<T: Debug> {
+/// expression that is displayed above the beginning of the surd.
+#[derive(Debug, Default, Copy, Clone, PartialEq, Eq)]
+pub struct Root {
     /// The expression "inside" of the radical symbol.
-    pub radicand: MathExpression<T>,
+    pub radicand: Index,
     /// The degree of the radical.
-    pub degree: MathExpression<T>,
+    pub degree: Index,
 }
 
-#[derive(Debug, Default, Copy, Clone)]
+#[derive(Debug, Default, Copy, Clone, PartialEq)]
 pub struct StretchConstraints {
     pub min_size: Option<Length>,
     pub max_size: Option<Length>,
     pub symmetric: bool,
 }
 
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, PartialEq)]
 pub struct Operator {
     pub stretch_constraints: Option<StretchConstraints>,
     pub is_large_op: bool,
@@ -225,7 +270,7 @@ pub enum LengthUnit {
     DisplayOperatorMinHeight,
 }
 
-/// Lenghts are specified with a numeric value an a unit.
+/// Lengths are specified with a numeric value an a unit.
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub struct Length {
     pub value: f32,
@@ -263,37 +308,44 @@ impl Default for Length {
 ///
 /// # Examples
 /// ```
-/// # use math_render::PercentScale;
-/// let scale = PercentScale::new(50);
+/// # use math_render::PercentValue;
+/// let scale = PercentValue::new(50);
 /// let num = 300;
 /// assert_eq!(150, num * scale);
 /// ```
 #[derive(Default, Clone, Copy, PartialOrd, Ord, PartialEq, Eq, Hash)]
-pub struct PercentScale {
+pub struct PercentValue {
     percent: u8,
 }
 
-impl PercentScale {
-    /// Create a new `PercentScale` from an integer between 0 and 100 representing the percentage.
-    pub fn new(value: u8) -> PercentScale {
+impl PercentValue {
+    /// Create a new `PercentValue` from an integer between 0 and 100 representing the percentage.
+    pub fn new(value: u8) -> PercentValue {
         debug_assert!(value <= 100, "Not a valid percent value");
         // for release builds still make sure that percentage is valid
         let value = if value > 100 { 100u8 } else { value };
-        PercentScale { percent: value }
+        PercentValue { percent: value }
     }
 
-    /// Returns the percentage as an unsigned integer
+    /// Returns the percentage as an unsigned integer.
+    ///
+    /// # Examples
+    /// ```
+    /// # use math_render::PercentValue;
+    /// let percent = PercentValue::new(64);
+    /// assert_eq!( 64, percent.as_percentage() );
+    /// ```
     pub fn as_percentage(self) -> u8 {
         self.percent
     }
 
     /// Returns the scale factor corresponding to the percentage. Essentially the percentage
-    /// divided by 100
+    /// divided by 100 represented as a floating point number.
     ///
     /// # Examples
     /// ```
-    /// # use math_render::PercentScale;
-    /// let percent = PercentScale::new(50);
+    /// # use math_render::PercentValue;
+    /// let percent = PercentValue::new(50);
     /// assert_eq!( 0.5f32, percent.as_scale_mult() );
     /// ```
     pub fn as_scale_mult(self) -> f32 {
@@ -301,14 +353,14 @@ impl PercentScale {
     }
 }
 
-impl fmt::Debug for PercentScale {
+impl fmt::Debug for PercentValue {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{:?} %", self.percent)
     }
 }
 
 
-impl Mul<i32> for PercentScale {
+impl Mul<i32> for PercentValue {
     type Output = i32;
 
     fn mul(self, _rhs: i32) -> i32 {
@@ -317,18 +369,18 @@ impl Mul<i32> for PercentScale {
     }
 }
 
-impl Mul<PercentScale> for i32 {
+impl Mul<PercentValue> for i32 {
     type Output = i32;
 
-    fn mul(self, _rhs: PercentScale) -> i32 {
+    fn mul(self, _rhs: PercentValue) -> i32 {
         _rhs * self
     }
 }
 
-impl Div<PercentScale> for i32 {
+impl Div<PercentValue> for i32 {
     type Output = i32;
 
-    fn div(self, _rhs: PercentScale) -> i32 {
+    fn div(self, _rhs: PercentValue) -> i32 {
         if _rhs.percent == 100 {
             self
         } else {
@@ -338,10 +390,10 @@ impl Div<PercentScale> for i32 {
     }
 }
 
-impl Div<PercentScale> for u32 {
+impl Div<PercentValue> for u32 {
     type Output = u32;
 
-    fn div(self, _rhs: PercentScale) -> u32 {
+    fn div(self, _rhs: PercentValue) -> u32 {
         if _rhs.percent == 100 {
             self
         } else {
@@ -351,15 +403,6 @@ impl Div<PercentScale> for u32 {
     }
 }
 
-/// Combines a horizontal and a vertical `PercentScale` value for direction-dependent scaling.
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct PercentScale2D {
-    /// horizontal scaling value
-    pub horiz: PercentScale,
-    /// vertical scaling value
-    pub vert: PercentScale,
-}
-
 /// A font-dependent representation of a (possibly scaled) glyph.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Glyph {
@@ -367,19 +410,19 @@ pub struct Glyph {
     pub glyph_code: GlyphCode,
 
     /// The scaling to apply to this glyph
-    pub scale: PercentScale2D,
+    pub scale: PercentValue,
 }
 
 /// Vertical layout style for equations.
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum MathStyle {
-    /// Equation is displayed in its own line.
+    /// Style for equations that are displayed in their own line.
     Display,
-    /// Equation is displayed inline with text.
+    /// Style for equations to be displayed inline with text.
     Inline,
 }
 
-/// Determines the general style how a math expression should be layed out.
+/// Determines the general style how a math expression should be laid out.
 ///
 /// This affects lots of parameters when laying out an equation.
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
@@ -492,7 +535,7 @@ impl CornerPosition {
         }
     }
 
-    /// Returns the position that is vercally opposite.
+    /// Returns the position that is vertically opposite.
     pub fn vertical_mirror(self) -> Self {
         match self {
             TopLeft => BottomLeft,
@@ -520,7 +563,23 @@ mod tests {
     #[test]
     #[should_panic(expected = "Not a valid percent value")]
     fn percent_test() {
-        let val = PercentScale::new(101);
-        assert_eq!(val.as_percentage(), 100);
+        let val = PercentValue::new(101);
+        assert_eq!(val.as_percentage(), 101);
+    }
+
+    #[test]
+    fn test_math_expression() {
+        let mut graph = MathExpression::new();
+        let first_node = MathItem::default();
+        let second_node = MathItem::default();
+        let third_node = MathItem::default();
+
+        let first_index = graph.add_item(first_node);
+        let second_index = graph.add_item(second_node);
+        let third_index = graph.add_item(third_node);
+
+        assert_eq!(first_index, Index(0));
+        assert_eq!(second_index, Index(1));
+        assert_eq!(third_index, Index(2));
     }
 }

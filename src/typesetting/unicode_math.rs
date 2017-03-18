@@ -1,5 +1,4 @@
 use std::char;
-use std::str::FromStr;
 
 /// Mathematical font families available from the unicode character range.
 #[derive(Copy, Clone)]
