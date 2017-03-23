@@ -75,34 +75,36 @@ impl Attributes {
 // (Embellished) operators are treated specially because their default attribute values depend
 // on the surrounding elements.
 pub fn process_operators(list: &mut Vec<Index>, context: &mut ParseContext) {
-    let mut first_non_ws_index = -1;
-    let mut last_non_ws_index = 0;
-    let operator_positions = list.iter()
-        .enumerate()
-        .filter_map(|(position, &index)| context.mathml_info.get(index.into()).map(|x| (position, x)))
-        .filter(|&(_, ref info)| info.is_space.not())
-        .inspect(|&(index, _)| {
-                     if first_non_ws_index == -1 {
-                         first_non_ws_index = index as isize;
-                     }
-                     last_non_ws_index = index;
-                 })
-        .filter(|&(_, ref info)| info.is_operator())
-        .map(|(index, _)| index)
+    // filter out all whitespace elements
+    let non_whitespace_list = list.iter()
+        .cloned()
+        .filter(|&index| {
+                    context.mathml_info
+                        .get(index.into())
+                        .map(|info| !info.is_space)
+                        .unwrap_or(true)
+                })
         .collect::<Vec<_>>();
 
-    for index in &operator_positions {
-        let elem = list[*index];
-        if first_non_ws_index as usize != last_non_ws_index {
-            if *index == first_non_ws_index as usize {
-                set_default_form(elem, Form::Prefix, context);
-            } else if *index == last_non_ws_index {
-                set_default_form(elem, Form::Postfix, context);
+    for &index in &non_whitespace_list {
+        if !context.mathml_info
+                .get(index.into())
+                .map(|info| info.is_operator())
+                .unwrap_or(false) {
+            // current element is not an operator, nothing to do
+            continue;
+        }
+        if non_whitespace_list.len() > 1 {
+            if index == *non_whitespace_list.first().unwrap() {
+                set_default_form(index, Form::Prefix, context);
+            } else if index == *non_whitespace_list.last().unwrap() {
+                set_default_form(index, Form::Postfix, context);
             }
         }
-        set_default_form(elem, Form::Infix, context);
-        guess_operator_attributes(elem, context);
-        make_operator(elem, context);
+
+        set_default_form(index, Form::Infix, context);
+        guess_operator_attributes(index, context);
+        make_operator(index, context);
     }
 }
 
