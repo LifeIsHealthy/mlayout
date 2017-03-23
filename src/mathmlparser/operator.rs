@@ -147,7 +147,7 @@ fn guess_operator_attributes(index: Index, context: &mut ParseContext) {
 }
 
 fn find_core_operator(embellished_op: Index, context: &mut ParseContext) -> Option<Index> {
-    let core_index = match *context.expr.get_item(embellished_op).unwrap() {
+    let core_index = match context.expr[embellished_op] {
         MathItem::Field(_) => return Some(embellished_op),
         MathItem::Atom(Atom { nucleus, .. }) => nucleus,
         MathItem::OverUnder(OverUnder { nucleus, .. }) => nucleus,
@@ -158,12 +158,12 @@ fn find_core_operator(embellished_op: Index, context: &mut ParseContext) -> Opti
 }
 
 fn set_movable_limits(embellished_op: Index, context: &mut ParseContext) {
-    let core_index = match *context.expr.get_item_mut(embellished_op).unwrap() {
+    let core_index = match context.expr[embellished_op] {
         MathItem::Atom(Atom { nucleus, .. }) => nucleus,
         MathItem::OverUnder(ref mut ou) => {
             ou.is_limits = true;
             ou.nucleus
-        },
+        }
         MathItem::GeneralizedFraction(GeneralizedFraction { numerator, .. }) => numerator,
         _ => return,
     };
@@ -191,8 +191,7 @@ fn make_operator(index: Index, context: &mut ParseContext) {
         } else {
             None
         };
-        let core = context.expr.get_item_mut(core_index).unwrap();
-        let field = match *core {
+        let field = match context.expr[core_index] {
             MathItem::Field(ref field) => field.clone(),
             _ => unreachable!(),
         };
@@ -204,7 +203,7 @@ fn make_operator(index: Index, context: &mut ParseContext) {
             trailing_space: operator_attrs.rspace.expect("operator has no rspace"),
             ..Default::default()
         };
-        ::std::mem::replace(core, MathItem::Operator(new_elem));
+        context.expr[core_index] = MathItem::Operator(new_elem);
     }
 }
 

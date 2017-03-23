@@ -410,18 +410,16 @@ mod tests {
     use types::*;
 
     fn find_operator(expr: &MathExpression) -> Index {
-        let first_item = expr.get_item(expr.root_index).unwrap();
+        let first_item = &expr[expr.root_index];
         match *first_item {
             MathItem::List(ref list) => {
                 list.iter()
                     .cloned()
-                    .filter(|&index| {
-                        if let MathItem::Operator(_) = *expr.get_item(index).unwrap() {
-                            true
-                        } else {
-                            false
-                        }
-                    })
+                    .filter(|&index| if let MathItem::Operator(_) = expr[index] {
+                                true
+                            } else {
+                                false
+                            })
                     .next()
                     .expect("List contains no operator.")
             }
@@ -435,7 +433,7 @@ mod tests {
         let xml = "<mo>+</mo>";
         let expr = parse(xml.as_bytes()).unwrap();
         let operator = find_operator(&expr);
-        match *expr.get_item(operator).unwrap() {
+        match expr[operator] {
             MathItem::Operator(Operator { field: Field::Unicode(ref text), .. }) => {
                 assert_eq!(text, "+")
             }
@@ -448,7 +446,7 @@ mod tests {
         let xml = "<mo>-</mo><mi>x</mi>";
         let expr = parse(xml.as_bytes()).unwrap();
         let operator = find_operator(&expr);
-        match *expr.get_item(operator).unwrap() {
+        match expr[operator] {
             MathItem::Operator(Operator { field: Field::Unicode(ref text), .. }) => {
                 assert_eq!(text, "\u{2212}") // MINUS SIGN
             }
@@ -461,7 +459,7 @@ mod tests {
         let xml = "<mi>x</mi><mo>=</mo><mi>y</mi>";
         let expr = parse(xml.as_bytes()).unwrap();
         let operator = find_operator(&expr);
-        match *expr.get_item(operator).unwrap() {
+        match expr[operator] {
             MathItem::Operator(Operator { field: Field::Unicode(ref text), .. }) => {
                 assert_eq!(text, "=")
             }
@@ -474,7 +472,7 @@ mod tests {
         let xml = "<mi>x</mi><mo>!</mo>";
         let expr = parse(xml.as_bytes()).unwrap();
         let operator = find_operator(&expr);
-        match *expr.get_item(operator).unwrap() {
+        match expr[operator] {
             MathItem::Operator(Operator { field: Field::Unicode(ref text), .. }) => {
                 assert_eq!(text, "!")
             }

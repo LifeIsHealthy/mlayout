@@ -59,7 +59,10 @@ pub struct MathExpression {
 
 impl MathExpression {
     pub fn new() -> MathExpression {
-        MathExpression { entries: Vec::new(), root_index: Index(0) }
+        MathExpression {
+            entries: Vec::new(),
+            root_index: Index(-1),
+        }
     }
 
     pub fn add_item(&mut self, item: MathItem) -> Index {
@@ -80,6 +83,20 @@ impl MathExpression {
             return None;
         }
         self.entries.get_mut(index.0 as usize)
+    }
+}
+
+impl ::std::ops::Index<Index> for MathExpression {
+    type Output = MathItem;
+
+    fn index(&self, index: Index) -> &MathItem {
+        self.get_item(index).expect("Invalid Index for MathExpression.")
+    }
+}
+
+impl ::std::ops::IndexMut<Index> for MathExpression {
+    fn index_mut(&mut self, index: Index) -> &mut MathItem {
+        self.get_item_mut(index).expect("Invalid Index for MathExpression.")
     }
 }
 
