@@ -163,12 +163,15 @@ impl<'a> HarfbuzzShaper<'a> {
                               end: std::u32::MAX,
                           })
         }
-        //        features.push(hb::hb_feature_t {
-        //            tag: Tag::new('f', 'l', 'a', 'c').0,
-        //            value: 1,
-        //            start: 0,
-        //            end: std::u32::MAX,
-        //        });
+        if style.flat_accent {
+            features.push(hb::hb_feature_t {
+                              tag: Tag::new('f', 'l', 'a', 'c').0,
+                              value: 1,
+                              start: 0,
+                              end: std::u32::MAX,
+                          });
+        }
+
         buffer.add_str(string).set_script(Tag::from_str("Math").unwrap()).shape(&self.font,
                                                                                 &features)
     }

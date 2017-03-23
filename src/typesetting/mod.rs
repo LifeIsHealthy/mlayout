@@ -20,6 +20,7 @@ pub fn layout<'a, S: MathShaper>(expression: &'a MathExpression, shaper: &'a S) 
             math_style: MathStyle::Display,
             script_level: 0,
             is_cramped: false,
+            flat_accent: false,
         },
         stretch_size: None,
         as_accent: false,

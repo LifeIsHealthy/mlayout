@@ -454,6 +454,8 @@ pub struct LayoutStyle {
     pub script_level: u8,
     /// If `true` superscripts and similar protrude less at the top.
     pub is_cramped: bool,
+    /// If `true` display a flatter version of the accent.
+    pub flat_accent: bool,
 }
 
 impl LayoutStyle {
@@ -501,6 +503,12 @@ impl LayoutStyle {
             ..self
         }
     }
+
+    pub fn no_flat_accent_style(self) -> LayoutStyle {
+        LayoutStyle {
+            flat_accent: false,
+            ..self
+        }
     }
 
     /// Returns the style that the superscript of a base styled with `self` should have.
@@ -524,6 +532,7 @@ impl Default for LayoutStyle {
             math_style: MathStyle::Display,
             script_level: 0,
             is_cramped: false,
+            flat_accent: false,
         }
     }
 }

@@ -1,5 +1,6 @@
 #![allow(unused_variables, dead_code)]
 use types::*;
+use std::iter;
 use std::iter::IntoIterator;
 use std::cmp::{max, min};
 
@@ -265,7 +266,7 @@ impl<'a> MathLayout<'a, MathBox<'a>> for &'a OverUnder {
         let nucleus_is_horizontally_stretchy = nucleus.can_stretch(expr, options);
 
         let mut over_options = LayoutOptions {
-            style: options.style.inline_style(),
+            style: options.style.inline_style().no_flat_accent_style(),
             stretch_size: None,
             ..options
         };
@@ -273,7 +274,7 @@ impl<'a> MathLayout<'a, MathBox<'a>> for &'a OverUnder {
             over_options.style = over_options.style.superscript_style();
         }
         let mut under_options = LayoutOptions {
-            style: options.style.inline_style(),
+            style: options.style.inline_style().no_flat_accent_style(),
             stretch_size: None,
             ..options
         };
@@ -318,6 +319,15 @@ impl<'a> MathLayout<'a, MathBox<'a>> for &'a OverUnder {
         let nucleus = boxes[0].take().unwrap_or_default();
         let nucleus = if let Some(mut over) = boxes[1].take() {
             let (_, LayoutOptions { style, shaper, .. }, ..) = arguments[1];
+
+            // enable flat accents if needed
+            let height = options.shaper.math_constant(MathConstant::FlattenedAccentBaseHeight);
+            if self.over_is_accent && nucleus.extents().ascent >= height {
+                let (_,  ref mut over_options, _) = arguments[1];
+                over_options.style.flat_accent = true;
+                over = expr.get_item(self.over).unwrap().layout(expr, *over_options);
+            }
+
             layout_over_or_under(over,
                                  nucleus,
                                  shaper,
