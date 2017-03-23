@@ -58,6 +58,32 @@ const ASCII_WITH_GREEK_CHARACTERS: &'static [u32] = &[
 ];
 
 #[cfg_attr(rustfmt, rustfmt_skip)]
+const ASCII_WITH_GREEK_AND_DOTLESS_CHARACTERS: &'static [u32] = &[
+    // small latin
+    0x61, 0x62, 0x63, 0x64, 0x65, 0x66, 0x67, 0x68, 0x69, 0x6a,
+    0x6b, 0x6c, 0x6d, 0x6e, 0x6f, 0x70, 0x71, 0x72, 0x73, 0x74,
+    0x75, 0x76, 0x77, 0x78, 0x79, 0x7a,
+    // capital latin
+    0x41, 0x42, 0x43, 0x44, 0x45, 0x46, 0x47, 0x48, 0x49, 0x4a,
+    0x4b, 0x4c, 0x4d, 0x4e, 0x4f, 0x50, 0x51, 0x52, 0x53, 0x54,
+    0x55, 0x56, 0x57, 0x58, 0x59, 0x5a,
+    // small greek
+    0x3b1, 0x3b2, 0x3b3, 0x3b4, 0x3b5, 0x3b6, 0x3b7, 0x3b8, 0x3b9,
+    0x3ba, 0x3bb, 0x3bc, 0x3bd, 0x3be, 0x3bf, 0x3c0, 0x3c1, 0x3c2,
+    0x3c3, 0x3c4, 0x3c5, 0x3c6, 0x3c7, 0x3c8, 0x3c9, 0x2202, // partial diff
+    0x3f5, /* epsilon symbol */ 0x3d1, /* theta symbol */
+    0x3f0, /* kappa symbol */   0x278, /* phi symbol */
+    0x3f1, /* rho symbol */     0x3d6, /* pi symbol */
+
+    // capital greek (notice theta symbol 0x3f4)
+    0x391, 0x392, 0x393, 0x394, 0x395, 0x396, 0x397, 0x398, 0x399,
+    0x39a, 0x39b, 0x39c, 0x39d, 0x39e, 0x39f, 0x3a0, 0x3f4, 0x3a2,
+    0x3a3, 0x3a4, 0x3a5, 0x3a6, 0x3a7, 0x3a8, 0x3a9, 0x2207, //nabla
+
+    // dotless i and j
+    0x131, 0x237,
+];
+
 #[cfg_attr(rustfmt, rustfmt_skip)]
 const ASCII_WITH_NUMERALS_CHARACTERS: &'static [u32] = &[
     // small latin
@@ -138,6 +164,9 @@ const ITALICS: &'static [u32] = &[
     0x1d6e9, 0x1d6ea, 0x1d6eb, 0x1d6ec, 0x1d6ed, 0x1d6ee, 0x1d6ef,
     0x1d6f0, 0x1d6f1, 0x1d6f2, 0x1d6f3, 0x1d6f4, 0x1d6f5, 0x1d6f6,
     0x1d6f7, 0x1d6f8, 0x1d6f9, 0x1d6fa, 0x1d6fb,
+
+    // dotless i and j
+    0x1d6a4, 0x1d6a5
 ];
 
 #[cfg_attr(rustfmt, rustfmt_skip)]
@@ -392,37 +421,33 @@ const MONOSPACE: &'static [u32] = &[
     0x1d7fd, 0x1d7fe, 0x1d7ff,
 ];
 
-static FAMILY_TABLES: &'static [&'static [u32]] = &[
-    ITALICS,
-    BOLD,
-    BOLD_ITALICS,
-    SCRIPT,
-    BOLD_SCRIPT,
-    FRAKTUR,
-    DOUBLE_STRUCK,
-    BOLD_FRAKTUR,
-    SANS_SERIF,
-    SANS_SERIF_BOLD,
-    SANS_SERIF_ITALICS,
-    SANS_SERIF_BOLD_ITALICS,
-    MONOSPACE
-];
+static FAMILY_TABLES: &'static [&'static [u32]] = &[ITALICS,
+                                                    BOLD,
+                                                    BOLD_ITALICS,
+                                                    SCRIPT,
+                                                    BOLD_SCRIPT,
+                                                    FRAKTUR,
+                                                    DOUBLE_STRUCK,
+                                                    BOLD_FRAKTUR,
+                                                    SANS_SERIF,
+                                                    SANS_SERIF_BOLD,
+                                                    SANS_SERIF_ITALICS,
+                                                    SANS_SERIF_BOLD_ITALICS,
+                                                    MONOSPACE];
 
-static CHARACTER_TABLES: &'static [&'static [u32]] = &[
-    ASCII_WITH_GREEK_CHARACTERS,
-    ASCII_WITH_NUMERALS_AND_GREEK_CHARACTERS,
-    ASCII_WITH_GREEK_CHARACTERS,
-    ASCII_CHARACTERS,
-    ASCII_CHARACTERS,
-    ASCII_CHARACTERS,
-    ASCII_WITH_NUMERALS_CHARACTERS,
-    ASCII_CHARACTERS,
-    ASCII_WITH_NUMERALS_CHARACTERS,
-    ASCII_WITH_NUMERALS_AND_GREEK_CHARACTERS,
-    ASCII_CHARACTERS,
-    ASCII_WITH_GREEK_CHARACTERS,
-    ASCII_WITH_NUMERALS_CHARACTERS
-];
+static CHARACTER_TABLES: &'static [&'static [u32]] = &[ASCII_WITH_GREEK_AND_DOTLESS_CHARACTERS,
+                                                       ASCII_WITH_NUMERALS_AND_GREEK_CHARACTERS,
+                                                       ASCII_WITH_GREEK_CHARACTERS,
+                                                       ASCII_CHARACTERS,
+                                                       ASCII_CHARACTERS,
+                                                       ASCII_CHARACTERS,
+                                                       ASCII_WITH_NUMERALS_CHARACTERS,
+                                                       ASCII_CHARACTERS,
+                                                       ASCII_WITH_NUMERALS_CHARACTERS,
+                                                       ASCII_WITH_NUMERALS_AND_GREEK_CHARACTERS,
+                                                       ASCII_CHARACTERS,
+                                                       ASCII_WITH_GREEK_CHARACTERS,
+                                                       ASCII_WITH_NUMERALS_CHARACTERS];
 
 pub fn convert_character_to_family(c: char, family: Family) -> char {
     if let Family::Normal = family {
@@ -448,5 +473,8 @@ mod tests {
         assert_eq!('a', convert_character_to_family('a', Family::Normal));
         let italic_a: char = char::from_u32(0x1d434).unwrap();
         assert_eq!(italic_a, convert_character_to_family('A', Family::Italics));
+        let latin_dotless_i = '\u{131}';
+        let mathematical_dotless_i = '\u{1d6a4}';
+        assert_eq!(mathematical_dotless_i, convert_character_to_family(latin_dotless_i, Family::Italics));
     }
 }
