@@ -24,8 +24,7 @@ fn shaping_test() {
                    })
 }
 
-fn assume_boxes<'a, 'b, T, G>(content: &MathBoxContent<T, G>)
-                           -> &T {
+fn assume_boxes<'a, 'b, T, G>(content: &MathBoxContent<T, G>) -> &T {
     match *content {
         MathBoxContent::Boxes(ref list) => list,
         _ => panic!(),
@@ -44,7 +43,8 @@ fn no_scale_division_test() {
         let boxes = assume_boxes(content).as_slice();
         // test that the second box has a greater x-value than the right edge of the first box
         // with a somewhat big error margin
-        assert!(boxes[1].origin.x > (boxes[0].origin.x + (boxes[0].extents().width as f32 * 0.8) as i32));
+        assert!(boxes[1].origin.x >
+                (boxes[0].origin.x + (boxes[0].extents().width as f32 * 0.8) as i32));
     })
 }
 

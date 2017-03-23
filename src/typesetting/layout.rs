@@ -62,14 +62,16 @@ fn clamp<T: Ord, U: Into<Option<T>>>(value: T, min: U, max: U) -> T {
     value
 }
 
-fn math_box_from_shaped_glyphs<'a, I>(glyphs: I,
-                                             options: LayoutOptions<'a>)
-                                             -> MathBox<'a>
+fn math_box_from_shaped_glyphs<'a, I>(glyphs: I, options: LayoutOptions<'a>) -> MathBox<'a>
     where I: 'a + IntoIterator<Item = ShapedGlyph>
 {
     let mut cursor = Vector { x: 0, y: 0 };
     let scale = options.shaper.scale_factor_for_script_level(options.style.script_level);
-    let iterator = glyphs.into_iter().map(move |ShapedGlyph { mut origin, mut advance, glyph }| {
+    let iterator = glyphs.into_iter().map(move |ShapedGlyph {
+                                                    mut origin,
+                                                    mut advance,
+                                                    glyph,
+                                                }| {
         let glyph = Glyph {
             glyph_code: glyph,
             scale: scale,
@@ -89,11 +91,14 @@ fn math_box_from_shaped_glyphs<'a, I>(glyphs: I,
 /// The trait that every Item in a math list satisfies so that the entire math list can be
 /// laid out.
 pub trait MathLayout<'a, T> {
-    fn layout(self, expr: &'a  MathExpression, options: LayoutOptions<'a>) -> T;
-    fn operator_properties(&self, expr: &'a  MathExpression, options: LayoutOptions<'a>) -> Option<OperatorProperties> {
+    fn layout(self, expr: &'a MathExpression, options: LayoutOptions<'a>) -> T;
+    fn operator_properties(&self,
+                           expr: &'a MathExpression,
+                           options: LayoutOptions<'a>)
+                           -> Option<OperatorProperties> {
         None
     }
-    fn can_stretch(&self, expr: &'a  MathExpression, options: LayoutOptions<'a>) -> bool {
+    fn can_stretch(&self, expr: &'a MathExpression, options: LayoutOptions<'a>) -> bool {
         self.operator_properties(expr, options)
             .map(|operator_properties| operator_properties.stretch_properties.is_some())
             .unwrap_or_default()
@@ -101,7 +106,7 @@ pub trait MathLayout<'a, T> {
 }
 
 impl<'a> MathLayout<'a, MathBox<'a>> for &'a Field {
-    fn layout(self, expr: &'a  MathExpression, options: LayoutOptions<'a>) -> MathBox<'a> {
+    fn layout(self, expr: &'a MathExpression, options: LayoutOptions<'a>) -> MathBox<'a> {
         match *self {
             Field::Empty => MathBox::default(),
             Field::Glyph(ref glyph) => MathBox::with_glyph(*glyph, options.shaper),
@@ -114,7 +119,7 @@ impl<'a> MathLayout<'a, MathBox<'a>> for &'a Field {
 }
 
 impl<'a> MathLayout<'a, MathBox<'a>> for &'a [Index] {
-    fn layout(self, expr: &'a  MathExpression, options: LayoutOptions<'a>) -> MathBox<'a> {
+    fn layout(self, expr: &'a MathExpression, options: LayoutOptions<'a>) -> MathBox<'a> {
         let boxes = layout_strechy_list(self, expr, options);
 
         let mut cursor = 0i32;
@@ -134,14 +139,17 @@ impl<'a> MathLayout<'a, MathBox<'a>> for &'a [Index] {
 }
 
 impl<'a> MathLayout<'a, MathBox<'a>> for &'a Atom {
-    fn layout(self, expr: &'a  MathExpression, options: LayoutOptions<'a>) -> MathBox<'a> {
+    fn layout(self, expr: &'a MathExpression, options: LayoutOptions<'a>) -> MathBox<'a> {
         let subscript = expr.get_item(self.bottom_right);
         let superscript = expr.get_item(self.top_right);
         let nucleus = expr.get_item(self.nucleus);
         layout_sub_superscript(subscript, superscript, nucleus, expr, options)
     }
 
-    fn operator_properties(&self, expr: &'a  MathExpression, options: LayoutOptions<'a>) -> Option<OperatorProperties> {
+    fn operator_properties(&self,
+                           expr: &'a MathExpression,
+                           options: LayoutOptions<'a>)
+                           -> Option<OperatorProperties> {
         let nucleus = expr.get_item(self.nucleus);
         nucleus.and_then(|nucleus| nucleus.operator_properties(expr, options))
     }
@@ -150,7 +158,7 @@ impl<'a> MathLayout<'a, MathBox<'a>> for &'a Atom {
 fn layout_sub_superscript<'a>(subscript: Option<&'a MathItem>,
                               superscript: Option<&'a MathItem>,
                               nucleus: Option<&'a MathItem>,
-                              expr: &'a  MathExpression,
+                              expr: &'a MathExpression,
                               options: LayoutOptions<'a>)
                               -> MathBox<'a> {
     let nucleus = match nucleus {
@@ -273,14 +281,14 @@ impl<'a> MathLayout<'a, MathBox<'a>> for &'a OverUnder {
             under_options.style = under_options.style.subscript_style();
         }
         let mut arguments = [(Some(nucleus), options, false),
-                               (over, over_options, self.over_is_accent),
-                               (under, under_options, self.under_is_accent)];
+                             (over, over_options, self.over_is_accent),
+                             (under, under_options, self.under_is_accent)];
         let mut boxes = [None, None, None];
 
         for (index, &mut (ref mut arg, options, ..)) in arguments.iter_mut().enumerate() {
             // first take and layout non-stretchy subexpressions
             if !arg.as_ref().map(|x| x.can_stretch(expr, options)).unwrap_or(false) {
-                boxes[index] = arg.take().map(|arg| arg.layout(expr, options));
+                boxes[index] = arg.map(|arg| arg.layout(expr, options));
             }
         }
         // get the maximal width of the non-stretchy items
@@ -295,17 +303,20 @@ impl<'a> MathLayout<'a, MathBox<'a>> for &'a OverUnder {
         }
 
         // layout the rest
-        for (index, &mut (ref mut arg, mut options, as_accent)) in arguments.iter_mut().enumerate() {
-            options.stretch_size = options.stretch_size.or(Some(Default::default()))
-                .map(|size| Extents { width: max_width, ..size });
+        for (index, &mut (ref mut arg, ref mut options, as_accent)) in
+            arguments.iter_mut().enumerate() {
+            let mut stretch_size = options.stretch_size.unwrap_or(Default::default());
+            stretch_size.width = max_width;
+            options.stretch_size = Some(stretch_size);
+
             options.as_accent = as_accent;
-            if let Some(stretched_box) = arg.take().map(|arg| arg.layout(expr, options)) {
+            if let Some(stretched_box) = arg.map(|arg| arg.layout(expr, *options)) {
                 boxes[index] = Some(stretched_box);
             }
         }
 
         let nucleus = boxes[0].take().unwrap_or_default();
-        let nucleus = if let Some(over) = boxes[1].take() {
+        let nucleus = if let Some(mut over) = boxes[1].take() {
             let (_, LayoutOptions { style, shaper, .. }, ..) = arguments[1];
             layout_over_or_under(over,
                                  nucleus,
@@ -334,20 +345,23 @@ impl<'a> MathLayout<'a, MathBox<'a>> for &'a OverUnder {
         }
     }
 
-    fn operator_properties(&self, expr: &'a  MathExpression, options: LayoutOptions<'a>) -> Option<OperatorProperties> {
+    fn operator_properties(&self,
+                           expr: &'a MathExpression,
+                           options: LayoutOptions<'a>)
+                           -> Option<OperatorProperties> {
         expr.get_item(self.nucleus).and_then(|nucleus| nucleus.operator_properties(expr, options))
     }
 }
 
 fn layout_over_or_under<'a>(mut attachment: MathBox<'a>,
-                                   mut nucleus: MathBox<'a>,
-                                   shaper: &MathShaper,
-                                   style: LayoutStyle,
-                                   as_over: bool,
-                                   as_accent: bool,
-                                   nucleus_is_large_op: bool,
-                                   nucleus_is_horizontally_stretchy: bool)
-                                   -> MathBox<'a> {
+                            mut nucleus: MathBox<'a>,
+                            shaper: &MathShaper,
+                            style: LayoutStyle,
+                            as_over: bool,
+                            as_accent: bool,
+                            nucleus_is_large_op: bool,
+                            nucleus_is_horizontally_stretchy: bool)
+                            -> MathBox<'a> {
     let mut gap = 0;
     let mut shift = 0;
     if nucleus_is_large_op {
@@ -436,8 +450,10 @@ impl<'a> MathLayout<'a, MathBox<'a>> for &'a GeneralizedFraction {
         } else {
             numerator_options.style.script_level += 1;
         }
-        let denominator_options =
-            LayoutOptions { style: numerator_options.style.cramped_style(), ..options };
+        let denominator_options = LayoutOptions {
+            style: numerator_options.style.cramped_style(),
+            ..options
+        };
         let mut numerator = numerator.layout(expr, numerator_options);
         let mut denominator = denominator.layout(expr, denominator_options);
 
@@ -501,8 +517,13 @@ impl<'a> MathLayout<'a, MathBox<'a>> for &'a GeneralizedFraction {
         MathBox::with_vec(vec![numerator, fraction_rule, denominator])
     }
 
-    fn operator_properties(&self, expr: &'a  MathExpression, options: LayoutOptions<'a>) -> Option<OperatorProperties> {
-        expr.get_item(self.numerator).and_then(|numerator| numerator.operator_properties(expr, options))
+    fn operator_properties(&self,
+                           expr: &'a MathExpression,
+                           options: LayoutOptions<'a>)
+                           -> Option<OperatorProperties> {
+        expr.get_item(self.numerator).and_then(|numerator| {
+                                                   numerator.operator_properties(expr, options)
+                                               })
     }
 }
 
@@ -553,7 +574,10 @@ impl<'a> MathLayout<'a, MathBox<'a>> for &'a Root {
             x: surd.origin.x + surd.advance_width(),
             y: surd.origin.y - surd.extents().ascent + line_thickness / 2,
         };
-        let target = Vector { x: origin.x + radicand.extents().right_edge(), ..origin };
+        let target = Vector {
+            x: origin.x + radicand.extents().right_edge(),
+            ..origin
+        };
         let mut radical_rule = MathBox::with_line(origin, target, line_thickness as u32);
 
         let mut boxes = vec![];
@@ -595,57 +619,64 @@ impl<'a> MathLayout<'a, MathBox<'a>> for &'a Root {
 
 impl Operator {
     fn layout_stretchy<'a>(&self,
-                                          needed_height: u32,
-                                          needed_width: u32,
-                                          options: LayoutOptions<'a>)
-                                          -> MathBox<'a> {
+                           needed_height: u32,
+                           needed_width: u32,
+                           options: LayoutOptions<'a>)
+                           -> MathBox<'a> {
         match self.field {
             Field::Unicode(ref string) => {
                 let scale = options.shaper
                     .scale_factor_for_script_level(options.style.script_level);
                 let needed_height = needed_height / scale;
                 let needed_width = needed_width / scale;
-                let mut shape_result = options.shaper.shape_string(string, options.style);
-                let first_glyph = shape_result.next();
+                let mut shape_result = options.shaper.shape_string(string, options.style.no_flat_accent_style());
+                let first_glyph = match shape_result.next() {
+                    Some(glyph) => glyph,
+                    None => return MathBox::empty(Extents::default()),
+                };
 
-                if needed_width > 0 {
-                    let stretched = first_glyph.and_then(move |shaped_glyph| {
-                        options.shaper.stretch_glyph(shaped_glyph.glyph, true, options.as_accent, needed_width)
-                    });
+                if needed_width > 0 && options.shaper.can_stretch_glyph(first_glyph.glyph, true) {
+                    let stretched = options.shaper.stretch_glyph(first_glyph.glyph,
+                                                                 true,
+                                                                 options.as_accent,
+                                                                 needed_width);
                     if let Some(stretched) = stretched {
                         return math_box_from_shaped_glyphs(stretched, options);
                     }
                 }
 
-                if needed_height > 0 {
-                    let stretched = first_glyph.and_then(move |shaped_glyph| {
-                        options.shaper.stretch_glyph(shaped_glyph.glyph, false, false, needed_height)
-                    });
+                if needed_height > 0 && options.shaper.can_stretch_glyph(first_glyph.glyph, false) {
+                    let stretched = options.shaper.stretch_glyph(first_glyph.glyph,
+                                                                 false,
+                                                                 false,
+                                                                 needed_height);
                     let mut math_box = match stretched {
                         Some(stretched) => math_box_from_shaped_glyphs(stretched, options),
                         // no stretched variant available, use the unstretched glyph
-                        None => math_box_from_shaped_glyphs(first_glyph, options)
+                        None => math_box_from_shaped_glyphs(iter::once(first_glyph), options),
                     };
-                    let stretch_constraints = self.stretch_constraints.unwrap_or(StretchConstraints { symmetric: true, ..Default::default() });
+                    let stretch_constraints = self.stretch_constraints
+                        .unwrap_or(StretchConstraints {
+                                       symmetric: true,
+                                       ..Default::default()
+                                   });
                     if stretch_constraints.symmetric {
-                        let axis_height = options.shaper
-                            .math_constant(MathConstant::AxisHeight);
-                        let shift_up =
-                            (math_box.extents().descent - math_box.extents().ascent) / 2 +
-                            axis_height;
+                        let axis_height = options.shaper.math_constant(MathConstant::AxisHeight);
+                        let shift_up = (math_box.extents().descent - math_box.extents().ascent) /
+                                       2 + axis_height;
                         math_box.origin.y -= shift_up;
                     } else {
                         let stretch_size = options.stretch_size.unwrap_or_default();
                         let excess_ascent = math_box.extents().ascent - stretch_size.ascent;
-                        let excess_descent = math_box.extents().descent -
-                                             stretch_size.descent;
+                        let excess_descent = math_box.extents().descent - stretch_size.descent;
                         math_box.origin.y += (excess_ascent - excess_descent) / 2;
                     }
 
                     return math_box;
                 }
 
-                math_box_from_shaped_glyphs(first_glyph, options)
+                let fallback = options.shaper.shape_string(string, options.style);
+                math_box_from_shaped_glyphs(fallback, options)
             }
             _ => unimplemented!(),
         }
@@ -656,10 +687,10 @@ impl<'a> MathLayout<'a, MathBox<'a>> for &'a Operator {
     fn layout(self, expr: &'a MathExpression, options: LayoutOptions<'a>) -> MathBox<'a> {
         match (options.stretch_size, self.stretch_constraints) {
             (Some(stretch_size), Some(stretch_constraints)) => {
-                let min_size = stretch_constraints.min_size
-                    .map(|size| size.to_font_units(options.shaper));
-                let max_size = stretch_constraints.max_size
-                    .map(|size| size.to_font_units(options.shaper));
+                let min_size =
+                    stretch_constraints.min_size.map(|size| size.to_font_units(options.shaper));
+                let max_size =
+                    stretch_constraints.max_size.map(|size| size.to_font_units(options.shaper));
                 let mut needed_height = if stretch_constraints.symmetric {
                     let axis_height = options.shaper.math_constant(MathConstant::AxisHeight);
                     max(stretch_size.ascent - axis_height,
@@ -673,8 +704,8 @@ impl<'a> MathLayout<'a, MathBox<'a>> for &'a Operator {
             }
             _ => {
                 if self.is_large_op && options.style.math_style == MathStyle::Display {
-                    let display_min_height = options.shaper
-                        .math_constant(MathConstant::DisplayOperatorMinHeight);
+                    let display_min_height =
+                        options.shaper.math_constant(MathConstant::DisplayOperatorMinHeight);
                     self.layout_stretchy(display_min_height as u32, 0, options)
                 } else {
                     self.field.layout(expr, options)
@@ -683,12 +714,15 @@ impl<'a> MathLayout<'a, MathBox<'a>> for &'a Operator {
         }
     }
 
-    fn operator_properties(&self, expr: &'a  MathExpression, options: LayoutOptions<'a>) -> Option<OperatorProperties> {
+    fn operator_properties(&self,
+                           expr: &'a MathExpression,
+                           options: LayoutOptions<'a>)
+                           -> Option<OperatorProperties> {
         Some(OperatorProperties {
-            stretch_properties: self.stretch_constraints.as_ref().map(|_| Default::default()),
-            leading_space: self.leading_space.to_font_units(options.shaper),
-            trailing_space: self.trailing_space.to_font_units(options.shaper),
-        })
+                 stretch_properties: self.stretch_constraints.as_ref().map(|_| Default::default()),
+                 leading_space: self.leading_space.to_font_units(options.shaper),
+                 trailing_space: self.trailing_space.to_font_units(options.shaper),
+             })
     }
 }
 

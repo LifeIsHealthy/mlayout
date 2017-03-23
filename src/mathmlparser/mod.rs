@@ -156,13 +156,16 @@ pub fn parse<R: BufRead>(file: R) -> Result<MathExpression> {
     };
     let expr = MathExpression::new();
     let info = VecMap::new();
-    let mut context = ParseContext { expr: expr, mathml_info: info };
+    let mut context = ParseContext {
+        expr: expr,
+        mathml_info: info,
+    };
 
     match parse_element(&mut parser, root_elem, std::iter::empty(), &mut context) {
         Ok(index) => {
             context.expr.root_index = index;
             Ok(context.expr)
-        },
+        }
         Err(err) => Err(err),
     }
 }
@@ -190,7 +193,10 @@ fn parse_element<'a, R: BufRead, A>(parser: &mut XmlReader<R>,
     }
 }
 
-fn parse_sub_element<R: BufRead>(parser: &mut XmlReader<R>, elem: &Element, context: &mut ParseContext) -> Result<Index> {
+fn parse_sub_element<R: BufRead>(parser: &mut XmlReader<R>,
+                                 elem: &Element,
+                                 context: &mut ParseContext)
+                                 -> Result<Index> {
     let sub_elem = match_math_element(elem.name());
     match sub_elem {
         Some(sub_elem) => parse_element(parser, sub_elem, elem.attributes(), context),
@@ -259,7 +265,10 @@ fn parse_list_schema<'a, A>(content: Vec<Index>,
     match elem.identifier {
         "mrow" | "math" => Ok(content),
         "msqrt" => {
-            let item = MathItem::Root(Root { radicand: content, ..Default::default() });
+            let item = MathItem::Root(Root {
+                                          radicand: content,
+                                          ..Default::default()
+                                      });
             Ok(context.expr.add_item(item))
         }
         _ => unimplemented!(),
@@ -373,9 +382,15 @@ fn parse_fixed_schema<'a, A>(content: Vec<Index>,
     };
     let info = MathmlInfo {
         operator_attrs: match result {
-            MathItem::Atom(ref atom) => context.mathml_info.get(atom.nucleus.into()).and_then(|info| info.operator_attrs),
-            MathItem::OverUnder(ref ou) => context.mathml_info.get(ou.nucleus.into()).and_then(|info| info.operator_attrs),
-            MathItem::GeneralizedFraction(ref frac) => context.mathml_info.get(frac.numerator.into()).and_then(|info| info.operator_attrs),
+            MathItem::Atom(ref atom) => {
+                context.mathml_info.get(atom.nucleus.into()).and_then(|info| info.operator_attrs)
+            }
+            MathItem::OverUnder(ref ou) => {
+                context.mathml_info.get(ou.nucleus.into()).and_then(|info| info.operator_attrs)
+            }
+            MathItem::GeneralizedFraction(ref frac) => {
+                context.mathml_info.get(frac.numerator.into()).and_then(|info| info.operator_attrs)
+            }
             _ => None,
         },
         ..Default::default()

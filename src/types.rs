@@ -191,7 +191,10 @@ pub struct MathSpace {
 
 impl MathSpace {
     pub fn horizontal_space(width: Length) -> Self {
-        MathSpace { width: width, ..Default::default() }
+        MathSpace {
+            width: width,
+            ..Default::default()
+        }
     }
 }
 
@@ -460,19 +463,31 @@ impl LayoutStyle {
     }
 
     pub fn inline_style(self) -> Self {
-        LayoutStyle { math_style: MathStyle::Inline, ..self }
+        LayoutStyle {
+            math_style: MathStyle::Inline,
+            ..self
+        }
     }
 
     pub fn display_style(self) -> Self {
-        LayoutStyle { math_style: MathStyle::Display, ..self }
+        LayoutStyle {
+            math_style: MathStyle::Display,
+            ..self
+        }
     }
 
     pub fn with_increased_script_level(self) -> Self {
-        LayoutStyle { script_level: self.script_level.saturating_add(1), ..self }
+        LayoutStyle {
+            script_level: self.script_level.saturating_add(1),
+            ..self
+        }
     }
 
     pub fn with_decreased_script_level(self) -> Self {
-        LayoutStyle { script_level: self.script_level.saturating_sub(1), ..self }
+        LayoutStyle {
+            script_level: self.script_level.saturating_sub(1),
+            ..self
+        }
     }
 
     /// Returns a cramped version of the style.
@@ -481,7 +496,11 @@ impl LayoutStyle {
     /// extent of equations above the text. This is used for example in denominators of fractions or
     /// subscripts and similar.
     pub fn cramped_style(self) -> LayoutStyle {
-        LayoutStyle { is_cramped: true, ..self }
+        LayoutStyle {
+            is_cramped: true,
+            ..self
+        }
+    }
     }
 
     /// Returns the style that the superscript of a base styled with `self` should have.
@@ -489,7 +508,7 @@ impl LayoutStyle {
         LayoutStyle {
             math_style: MathStyle::Inline,
             script_level: self.script_level + 1,
-            is_cramped: self.is_cramped,
+            ..self
         }
     }
 

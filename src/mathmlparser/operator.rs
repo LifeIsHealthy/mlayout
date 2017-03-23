@@ -1,6 +1,5 @@
-use std::ops::Not;
-
-use types::{Length, MathItem, StretchConstraints, Operator, Index, Atom, OverUnder, GeneralizedFraction};
+use types::{Length, MathItem, StretchConstraints, Operator, Index, Atom, OverUnder,
+            GeneralizedFraction};
 
 use super::{FromXmlAttribute, ParseContext};
 use super::operator_dict;
@@ -187,7 +186,10 @@ fn make_operator(index: Index, context: &mut ParseContext) {
 
     if let Some(core_index) = find_core_operator(index, context) {
         let stretch_constraints = if flags.contains(STRETCHY) {
-            Some(StretchConstraints { symmetric: flags.contains(SYMMETRIC), ..Default::default() })
+            Some(StretchConstraints {
+                     symmetric: flags.contains(SYMMETRIC),
+                     ..Default::default()
+                 })
         } else {
             None
         };
@@ -217,10 +219,14 @@ mod tests {
     fn test_set_default_form() {
         let expr = MathExpression::new();
         let info = VecMap::new();
-        let mut context = ParseContext { expr: expr, mathml_info: info };
+        let mut context = ParseContext {
+            expr: expr,
+            mathml_info: info,
+        };
         let context = ParseContext {
             expr: MathExpression::new(),
-            mathml_info: VecMap::new()
+            mathml_info: VecMap::new(),
         };
+
     }
 }

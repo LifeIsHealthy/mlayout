@@ -9,8 +9,7 @@ use std::str::FromStr;
 use types::{CornerPosition, PercentValue, LayoutStyle};
 use super::math_box::{Vector, Extents};
 pub use self::harfbuzz_rs::Position;
-use self::harfbuzz_rs::{Font, GlyphBuffer, Tag, Blob,
-                        HarfbuzzObject, UnicodeBuffer};
+use self::harfbuzz_rs::{Font, GlyphBuffer, Tag, Blob, HarfbuzzObject, UnicodeBuffer};
 
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
 #[repr(C)]

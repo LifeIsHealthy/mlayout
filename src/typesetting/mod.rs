@@ -13,9 +13,7 @@ use self::math_box::MathBox;
 
 // Calculates the dimensions of the components and their relative positioning. However no space
 // is distributed.
-pub fn layout<'a, S: MathShaper>(expression: &'a MathExpression,
-                                                shaper: &'a S)
-                                                -> MathBox<'a> {
+pub fn layout<'a, S: MathShaper>(expression: &'a MathExpression, shaper: &'a S) -> MathBox<'a> {
     let options = LayoutOptions {
         shaper: shaper,
         style: LayoutStyle {

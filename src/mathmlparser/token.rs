@@ -96,18 +96,23 @@ fn adapt_to_family(text: &str, family: Option<Family>) -> Cow<str> {
         }
     } else {
         let family = family.unwrap();
-        text.chars().map(|chr| convert_character_to_family(chr, family)).collect::<String>().into()
+        text.chars()
+            .map(|chr| convert_character_to_family(chr, family))
+            .collect::<String>()
+            .into()
     }
 }
 
 fn replace_anomalous_characters(text: &str, elem: MathmlElement) -> String {
-    text.chars().map(|chr| match chr {
-        '-' if elem.identifier == "mo" => '\u{2212}', // Minus Sign
-        '-' => '\u{2010}', // Hyphen
-        '\u{0027}' => '\u{2023}', // Prime
-        chr => chr
+    text.chars()
+        .map(|chr| match chr {
+                 '-' if elem.identifier == "mo" => '\u{2212}', // Minus Sign
+                 '-' => '\u{2010}', // Hyphen
+                 '\u{0027}' => '\u{2023}', // Prime
+                 chr => chr,
 
-    }).collect()
+             })
+        .collect()
 }
 
 // invoked after a token expression
@@ -242,16 +247,17 @@ pub fn parse<'a, R: BufRead, A>(parser: &mut XmlReader<R>,
         }
         MathItem::Field(field)
     } else {
-        let list = fields.into_iter()
-            .map(|field| {
-                context.expr.add_item(MathItem::Field(field))
-            })
-            .collect();
+        let list =
+            fields.into_iter().map(|field| context.expr.add_item(MathItem::Field(field))).collect();
         MathItem::List(list)
     };
 
     let index = context.expr.add_item(item);
-    context.mathml_info.insert(index.into(), MathmlInfo { operator_attrs: op_attrs, ..Default::default() });
+    context.mathml_info.insert(index.into(),
+                               MathmlInfo {
+                                   operator_attrs: op_attrs,
+                                   ..Default::default()
+                               });
     Ok(index)
 }
 
@@ -273,10 +279,17 @@ mod tests {
 
         let expr = MathExpression::new();
         let info = VecMap::new();
-        let mut context = ParseContext { expr: expr, mathml_info: info };
+        let mut context = ParseContext {
+            expr: expr,
+            mathml_info: info,
+        };
         let index = parse(&mut parser, mathml_elem, attributes, &mut context).unwrap();
 
-        let operator_attrs = context.mathml_info.get(index.into()).unwrap().operator_attrs.unwrap();
+        let operator_attrs = context.mathml_info
+            .get(index.into())
+            .unwrap()
+            .operator_attrs
+            .unwrap();
         assert!(operator_attrs.flags.contains(flag));
     }
 

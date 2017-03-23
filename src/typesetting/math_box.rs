@@ -336,13 +336,14 @@ impl<'a> MathBoxMetrics for MathBoxContent<BoxList<'a>, (Glyph, &'a MathShaper)>
                     .map(|item| item.origin.y + item.extents().descent)
                     .max()
                     .unwrap_or_default();
-                let left_side_bearing = slice[0].extents().left_side_bearing;
+                let left_side_bearing =
+                    slice.get(0).map(|x| x.extents().left_side_bearing).unwrap_or(0);
                 let width = slice.iter()
                     .map(|item| {
                              item.origin.x + item.extents().left_side_bearing + item.extents().width
                          })
                     .max()
-                    .unwrap_or_default() - left_side_bearing;
+                    .unwrap_or(0) - left_side_bearing;
                 Extents {
                     left_side_bearing: left_side_bearing,
                     width: width,
@@ -452,8 +453,7 @@ impl<'a> ::std::fmt::Debug for MathBox<'a> {
 
 impl<'a> MathBox<'a> {
     pub fn first_glyph(&self) -> Option<Glyph> {
-        match self.metrics
-                  .content {
+        match self.metrics.content {
             MathBoxContent::Drawable(Drawable::Glyph((glyph, _))) => Some(glyph),
             MathBoxContent::Boxes(ref boxes) => {
                 boxes.as_slice().first().and_then(|math_box| math_box.first_glyph())

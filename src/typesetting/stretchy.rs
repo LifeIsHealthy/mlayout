@@ -20,12 +20,16 @@ fn indices_of_stretchy_elements<'a>(list: &[Index],
 }
 
 pub fn layout_list_element<'a, T>(item: T,
-                               expr: &'a MathExpression,
-                               options: LayoutOptions<'a>)
-                               -> MathBox<'a>
-where T: MathLayout<'a, MathBox<'a>> {
-    if let Some(OperatorProperties { leading_space, trailing_space, .. }) =
-        item.operator_properties(expr, options) {
+                                  expr: &'a MathExpression,
+                                  options: LayoutOptions<'a>)
+                                  -> MathBox<'a>
+    where T: MathLayout<'a, MathBox<'a>>
+{
+    if let Some(OperatorProperties {
+                    leading_space,
+                    trailing_space,
+                    ..
+                }) = item.operator_properties(expr, options) {
         if options.style.math_style == MathStyle::Display {
             let left_space = MathBox::empty(Extents::new(0, leading_space, 0, 0));
             let mut elem = item.layout(expr, options);
@@ -82,7 +86,8 @@ pub fn layout_strechy_list<'a>(list: &'a [Index],
 
     let mut list_iter = list.iter().enumerate();
     for stretchy_index in stretchy_indices.iter() {
-        let (insertion_point, index) = list_iter.find(|&(_, index)| index == stretchy_index).unwrap();
+        let (insertion_point, index) = list_iter.find(|&(_, index)| index == stretchy_index)
+            .unwrap();
         let item = expr.get_item(*index);
         let math_box = layout_list_element(item, expr, options);
         items.insert(insertion_point, math_box);

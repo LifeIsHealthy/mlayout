@@ -6,8 +6,7 @@ pub enum LazyVecInner<I: Iterator> {
     Vec(Vec<I::Item>),
 }
 
-impl<I: Iterator> LazyVecInner<I>
-{
+impl<I: Iterator> LazyVecInner<I> {
     fn replace_with_vec(&mut self) {
         let vec = if let LazyVecInner::Iter(ref mut iter) = *self {
             iter.collect()
@@ -20,8 +19,7 @@ impl<I: Iterator> LazyVecInner<I>
 
 pub struct LazyVec<I: Iterator>(UnsafeCell<LazyVecInner<I>>);
 
-impl<I: Iterator> LazyVec<I>
-{
+impl<I: Iterator> LazyVec<I> {
     pub fn with_iter(iter: I) -> Self {
         LazyVec(UnsafeCell::new(LazyVecInner::Iter(iter)))
     }
@@ -63,8 +61,7 @@ pub enum IntoIter<I: Iterator> {
     VecIter(::std::vec::IntoIter<I::Item>),
 }
 
-impl<I: Iterator> Iterator for IntoIter<I>
-{
+impl<I: Iterator> Iterator for IntoIter<I> {
     type Item = I::Item;
 
     fn next(&mut self) -> Option<I::Item> {
@@ -75,8 +72,7 @@ impl<I: Iterator> Iterator for IntoIter<I>
     }
 }
 
-impl<I: Iterator> IntoIterator for LazyVec<I>
-{
+impl<I: Iterator> IntoIterator for LazyVec<I> {
     type IntoIter = IntoIter<I>;
     type Item = I::Item;
 
@@ -89,7 +85,8 @@ impl<I: Iterator> IntoIterator for LazyVec<I>
 }
 
 impl<I: Iterator> ::std::fmt::Debug for LazyVec<I>
-    where I::Item: ::std::fmt::Debug {
+    where I::Item: ::std::fmt::Debug
+{
     fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
         f.debug_list().entries(self.as_slice()).finish()
     }
