@@ -10,7 +10,7 @@ pub struct _Entry<T> {
     pub form: Form,
     pub lspace: u8,
     pub rspace: u8,
-    pub flags: T
+    pub flags: T,
 }
 
 impl<T: Default> std::default::Default for _Entry<T> {
@@ -51,19 +51,20 @@ impl std::convert::From<_Entry<u8>> for Entry {
             form: entry.form,
             lspace: entry.lspace,
             rspace: entry.rspace,
-            flags: Flags::from_bits(entry.flags).unwrap()
+            flags: Flags::from_bits(entry.flags).unwrap(),
         }
     }
 }
 
-const SYMMETRIC: u8         = 0b00000001;
-const FENCE: u8             = 0b00000010;
-const STRETCHY: u8          = 0b00000100;
-const SEPARATOR: u8         = 0b00001000;
-const ACCENT: u8            = 0b00010000;
-const LARGEOP: u8           = 0b00100000;
-const MOVABLE_LIMITS: u8    = 0b01000000;
+const SYMMETRIC: u8 = 0b00000001;
+const FENCE: u8 = 0b00000010;
+const STRETCHY: u8 = 0b00000100;
+const SEPARATOR: u8 = 0b00001000;
+const ACCENT: u8 = 0b00010000;
+const LARGEOP: u8 = 0b00100000;
+const MOVABLE_LIMITS: u8 = 0b01000000;
 
+#[cfg_attr(rustfmt, rustfmt_skip)]
 pub static DICTIONARY: [_Entry<u8>; 1043] = [
     _Entry { character: '\u{21}', form: Form::Postfix, lspace: 1, rspace: 0, flags: 0 },
     _Entry { character: '\u{25}', form: Form::Infix, lspace: 3, rspace: 3, flags: 0 },
@@ -1125,7 +1126,10 @@ fn try_entry_at_offset(index: usize, offset: isize, requested_form: Form) -> Opt
 }
 
 pub fn find_entry(character: char, preferred_form: Form) -> Option<Entry> {
-    let entry = _Entry { character: character, ..std::default::Default::default() };
+    let entry = _Entry {
+        character: character,
+        ..std::default::Default::default()
+    };
     let (result, index) = match DICTIONARY.binary_search(&entry) {
         Ok(index) => (DICTIONARY[index], index),
         Err(_) => return None,
@@ -1179,8 +1183,8 @@ mod tests {
         assert_eq!(find_entry('+', Form::Prefix).unwrap().form, Form::Prefix);
         assert_eq!(find_entry('+', Form::Postfix).unwrap().form, Form::Infix);
         assert!(find_entry('\u{2211}', Form::Postfix)
-            .unwrap()
-            .flags
-            .contains(Flags::from_bits(LARGEOP).unwrap()));
+                    .unwrap()
+                    .flags
+                    .contains(Flags::from_bits(LARGEOP).unwrap()));
     }
 }

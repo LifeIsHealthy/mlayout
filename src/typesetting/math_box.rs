@@ -1,89 +1,80 @@
-use std;
 use std::cmp::{max, min};
 use std::ops::{Mul, Div, Add, Sub};
-use types::{Glyph, PercentScale, PercentScale2D};
+use types::{Glyph, PercentValue, WithUserData};
 use std::default::Default;
 
 use std::cell::Cell;
 use typesetting::shaper::MathShaper;
 
-use super::lazy_vec;
 use super::lazy_vec::LazyVec;
 
 /// A point in 2D space.
 ///
 /// Note: The y coordinate increases downwards.
 #[derive(Debug, Default, PartialEq, Eq, Clone, Copy, Hash)]
-pub struct Point<T> {
+pub struct Vector<T> {
     /// the x coordinate
     pub x: T,
     /// the y coordinate
     pub y: T,
 }
-impl Add<Point<i32>> for Point<i32> {
-    type Output = Point<i32>;
-    fn add(self, _rhs: Point<i32>) -> Point<i32> {
-        Point {
+impl Add<Vector<i32>> for Vector<i32> {
+    type Output = Vector<i32>;
+    fn add(self, _rhs: Vector<i32>) -> Vector<i32> {
+        Vector {
             x: self.x + _rhs.x,
             y: self.y + _rhs.y,
         }
     }
 }
-impl Sub<Point<i32>> for Point<i32> {
-    type Output = Point<i32>;
-    fn sub(self, _rhs: Point<i32>) -> Point<i32> {
-        Point {
+impl Sub<Vector<i32>> for Vector<i32> {
+    type Output = Vector<i32>;
+    fn sub(self, _rhs: Vector<i32>) -> Vector<i32> {
+        Vector {
             x: self.x - _rhs.x,
             y: self.y - _rhs.y,
         }
     }
 }
-impl Mul<i32> for Point<i32> {
-    type Output = Point<i32>;
-    fn mul(self, _rhs: i32) -> Point<i32> {
-        Point {
+impl Mul<i32> for Vector<i32> {
+    type Output = Vector<i32>;
+    fn mul(self, _rhs: i32) -> Vector<i32> {
+        Vector {
             x: self.x * _rhs,
             y: self.y * _rhs,
         }
     }
 }
-impl Div<i32> for Point<i32> {
-    type Output = Point<i32>;
-    fn div(self, _rhs: i32) -> Point<i32> {
-        Point {
+impl Div<i32> for Vector<i32> {
+    type Output = Vector<i32>;
+    fn div(self, _rhs: i32) -> Vector<i32> {
+        Vector {
             x: self.x / _rhs,
             y: self.y / _rhs,
         }
     }
 }
-impl Mul<PercentScale> for Point<i32> {
-    type Output = Point<i32>;
-    fn mul(self, _rhs: PercentScale) -> Point<i32> {
-        Point {
+impl Mul<PercentValue> for Vector<i32> {
+    type Output = Vector<i32>;
+    fn mul(self, _rhs: PercentValue) -> Vector<i32> {
+        Vector {
             x: self.x * _rhs,
             y: self.y * _rhs,
         }
     }
 }
-impl Mul<PercentScale2D> for Point<i32> {
-    type Output = Point<i32>;
-    fn mul(self, _rhs: PercentScale2D) -> Point<i32> {
-        Point {
-            x: self.x * _rhs.horiz,
-            y: self.y * _rhs.vert,
-        }
-    }
-}
 
-/// Basic Extents of boxes
+/// Basic Extents of ink inside boxes
+// TODO: Image for documentation
 #[derive(Debug, Default, PartialEq, Eq, Clone, Copy)]
 pub struct Extents<T> {
+    /// Horizontal offset of the left edge.
     pub left_side_bearing: T,
-    /// Width of the box
+    /// Width
     pub width: T,
-    /// Maximum extent of box above the baseline.
+    /// Maximum extent above the baseline.
     pub ascent: T,
-    /// Maximum extent of box above the baseline.
+    /// Maximum extent below the baseline.
     pub descent: T,
 }
 impl Extents<i32> {
@@ -130,23 +121,29 @@ impl Div<i32> for Extents<i32> {
         }
     }
 }
-impl Mul<PercentScale2D> for Extents<i32> {
+impl Mul<PercentValue> for Extents<i32> {
     type Output = Extents<i32>;
-    fn mul(self, _rhs: PercentScale2D) -> Extents<i32> {
+    fn mul(self, _rhs: PercentValue) -> Extents<i32> {
         Extents {
-            left_side_bearing: self.left_side_bearing * _rhs.horiz,
-            width: self.width * _rhs.horiz,
-            ascent: self.ascent * _rhs.vert,
-            descent: self.descent * _rhs.vert,
+            left_side_bearing: self.left_side_bearing * _rhs,
+            width: self.width * _rhs,
+            ascent: self.ascent * _rhs,
+            descent: self.descent * _rhs,
         }
     }
+}
+
+#[derive(Default, Copy, Clone, PartialEq, Eq)]
+pub struct Moved<T> {
+    pub offset: Vector<i32>,
+    pub item: T,
 }
 
 /// Describes the box metrics for mathematical objects.
 #[derive(Debug, Default, PartialEq, Eq, Clone, Copy)]
 pub struct Bounds {
     /// Position on the left on the baseline.
-    pub origin: Point<i32>,
+    pub origin: Vector<i32>,
     /// Extents of the bounds.
     pub extents: Extents<i32>,
 }
@@ -205,9 +202,9 @@ impl Div<i32> for Bounds {
     }
 }
 
-impl Mul<PercentScale2D> for Bounds {
+impl Mul<PercentValue> for Bounds {
     type Output = Bounds;
-    fn mul(self, _rhs: PercentScale2D) -> Bounds {
+    fn mul(self, _rhs: PercentValue) -> Bounds {
         Bounds {
             origin: self.origin * _rhs,
             extents: self.extents * _rhs,
@@ -215,21 +212,90 @@ impl Mul<PercentScale2D> for Bounds {
     }
 }
 
-#[derive(Debug)]
-pub enum DrawInstruction {
-    Glyph(Glyph),
-    Line { vector: Point<i32>, thickness: u32 },
+pub trait MathBoxMetrics {
+    fn advance_width(&self) -> i32;
+    fn extents(&self) -> Extents<i32>;
+    fn italic_correction(&self) -> i32;
+    fn top_accent_attachment(&self) -> i32;
 }
 
-pub type Boxes<'a, T> = LazyVec<Box<Iterator<Item = MathBox<'a, T>> + 'a>, MathBox<'a, T>>;
-pub type BoxesIter<'a, T> = lazy_vec::IntoIter<Box<Iterator<Item = MathBox<'a, T>> + 'a>,
-                                               MathBox<'a, T>>;
+impl<T: MathBoxMetrics, U> MathBoxMetrics for WithUserData<T, U> {
+    fn advance_width(&self) -> i32 {
+        self.inner.advance_width()
+    }
+
+    fn extents(&self) -> Extents<i32> {
+        self.inner.extents()
+    }
+
+    fn italic_correction(&self) -> i32 {
+        self.inner.italic_correction()
+    }
+
+    fn top_accent_attachment(&self) -> i32 {
+        self.inner.top_accent_attachment()
+    }
+}
+
+#[derive(Debug)]
+pub enum Drawable<G> {
+    Glyph(G),
+    Line { vector: Vector<i32>, thickness: u32 },
+}
+
+impl<'a> MathBoxMetrics for Drawable<(Glyph, &'a MathShaper)> {
+    fn advance_width(&self) -> i32 {
+        match *self {
+            Drawable::Glyph((ref glyph, ref shaper)) => {
+                shaper.glyph_advance(glyph.glyph_code) * glyph.scale
+            }
+            Drawable::Line { ref vector, .. } => vector.x,
+        }
+    }
+    fn extents(&self) -> Extents<i32> {
+        match *self {
+            Drawable::Glyph((ref glyph, ref shaper)) => {
+                shaper.glyph_extents(glyph.glyph_code) * glyph.scale
+            }
+            Drawable::Line { ref vector, .. } => {
+                Extents {
+                    left_side_bearing: 0,
+                    width: vector.x,
+                    ascent: max(0, -vector.y),
+                    descent: max(0, vector.y),
+                }
+            }
+        }
+    }
+
+    fn italic_correction(&self) -> i32 {
+        match *self {
+            Drawable::Glyph((ref glyph, ref shaper)) => {
+                shaper.italic_correction(glyph.glyph_code) * glyph.scale
+            }
+            Drawable::Line { .. } => 0,
+        }
+    }
+
+    fn top_accent_attachment(&self) -> i32 {
+        let value = match *self {
+            Drawable::Glyph((ref glyph, ref shaper)) => {
+                shaper.top_accent_attachment(glyph.glyph_code) * glyph.scale
+            }
+            _ => 0,
+        };
+        if value == 0 {
+            self.advance_width() / 2
+        } else {
+            value
+        }
+    }
+}
 
 #[derive(Debug)]
 pub enum MathBoxContent<I, G> {
     Empty,
-    Glyph(G),
-    Line { vector: Point<i32>, thickness: u32 },
+    Drawable(Drawable<G>),
     Boxes(I),
 }
 
@@ -239,14 +305,13 @@ impl<I, G> Default for MathBoxContent<I, G> {
     }
 }
 
-impl<'a, T: 'a> MathBoxContent<Boxes<'a, T>, (Glyph, &'a MathShaper)> {
+type BoxList<'a> = LazyVec<Box<Iterator<Item = MathBox<'a>> + 'a>>;
+
+impl<'a> MathBoxMetrics for MathBoxContent<BoxList<'a>, (Glyph, &'a MathShaper)> {
     fn advance_width(&self) -> i32 {
         match *self {
             MathBoxContent::Empty => 0,
-            MathBoxContent::Glyph((ref glyph, ref shaper)) => {
-                shaper.glyph_advance(glyph.glyph_code) * glyph.scale.horiz
-            }
-            MathBoxContent::Line { ref vector, .. } => vector.x,
+            MathBoxContent::Drawable(ref drawable) => drawable.advance_width(),
             MathBoxContent::Boxes(ref boxes) => {
                 boxes.as_slice()
                     .iter()
@@ -260,17 +325,7 @@ impl<'a, T: 'a> MathBoxContent<Boxes<'a, T>, (Glyph, &'a MathShaper)> {
     fn extents(&self) -> Extents<i32> {
         match *self {
             MathBoxContent::Empty => Extents::default(),
-            MathBoxContent::Glyph((ref glyph, ref shaper)) => {
-                shaper.glyph_extents(glyph.glyph_code) * glyph.scale
-            }
-            MathBoxContent::Line { ref vector, .. } => {
-                Extents {
-                    left_side_bearing: 0,
-                    width: vector.x,
-                    ascent: max(0, -vector.y),
-                    descent: max(0, vector.y),
-                }
-            }
+            MathBoxContent::Drawable(ref drawable) => drawable.extents(),
             MathBoxContent::Boxes(ref boxes) => {
                 let slice = boxes.as_slice();
                 let max_ascent = slice.iter()
@@ -281,13 +336,14 @@ impl<'a, T: 'a> MathBoxContent<Boxes<'a, T>, (Glyph, &'a MathShaper)> {
                     .map(|item| item.origin.y + item.extents().descent)
                     .max()
                     .unwrap_or_default();
-                let left_side_bearing = slice[0].extents().left_side_bearing;
+                let left_side_bearing =
+                    slice.get(0).map(|x| x.extents().left_side_bearing).unwrap_or(0);
                 let width = slice.iter()
                     .map(|item| {
-                        item.origin.x + item.extents().left_side_bearing + item.extents().width
-                    })
+                             item.origin.x + item.extents().left_side_bearing + item.extents().width
+                         })
                     .max()
-                    .unwrap_or_default() - left_side_bearing;
+                    .unwrap_or(0) - left_side_bearing;
                 Extents {
                     left_side_bearing: left_side_bearing,
                     width: width,
@@ -301,10 +357,7 @@ impl<'a, T: 'a> MathBoxContent<Boxes<'a, T>, (Glyph, &'a MathShaper)> {
     fn italic_correction(&self) -> i32 {
         match *self {
             MathBoxContent::Empty => 0,
-            MathBoxContent::Glyph((ref glyph, ref shaper)) => {
-                shaper.italic_correction(glyph.glyph_code) * glyph.scale.horiz
-            }
-            MathBoxContent::Line { .. } => 0,
+            MathBoxContent::Drawable(ref drawable) => drawable.italic_correction(),
             MathBoxContent::Boxes(ref boxes) => {
                 boxes.as_slice()
                     .last()
@@ -316,9 +369,7 @@ impl<'a, T: 'a> MathBoxContent<Boxes<'a, T>, (Glyph, &'a MathShaper)> {
 
     fn top_accent_attachment(&self) -> i32 {
         let value = match *self {
-            MathBoxContent::Glyph((ref glyph, ref shaper)) => {
-                shaper.top_accent_attachment(glyph.glyph_code) * glyph.scale.horiz
-            }
+            MathBoxContent::Drawable(ref drawable) => drawable.top_accent_attachment(),
             MathBoxContent::Boxes(ref boxes) if boxes.as_slice().len() == 1 => {
                 boxes.as_slice()
                     .first()
@@ -335,135 +386,75 @@ impl<'a, T: 'a> MathBoxContent<Boxes<'a, T>, (Glyph, &'a MathShaper)> {
     }
 }
 
-pub struct MathBox<'a, T> {
-    content: MathBoxContent<Boxes<'a, T>, (Glyph, &'a MathShaper)>,
-    pub origin: Point<i32>,
+#[derive(Default, Debug, Clone)]
+pub struct CachedMetrics<T> {
+    content: T,
     extents: Cell<Extents<i32>>,
     advance_width: Cell<i32>,
     italic_correction: Cell<i32>,
     top_accent_attachment: Cell<i32>,
-    pub user_info: Option<T>,
 }
 
-impl<'a, T> Default for MathBox<'a, T> {
-    fn default() -> Self {
-        MathBox {
-            content: Default::default(),
-            origin: Default::default(),
-            advance_width: Default::default(),
+impl<T: MathBoxMetrics> CachedMetrics<T> {
+    fn new(metrics: T) -> Self {
+        CachedMetrics {
+            content: metrics,
             extents: Default::default(),
+            advance_width: Default::default(),
             italic_correction: Default::default(),
             top_accent_attachment: Default::default(),
-            user_info: None,
         }
     }
 }
 
-impl<'a, T: 'a> MathBox<'a, T> {
-    pub fn empty(extents: Extents<i32>) -> Self {
-        let mut math_box = MathBox { content: MathBoxContent::Empty, ..Default::default() };
-        math_box.set_extents(extents);
-        math_box.advance_width.set(extents.width);
-        math_box
-    }
-
-    pub fn with_line(from: Point<i32>, to: Point<i32>, thickness: u32) -> Self {
-        MathBox {
-            content: MathBoxContent::Line {
-                vector: to - from,
-                thickness: thickness,
-            },
-            origin: from,
-            ..Default::default()
-        }
-    }
-
-    pub fn with_glyph(glyph: Glyph, shaper: &'a MathShaper) -> Self {
-        MathBox { content: MathBoxContent::Glyph((glyph, shaper)), ..Default::default() }
-    }
-
-    pub fn with_vec(vec: Vec<MathBox<'a, T>>) -> MathBox<'a, T> {
-        MathBox { content: MathBoxContent::Boxes(Boxes::with_vec(vec)), ..Default::default() }
-    }
-
-    pub fn with_iter(iter: Box<Iterator<Item = MathBox<'a, T>> + 'a>) -> MathBox<'a, T> {
-        MathBox { content: MathBoxContent::Boxes(Boxes::with_iter(iter)), ..Default::default() }
-    }
-
-    pub fn into_content(self) -> MathBoxContent<BoxesIter<'a, T>, Glyph> {
-        match self.content {
-            MathBoxContent::Empty => MathBoxContent::Empty,
-            MathBoxContent::Glyph((glyph, _)) => MathBoxContent::Glyph(glyph),
-            MathBoxContent::Boxes(boxes) => MathBoxContent::Boxes(boxes.into_iter()),
-            MathBoxContent::Line { vector, thickness } => {
-                MathBoxContent::Line {
-                    vector: vector,
-                    thickness: thickness,
-                }
-            }
-        }
-    }
-
-    pub fn content(&self) -> MathBoxContent<&[MathBox<'a, T>], Glyph> {
-        match self.content {
-            MathBoxContent::Empty => MathBoxContent::Empty,
-            MathBoxContent::Glyph((glyph, _)) => MathBoxContent::Glyph(glyph),
-            MathBoxContent::Boxes(ref boxes) => MathBoxContent::Boxes(boxes.as_slice()),
-            MathBoxContent::Line { vector, thickness } => {
-                MathBoxContent::Line {
-                    vector: vector,
-                    thickness: thickness,
-                }
-            }
-        }
-    }
-
-    pub fn advance_width(&self) -> i32 {
+impl<T: MathBoxMetrics> MathBoxMetrics for CachedMetrics<T> {
+    fn advance_width(&self) -> i32 {
         if self.advance_width.get() == 0 {
             self.advance_width.set(self.content.advance_width());
         }
         self.advance_width.get()
     }
 
-    fn cache_extents(&self) {
-        self.extents.set(self.content.extents());
-    }
-
-    pub fn extents(&self) -> Extents<i32> {
+    fn extents(&self) -> Extents<i32> {
         if self.extents.get() == Extents::default() {
-            self.cache_extents();
+            self.extents.set(self.content.extents());
         }
         self.extents.get()
     }
 
-    pub fn italic_correction(&self) -> i32 {
+    fn italic_correction(&self) -> i32 {
         if self.italic_correction.get() == 0 {
             self.italic_correction.set(self.content.italic_correction());
         }
         self.italic_correction.get()
     }
 
-    pub fn top_accent_attachment(&self) -> i32 {
+    fn top_accent_attachment(&self) -> i32 {
         if self.top_accent_attachment.get() == 0 {
             self.top_accent_attachment.set(self.content.top_accent_attachment());
         }
         self.top_accent_attachment.get()
     }
+}
 
-    pub fn bounds(&self) -> Bounds {
-        Bounds {
-            origin: self.origin,
-            extents: self.extents(),
-        }
+pub type Content<'a> = MathBoxContent<BoxList<'a>, (Glyph, &'a MathShaper)>;
+
+#[derive(Default)]
+pub struct MathBox<'a> {
+    pub origin: Vector<i32>,
+    pub metrics: CachedMetrics<Content<'a>>,
+}
+
+impl<'a> ::std::fmt::Debug for MathBox<'a> {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
+        write!(f, "MathBox")
     }
+}
 
-    pub fn set_extents(&mut self, extents: Extents<i32>) {
-        self.extents.set(extents)
-    }
-
+impl<'a> MathBox<'a> {
     pub fn first_glyph(&self) -> Option<Glyph> {
-        match self.content {
-            MathBoxContent::Glyph((glyph, _)) => Some(glyph),
+        match self.metrics.content {
+            MathBoxContent::Drawable(Drawable::Glyph((glyph, _))) => Some(glyph),
             MathBoxContent::Boxes(ref boxes) => {
                 boxes.as_slice().first().and_then(|math_box| math_box.first_glyph())
             }
@@ -472,24 +463,77 @@ impl<'a, T: 'a> MathBox<'a, T> {
     }
 
     pub fn last_glyph(&self) -> Option<Glyph> {
-        match self.content {
-            MathBoxContent::Glyph((glyph, _)) => Some(glyph),
+        match self.metrics.content {
+            MathBoxContent::Drawable(Drawable::Glyph((glyph, _))) => Some(glyph),
             MathBoxContent::Boxes(ref boxes) => {
                 boxes.as_slice().last().and_then(|math_box| math_box.last_glyph())
             }
             _ => None,
         }
     }
+
+    fn with_content(content: Content<'a>) -> Self {
+        let cached = CachedMetrics::new(content);
+        MathBox {
+            metrics: cached,
+            origin: Vector::default(),
+        }
+    }
+
+    pub fn empty(extents: Extents<i32>) -> Self {
+        let math_box = MathBox::with_content(MathBoxContent::Empty);
+        math_box.metrics.extents.set(extents);
+        math_box.metrics.advance_width.set(extents.width);
+        math_box
+    }
+
+    pub fn with_line(from: Vector<i32>, to: Vector<i32>, thickness: u32) -> Self {
+        let mut math_box = MathBox::with_content(MathBoxContent::Drawable(Drawable::Line {
+                                                                              vector: to - from,
+                                                                              thickness: thickness,
+                                                                          }));
+        math_box.origin = from;
+        math_box
+    }
+
+    pub fn with_glyph(glyph: Glyph, shaper: &'a MathShaper) -> Self {
+        MathBox::with_content(MathBoxContent::Drawable(Drawable::Glyph((glyph, shaper))))
+    }
+
+    pub fn with_vec(vec: Vec<MathBox<'a>>) -> Self {
+        MathBox::with_content(MathBoxContent::Boxes(LazyVec::with_vec(vec)))
+    }
+
+    pub fn with_iter(iter: Box<Iterator<Item = MathBox<'a>> + 'a>) -> Self {
+        MathBox::with_content(MathBoxContent::Boxes(LazyVec::with_iter(iter)))
+    }
+
+    pub fn bounds(&self) -> Bounds {
+        Bounds {
+            origin: self.origin,
+            extents: self.metrics.extents(),
+        }
+    }
+
+    pub fn content(&self) -> &Content<'a> {
+        &self.metrics.content
+    }
 }
 
-impl<'a, T: 'a> std::fmt::Debug for MathBox<'a, T> {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        f.debug_struct("MathBox")
-            .field("origin", &self.origin)
-            .field("extents", &self.extents.get())
-            .field("italic_correction", &self.italic_correction.get())
-            .field("top_accent_attachment", &self.top_accent_attachment.get())
-            .field("content", &self.content())
-            .finish()
+impl<'a> MathBoxMetrics for MathBox<'a> {
+    fn advance_width(&self) -> i32 {
+        self.metrics.advance_width()
+    }
+
+    fn extents(&self) -> Extents<i32> {
+        self.metrics.extents()
+    }
+
+    fn italic_correction(&self) -> i32 {
+        self.metrics.italic_correction()
+    }
+
+    fn top_accent_attachment(&self) -> i32 {
+        self.metrics.top_accent_attachment()
     }
 }

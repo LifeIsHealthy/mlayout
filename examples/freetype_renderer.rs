@@ -232,5 +232,5 @@ fn main() {
                        (width / 3i32) as u32,
                        height as u32,
                        image::RGBA(8))
-        .unwrap();
+            .unwrap();
 }

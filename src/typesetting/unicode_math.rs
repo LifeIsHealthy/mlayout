@@ -1,5 +1,4 @@
 use std::char;
-use std::str::FromStr;
 
 /// Mathematical font families available from the unicode character range.
 #[derive(Copy, Clone)]
@@ -22,6 +21,7 @@ pub enum Family {
     Monospace = 13,
 }
 
+#[cfg_attr(rustfmt, rustfmt_skip)]
 const ASCII_CHARACTERS: &'static [u32] = &[
     // small latin
     0x61, 0x62, 0x63, 0x64, 0x65, 0x66, 0x67, 0x68, 0x69, 0x6a,
@@ -33,6 +33,7 @@ const ASCII_CHARACTERS: &'static [u32] = &[
     0x55, 0x56, 0x57, 0x58, 0x59, 0x5a,
 ];
 
+#[cfg_attr(rustfmt, rustfmt_skip)]
 const ASCII_WITH_GREEK_CHARACTERS: &'static [u32] = &[
     // small latin
     0x61, 0x62, 0x63, 0x64, 0x65, 0x66, 0x67, 0x68, 0x69, 0x6a,
@@ -56,6 +57,34 @@ const ASCII_WITH_GREEK_CHARACTERS: &'static [u32] = &[
     0x3a3, 0x3a4, 0x3a5, 0x3a6, 0x3a7, 0x3a8, 0x3a9, 0x2207, //nabla
 ];
 
+#[cfg_attr(rustfmt, rustfmt_skip)]
+const ASCII_WITH_GREEK_AND_DOTLESS_CHARACTERS: &'static [u32] = &[
+    // small latin
+    0x61, 0x62, 0x63, 0x64, 0x65, 0x66, 0x67, 0x68, 0x69, 0x6a,
+    0x6b, 0x6c, 0x6d, 0x6e, 0x6f, 0x70, 0x71, 0x72, 0x73, 0x74,
+    0x75, 0x76, 0x77, 0x78, 0x79, 0x7a,
+    // capital latin
+    0x41, 0x42, 0x43, 0x44, 0x45, 0x46, 0x47, 0x48, 0x49, 0x4a,
+    0x4b, 0x4c, 0x4d, 0x4e, 0x4f, 0x50, 0x51, 0x52, 0x53, 0x54,
+    0x55, 0x56, 0x57, 0x58, 0x59, 0x5a,
+    // small greek
+    0x3b1, 0x3b2, 0x3b3, 0x3b4, 0x3b5, 0x3b6, 0x3b7, 0x3b8, 0x3b9,
+    0x3ba, 0x3bb, 0x3bc, 0x3bd, 0x3be, 0x3bf, 0x3c0, 0x3c1, 0x3c2,
+    0x3c3, 0x3c4, 0x3c5, 0x3c6, 0x3c7, 0x3c8, 0x3c9, 0x2202, // partial diff
+    0x3f5, /* epsilon symbol */ 0x3d1, /* theta symbol */
+    0x3f0, /* kappa symbol */   0x278, /* phi symbol */
+    0x3f1, /* rho symbol */     0x3d6, /* pi symbol */
+
+    // capital greek (notice theta symbol 0x3f4)
+    0x391, 0x392, 0x393, 0x394, 0x395, 0x396, 0x397, 0x398, 0x399,
+    0x39a, 0x39b, 0x39c, 0x39d, 0x39e, 0x39f, 0x3a0, 0x3f4, 0x3a2,
+    0x3a3, 0x3a4, 0x3a5, 0x3a6, 0x3a7, 0x3a8, 0x3a9, 0x2207, //nabla
+
+    // dotless i and j
+    0x131, 0x237,
+];
+
+#[cfg_attr(rustfmt, rustfmt_skip)]
 const ASCII_WITH_NUMERALS_CHARACTERS: &'static [u32] = &[
     // small latin
     0x61, 0x62, 0x63, 0x64, 0x65, 0x66, 0x67, 0x68, 0x69, 0x6a,
@@ -70,6 +99,7 @@ const ASCII_WITH_NUMERALS_CHARACTERS: &'static [u32] = &[
     0x30, 0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38, 0x39,
 ];
 
+#[cfg_attr(rustfmt, rustfmt_skip)]
 const ASCII_WITH_NUMERALS_AND_GREEK_CHARACTERS: &'static [u32] = &[
     // small latin
     0x61, 0x62, 0x63, 0x64, 0x65, 0x66, 0x67, 0x68, 0x69, 0x6a,
@@ -108,6 +138,7 @@ const ASCII_WITH_NUMERALS_AND_GREEK_CHARACTERS: &'static [u32] = &[
  ", ".join("0x{:x}".format(num) for num in alphabet_from_point(<start_point>))
  */
 
+#[cfg_attr(rustfmt, rustfmt_skip)]
 const ITALICS: &'static [u32] = &[
     // small latin
     0x1d44e, 0x1d44f, 0x1d450, 0x1d451, 0x1d452, 0x1d453, 0x1d454, // a-g
@@ -133,8 +164,12 @@ const ITALICS: &'static [u32] = &[
     0x1d6e9, 0x1d6ea, 0x1d6eb, 0x1d6ec, 0x1d6ed, 0x1d6ee, 0x1d6ef,
     0x1d6f0, 0x1d6f1, 0x1d6f2, 0x1d6f3, 0x1d6f4, 0x1d6f5, 0x1d6f6,
     0x1d6f7, 0x1d6f8, 0x1d6f9, 0x1d6fa, 0x1d6fb,
+
+    // dotless i and j
+    0x1d6a4, 0x1d6a5
 ];
 
+#[cfg_attr(rustfmt, rustfmt_skip)]
 const BOLD: &'static [u32] = &[
     // small latin
     0x1d41a, 0x1d41b, 0x1d41c, 0x1d41d, 0x1d41e, 0x1d41f, 0x1d420,
@@ -166,6 +201,7 @@ const BOLD: &'static [u32] = &[
     0x1d7d5, 0x1d7d6, 0x1d7d7
 ];
 
+#[cfg_attr(rustfmt, rustfmt_skip)]
 const BOLD_ITALICS: &'static [u32] = &[
     // small latin
     0x1d482, 0x1d483, 0x1d484, 0x1d485, 0x1d486, 0x1d487, 0x1d488,
@@ -193,6 +229,7 @@ const BOLD_ITALICS: &'static [u32] = &[
     0x1d731, 0x1d732, 0x1d733, 0x1d734, 0x1d735,
 ];
 
+#[cfg_attr(rustfmt, rustfmt_skip)]
 const SCRIPT: &'static [u32] = &[
     // small latin
     0x1d4b6, 0x1d4b7, 0x1d4b8, 0x1d4b9, 0x212f,  0x1d4bb, 0x210a,
@@ -207,6 +244,7 @@ const SCRIPT: &'static [u32] = &[
     0x1d4b1, 0x1d4b2, 0x1d4b3, 0x1d4b4, 0x1d4b5,
 ];
 
+#[cfg_attr(rustfmt, rustfmt_skip)]
 const BOLD_SCRIPT: &'static [u32] = &[
     // small latin
     0x1d4ea, 0x1d4eb, 0x1d4ec, 0x1d4ed, 0x1d4ee, 0x1d4ef, 0x1d4f0,
@@ -221,6 +259,7 @@ const BOLD_SCRIPT: &'static [u32] = &[
     0x1d4e5, 0x1d4e6, 0x1d4e7, 0x1d4e8, 0x1d4e9,
 ];
 
+#[cfg_attr(rustfmt, rustfmt_skip)]
 const FRAKTUR: &'static [u32] = &[
     // small latin
     0x1d51e, 0x1d51f, 0x1d520, 0x1d521, 0x1d522, 0x1d523, 0x1d524,
@@ -235,6 +274,7 @@ const FRAKTUR: &'static [u32] = &[
     0x1d519, 0x1d51a, 0x1d51b, 0x1d51c, 0x2128,
 ];
 
+#[cfg_attr(rustfmt, rustfmt_skip)]
 const DOUBLE_STRUCK: &'static [u32] = &[
     // small latin
     0x1d552, 0x1d553, 0x1d554, 0x1d555, 0x1d556, 0x1d557, 0x1d558,
@@ -253,6 +293,7 @@ const DOUBLE_STRUCK: &'static [u32] = &[
     0x1d7df, 0x1d7e0, 0x1d7e1,
 ];
 
+#[cfg_attr(rustfmt, rustfmt_skip)]
 const BOLD_FRAKTUR: &'static [u32] = &[
     // small latin
     0x1d586, 0x1d587, 0x1d588, 0x1d589, 0x1d58a, 0x1d58b, 0x1d58c,
@@ -267,6 +308,7 @@ const BOLD_FRAKTUR: &'static [u32] = &[
     0x1d581, 0x1d582, 0x1d583, 0x1d584, 0x1d585,
 ];
 
+#[cfg_attr(rustfmt, rustfmt_skip)]
 const SANS_SERIF: &'static [u32] = &[
     // small latin
     0x1d5ba, 0x1d5bb, 0x1d5bc, 0x1d5bd, 0x1d5be, 0x1d5bf, 0x1d5c0,
@@ -285,6 +327,7 @@ const SANS_SERIF: &'static [u32] = &[
     0x1d7e9, 0x1d7ea, 0x1d7eb,
 ];
 
+#[cfg_attr(rustfmt, rustfmt_skip)]
 const SANS_SERIF_BOLD: &'static [u32] = &[
     // small latin
     0x1d5ee, 0x1d5ef, 0x1d5f0, 0x1d5f1, 0x1d5f2, 0x1d5f3, 0x1d5f4,
@@ -316,6 +359,7 @@ const SANS_SERIF_BOLD: &'static [u32] = &[
     0x1d7f3, 0x1d7f4, 0x1d7f5,
 ];
 
+#[cfg_attr(rustfmt, rustfmt_skip)]
 const SANS_SERIF_ITALICS: &'static [u32] = &[
     // small latin
     0x1d622, 0x1d623, 0x1d624, 0x1d625, 0x1d626, 0x1d627, 0x1d628,
@@ -330,6 +374,7 @@ const SANS_SERIF_ITALICS: &'static [u32] = &[
     0x1d61d, 0x1d61e, 0x1d61f, 0x1d620, 0x1d621,
 ];
 
+#[cfg_attr(rustfmt, rustfmt_skip)]
 const SANS_SERIF_BOLD_ITALICS: &'static [u32] = &[
     // small latin
     0x1d656, 0x1d657, 0x1d658, 0x1d659, 0x1d65a, 0x1d65b, 0x1d65c,
@@ -357,6 +402,7 @@ const SANS_SERIF_BOLD_ITALICS: &'static [u32] = &[
     0x1d7a5, 0x1d7a6, 0x1d7a7, 0x1d7a8, 0x1d7a9,
 ];
 
+#[cfg_attr(rustfmt, rustfmt_skip)]
 const MONOSPACE: &'static [u32] = &[
     // small latin
     0x1d68a, 0x1d68b, 0x1d68c, 0x1d68d, 0x1d68e, 0x1d68f, 0x1d690,
@@ -375,37 +421,33 @@ const MONOSPACE: &'static [u32] = &[
     0x1d7fd, 0x1d7fe, 0x1d7ff,
 ];
 
-static FAMILY_TABLES: &'static [&'static [u32]] = &[
-    ITALICS,
-    BOLD,
-    BOLD_ITALICS,
-    SCRIPT,
-    BOLD_SCRIPT,
-    FRAKTUR,
-    DOUBLE_STRUCK,
-    BOLD_FRAKTUR,
-    SANS_SERIF,
-    SANS_SERIF_BOLD,
-    SANS_SERIF_ITALICS,
-    SANS_SERIF_BOLD_ITALICS,
-    MONOSPACE
-];
+static FAMILY_TABLES: &'static [&'static [u32]] = &[ITALICS,
+                                                    BOLD,
+                                                    BOLD_ITALICS,
+                                                    SCRIPT,
+                                                    BOLD_SCRIPT,
+                                                    FRAKTUR,
+                                                    DOUBLE_STRUCK,
+                                                    BOLD_FRAKTUR,
+                                                    SANS_SERIF,
+                                                    SANS_SERIF_BOLD,
+                                                    SANS_SERIF_ITALICS,
+                                                    SANS_SERIF_BOLD_ITALICS,
+                                                    MONOSPACE];
 
-static CHARACTER_TABLES: &'static [&'static [u32]] = &[
-    ASCII_WITH_GREEK_CHARACTERS,
-    ASCII_WITH_NUMERALS_AND_GREEK_CHARACTERS,
-    ASCII_WITH_GREEK_CHARACTERS,
-    ASCII_CHARACTERS,
-    ASCII_CHARACTERS,
-    ASCII_CHARACTERS,
-    ASCII_WITH_NUMERALS_CHARACTERS,
-    ASCII_CHARACTERS,
-    ASCII_WITH_NUMERALS_CHARACTERS,
-    ASCII_WITH_NUMERALS_AND_GREEK_CHARACTERS,
-    ASCII_CHARACTERS,
-    ASCII_WITH_GREEK_CHARACTERS,
-    ASCII_WITH_NUMERALS_CHARACTERS
-];
+static CHARACTER_TABLES: &'static [&'static [u32]] = &[ASCII_WITH_GREEK_AND_DOTLESS_CHARACTERS,
+                                                       ASCII_WITH_NUMERALS_AND_GREEK_CHARACTERS,
+                                                       ASCII_WITH_GREEK_CHARACTERS,
+                                                       ASCII_CHARACTERS,
+                                                       ASCII_CHARACTERS,
+                                                       ASCII_CHARACTERS,
+                                                       ASCII_WITH_NUMERALS_CHARACTERS,
+                                                       ASCII_CHARACTERS,
+                                                       ASCII_WITH_NUMERALS_CHARACTERS,
+                                                       ASCII_WITH_NUMERALS_AND_GREEK_CHARACTERS,
+                                                       ASCII_CHARACTERS,
+                                                       ASCII_WITH_GREEK_CHARACTERS,
+                                                       ASCII_WITH_NUMERALS_CHARACTERS];
 
 pub fn convert_character_to_family(c: char, family: Family) -> char {
     if let Family::Normal = family {
@@ -429,7 +471,10 @@ mod tests {
     #[test]
     fn unicode_math_test() {
         assert_eq!('a', convert_character_to_family('a', Family::Normal));
-        let italic_a: char =  char::from_u32(0x1d434).unwrap();
+        let italic_a: char = char::from_u32(0x1d434).unwrap();
         assert_eq!(italic_a, convert_character_to_family('A', Family::Italics));
+        let latin_dotless_i = '\u{131}';
+        let mathematical_dotless_i = '\u{1d6a4}';
+        assert_eq!(mathematical_dotless_i, convert_character_to_family(latin_dotless_i, Family::Italics));
     }
 }

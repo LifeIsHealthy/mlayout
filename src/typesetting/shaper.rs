@@ -6,11 +6,10 @@ use std;
 use std::cell::RefCell;
 use std::str::FromStr;
 
-use types::{CornerPosition, PercentScale, LayoutStyle};
-use super::math_box::{Point, Extents, Bounds};
-
-pub use self::harfbuzz_rs::{Font, Position, GlyphPosition, GlyphExtents, GlyphInfo, GlyphBuffer,
-                            Tag, Blob, HarfbuzzObject, UnicodeBuffer};
+use types::{CornerPosition, PercentValue, LayoutStyle};
+use super::math_box::{Vector, Extents};
+pub use self::harfbuzz_rs::Position;
+use self::harfbuzz_rs::{Font, GlyphBuffer, Tag, Blob, HarfbuzzObject, UnicodeBuffer};
 
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
 #[repr(C)]
@@ -75,8 +74,8 @@ pub enum MathConstant {
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub struct ShapedGlyph {
-    pub origin: Point<i32>,
-    pub advance: Point<i32>,
+    pub origin: Vector<i32>,
+    pub advance: Vector<i32>,
     pub glyph: u32,
 }
 
@@ -99,6 +98,8 @@ pub trait MathShaper {
 
     fn shape_string(&self, string: &str, style: LayoutStyle) -> Box<Iterator<Item = ShapedGlyph>>;
 
+    fn can_stretch_glyph(&self, glyph: u32, horizontal: bool) -> bool;
+
     fn stretch_glyph<'a>(&'a self,
                          glyph: u32,
                          horizontal: bool,
@@ -108,7 +109,7 @@ pub trait MathShaper {
 
     fn get_math_table(&self) -> &[u8];
 
-    fn scale_factor_for_script_level(&self, script_level: u8) -> PercentScale {
+    fn scale_factor_for_script_level(&self, script_level: u8) -> PercentValue {
         let percent = if script_level >= 1 {
             if script_level >= 2 {
                 self.math_constant(MathConstant::ScriptScriptPercentScaleDown)
@@ -118,7 +119,7 @@ pub trait MathShaper {
         } else {
             100
         };
-        PercentScale::new(percent as u8)
+        PercentValue::new(percent as u8)
     }
 
     fn em_size(&self) -> Position;
@@ -147,29 +148,33 @@ impl<'a> HarfbuzzShaper<'a> {
     }
 
     fn shape_with_style(&self, string: &str, style: LayoutStyle) -> GlyphBuffer {
-        let buffer = self.buffer.borrow_mut().take().unwrap();
-        // hb::hb_buffer_set_language(buffer.hb_buffer, hb::hb_language_get_default());
+        let buffer = self.buffer
+            .borrow_mut()
+            .take()
+            .unwrap();
         let mut features: Vec<hb::hb_feature_t> = Vec::with_capacity(2);
         if style.script_level >= 1 {
             let math_variants_tag = Tag::new('s', 's', 't', 'y');
             let variant_num = style.script_level as u32;
 
             features.push(hb::hb_feature_t {
-                tag: math_variants_tag.0,
-                value: variant_num,
-                start: 0,
-                end: std::u32::MAX,
-            })
+                              tag: math_variants_tag.0,
+                              value: variant_num,
+                              start: 0,
+                              end: std::u32::MAX,
+                          })
         }
-        //        features.push(hb::hb_feature_t {
-        //            tag: Tag::new('f', 'l', 'a', 'c').0,
-        //            value: 1,
-        //            start: 0,
-        //            end: std::u32::MAX,
-        //        });
-        buffer.add_str(string)
-            .set_script(Tag::from_str("Math").unwrap())
-            .shape(&self.font, &features)
+        if style.flat_accent {
+            features.push(hb::hb_feature_t {
+                              tag: Tag::new('f', 'l', 'a', 'c').0,
+                              value: 1,
+                              start: 0,
+                              end: std::u32::MAX,
+                          });
+        }
+
+        buffer.add_str(string).set_script(Tag::from_str("Math").unwrap()).shape(&self.font,
+                                                                                &features)
     }
 
     fn layout_boxes(&self, glyph_buffer: GlyphBuffer) -> Box<Iterator<Item = ShapedGlyph>> {
@@ -179,11 +184,11 @@ impl<'a> HarfbuzzShaper<'a> {
             positions.iter()
                 .zip(infos.iter())
                 .map(move |(pos, info)| {
-                    let origin = Point {
+                    let origin = Vector {
                         x: pos.x_offset,
                         y: pos.y_offset,
                     };
-                    let advance = Point {
+                    let advance = Vector {
                         x: pos.x_advance,
                         y: pos.y_advance,
                     };
@@ -201,11 +206,11 @@ impl<'a> HarfbuzzShaper<'a> {
     }
 }
 
-fn point_with_offset(offset: i32, horizontal: bool) -> Point<i32> {
+fn point_with_offset(offset: i32, horizontal: bool) -> Vector<i32> {
     if horizontal {
-        Point { x: offset, y: 0 }
+        Vector { x: offset, y: 0 }
     } else {
-        Point { x: 0, y: offset }
+        Vector { x: 0, y: offset }
     }
 }
 
@@ -232,7 +237,7 @@ fn try_base_glyph<'a>(shaper: &HarfbuzzShaper<'a>,
     }
 }
 
-#[derive(Copy, Clone)]
+#[derive(Debug, Copy, Clone)]
 struct VariantIterator<'a> {
     shaper: &'a HarfbuzzShaper<'a>,
     glyph: u32,
@@ -261,7 +266,22 @@ impl<'a> Iterator for VariantIterator<'a> {
             None
         }
     }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        let total_variants = unsafe {
+            hb::hb_ot_math_get_glyph_variants(self.shaper.font.as_raw(),
+                                              self.glyph,
+                                              self.direction,
+                                              self.index,
+                                              &mut 0,
+                                              std::ptr::null_mut())
+        } as usize;
+        let remaining_elements = total_variants - self.index as usize;
+        (remaining_elements, Some(remaining_elements))
+    }
 }
+
+impl<'a> ExactSizeIterator for VariantIterator<'a> {}
 
 fn try_variant<'a>(shaper: &HarfbuzzShaper<'a>,
                    glyph: u32,
@@ -275,24 +295,25 @@ fn try_variant<'a>(shaper: &HarfbuzzShaper<'a>,
         hb::HB_DIRECTION_TTB
     };
 
-    let mut iter = VariantIterator {
+    let iter = VariantIterator {
         shaper: shaper,
         glyph: glyph,
         direction: direction,
         index: 0,
     };
 
-    let variant = if as_accent {
-        // return the largest variant that is smaller than the target size
-        iter.filter(|&variant| variant.advance <= target_size as i32)
+    let variant =
+        if as_accent {
+            // return the largest variant that is smaller than the target size
+            iter.filter(|&variant| variant.advance <= target_size as i32)
             .max_by_key(|&variant| variant.advance)
-    } else {
-        // return the smallest variant that is larger than the target size
-        iter.filter(|&variant| variant.advance >= target_size as i32)
+        } else {
+            // return the smallest variant that is larger than the target size
+            iter.filter(|&variant| variant.advance >= target_size as i32)
             .min_by_key(|&variant| variant.advance)
-    };
+        };
 
-    let mut variant = match variant {
+    let variant = match variant {
         Some(variant) => variant,
         None => return None,
     };
@@ -335,7 +356,23 @@ impl<'a> Iterator for AssemblyIterator<'a> {
             None
         }
     }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        let total_parts = unsafe {
+            hb::hb_ot_math_get_glyph_assembly(self.shaper.font.as_raw(),
+                                              self.glyph,
+                                              self.direction,
+                                              self.index,
+                                              &mut 0,
+                                              std::ptr::null_mut(),
+                                              &mut 0)
+        } as usize;
+        let remaining_elements = total_parts - self.index as usize;
+        (remaining_elements, Some(remaining_elements))
+    }
 }
+
+impl<'a> ExactSizeIterator for AssemblyIterator<'a> {}
 
 fn try_assembly<'a>(shaper: &'a HarfbuzzShaper<'a>,
                     glyph: u32,
@@ -446,7 +483,7 @@ fn try_assembly<'a>(shaper: &'a HarfbuzzShaper<'a>,
             let glyph = ShapedGlyph {
                 glyph: part.glyph,
                 origin: origin,
-                advance: Point::default(),
+                advance: Vector::default(),
             };
             *current_offset += delta_offset;
             Some((glyph, part.full_advance))
@@ -499,6 +536,38 @@ impl<'a> MathShaper for HarfbuzzShaper<'a> {
     fn shape_string(&self, string: &str, style: LayoutStyle) -> Box<Iterator<Item = ShapedGlyph>> {
         let glyph_buffer = self.shape_with_style(string, style);
         self.layout_boxes(glyph_buffer)
+    }
+
+    fn can_stretch_glyph(&self, glyph: u32, horizontal: bool) -> bool {
+        let direction = if horizontal {
+            hb::HB_DIRECTION_LTR
+        } else {
+            hb::HB_DIRECTION_TTB
+        };
+
+        let variant_iter = VariantIterator {
+            shaper: self,
+            glyph: glyph,
+            direction: direction,
+            index: 0,
+        };
+
+        if variant_iter.len() > 0 {
+            return true;
+        }
+
+        let assembly_iter = AssemblyIterator {
+            shaper: self,
+            glyph: glyph,
+            direction: direction,
+            index: 0,
+        };
+
+        if assembly_iter.len() > 0 {
+            return true;
+        }
+
+        false
     }
 
     fn stretch_glyph<'b>(&'b self,

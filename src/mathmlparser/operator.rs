@@ -1,9 +1,7 @@
-use std::str::FromStr;
-use std::ops::Not;
+use types::{Length, MathItem, StretchConstraints, Operator, Index, Atom, OverUnder,
+            GeneralizedFraction};
 
-use types::{Length, MathItem, StretchConstraints, Operator};
-
-use super::{MExpression, MathmlInfo, FromXmlAttribute};
+use super::{FromXmlAttribute, ParseContext};
 use super::operator_dict;
 
 bitflags! {
@@ -76,56 +74,62 @@ impl Attributes {
 
 // (Embellished) operators are treated specially because their default attribute values depend
 // on the surrounding elements.
-pub fn process_operators(list: &mut Vec<MExpression>) {
-    let mut first_non_ws_index = -1;
-    let mut last_non_ws_index = 0;
-    let operator_indices = list.iter_mut()
-        .enumerate()
-        .filter(|&(_, ref elem)| elem.user_info.is_space.not())
-        .inspect(|&(index, _)| {
-            if first_non_ws_index == -1 {
-                first_non_ws_index = index as isize;
-            }
-            last_non_ws_index = index;
-        })
-        .filter(|&(_, ref elem)| elem.user_info.is_operator())
-        .map(|(index, _)| index)
+pub fn process_operators(list: &mut Vec<Index>, context: &mut ParseContext) {
+    // filter out all whitespace elements
+    let non_whitespace_list = list.iter()
+        .cloned()
+        .filter(|&index| {
+                    context.mathml_info
+                        .get(index.into())
+                        .map(|info| !info.is_space)
+                        .unwrap_or(true)
+                })
         .collect::<Vec<_>>();
 
-    for index in &operator_indices {
-        let elem = &mut list[*index];
-        if first_non_ws_index as usize != last_non_ws_index {
-            if *index == first_non_ws_index as usize {
-                set_default_form(elem, Form::Prefix);
-            } else if *index == last_non_ws_index {
-                set_default_form(elem, Form::Postfix);
+    for &index in &non_whitespace_list {
+        if !context.mathml_info
+                .get(index.into())
+                .map(|info| info.is_operator())
+                .unwrap_or(false) {
+            // current element is not an operator, nothing to do
+            continue;
+        }
+        if non_whitespace_list.len() > 1 {
+            if index == *non_whitespace_list.first().unwrap() {
+                set_default_form(index, Form::Prefix, context);
+            } else if index == *non_whitespace_list.last().unwrap() {
+                set_default_form(index, Form::Postfix, context);
             }
         }
-        set_default_form(elem, Form::Infix);
-        guess_operator_attributes(elem);
-        make_operator(elem);
+
+        set_default_form(index, Form::Infix, context);
+        guess_operator_attributes(index, context);
+        make_operator(index, context);
     }
 }
 
-pub fn guess_if_operator_with_form(mut elem: MExpression, form: Form) -> MExpression {
-    set_default_form(&mut elem, form);
-    guess_operator_attributes(&mut elem);
-    make_operator(&mut elem);
-    elem
+pub fn guess_if_operator_with_form(index: Index, form: Form, context: &mut ParseContext) -> Index {
+    set_default_form(index, form, context);
+    guess_operator_attributes(index, context);
+    make_operator(index, context);
+    index
 }
 
-fn set_default_form(elem: &mut MExpression, form: Form) {
-    elem.user_info
-        .operator_attrs
-        .as_mut()
-        .map(|op_attrs| op_attrs.form = op_attrs.form.or(Some(form)));
+fn set_default_form(index: Index, form: Form, context: &mut ParseContext) {
+    let info = context.mathml_info.get_mut(index.into());
+    let mut operator_attrs = match info.and_then(|info| info.operator_attrs.as_mut()) {
+        Some(operator_attrs) => operator_attrs,
+        None => return,
+    };
+    operator_attrs.form = operator_attrs.form.or(Some(form))
 }
 
-fn guess_operator_attributes(elem: &mut MExpression) {
-    if elem.user_info.operator_attrs.is_none() {
-        return
-    }
-    let operator_attrs = elem.user_info.operator_attrs.as_mut().unwrap();
+fn guess_operator_attributes(index: Index, context: &mut ParseContext) {
+    let info = context.mathml_info.get_mut(index.into());
+    let mut operator_attrs = match info.and_then(|info| info.operator_attrs.as_mut()) {
+        Some(operator_attrs) => operator_attrs,
+        None => return,
+    };
 
     let form = operator_attrs.form.expect("operator has no form");
     let entry = operator_attrs.character
@@ -143,48 +147,57 @@ fn guess_operator_attributes(elem: &mut MExpression) {
                            (!operator_attrs.user_overrides & entry.flags);
 }
 
-fn find_core_operator(embellished_op: &mut MExpression) -> Option<&mut MathItem<MathmlInfo>> {
-    match embellished_op.content {
-        MathItem::Field(_) => Some(&mut embellished_op.content),
-        MathItem::Atom(ref mut atom) => find_core_operator(&mut atom.nucleus),
-        MathItem::OverUnder(ref mut ou) => find_core_operator(&mut ou.nucleus),
-        MathItem::GeneralizedFraction(ref mut frac) => find_core_operator(&mut frac.numerator),
-        _ => None,
-    }
+fn find_core_operator(embellished_op: Index, context: &mut ParseContext) -> Option<Index> {
+    let core_index = match context.expr[embellished_op] {
+        MathItem::Field(_) => return Some(embellished_op),
+        MathItem::Atom(Atom { nucleus, .. }) => nucleus,
+        MathItem::OverUnder(OverUnder { nucleus, .. }) => nucleus,
+        MathItem::GeneralizedFraction(GeneralizedFraction { numerator, .. }) => numerator,
+        _ => return None,
+    };
+    find_core_operator(core_index, context)
 }
 
-fn set_movable_limits(embellished_op: &mut MExpression) {
-    match embellished_op.content {
-        MathItem::Atom(ref mut atom) => set_movable_limits(&mut atom.nucleus),
+fn set_movable_limits(embellished_op: Index, context: &mut ParseContext) {
+    let core_index = match context.expr[embellished_op] {
+        MathItem::Atom(Atom { nucleus, .. }) => nucleus,
         MathItem::OverUnder(ref mut ou) => {
             ou.is_limits = true;
-            set_movable_limits(&mut ou.nucleus)
-        },
-        MathItem::GeneralizedFraction(ref mut frac) => set_movable_limits(&mut frac.numerator),
-        _ => {},
-    }
+            ou.nucleus
+        }
+        MathItem::GeneralizedFraction(GeneralizedFraction { numerator, .. }) => numerator,
+        _ => return,
+    };
+    set_movable_limits(core_index, context)
 }
 
-fn make_operator(elem: &mut MExpression) {
-    if elem.user_info.operator_attrs.is_none() {
-        return
-    }
-    let operator_attrs = elem.user_info.operator_attrs.unwrap();
+fn make_operator(index: Index, context: &mut ParseContext) {
+    let operator_attrs = {
+        let info = context.mathml_info.get(index.into());
+        match info.and_then(|info| info.operator_attrs) {
+            Some(operator_attrs) => operator_attrs,
+            None => return,
+        }
+    };
+
     let flags = operator_attrs.flags;
 
     if flags.contains(MOVABLE_LIMITS) {
-        set_movable_limits(elem);
+        set_movable_limits(index, context);
     }
 
-    if let Some(item) = find_core_operator(elem) {
+    if let Some(core_index) = find_core_operator(index, context) {
         let stretch_constraints = if flags.contains(STRETCHY) {
-            Some(StretchConstraints { symmetric: flags.contains(SYMMETRIC), ..Default::default() })
+            Some(StretchConstraints {
+                     symmetric: flags.contains(SYMMETRIC),
+                     ..Default::default()
+                 })
         } else {
             None
         };
-        let field = match *item {
+        let field = match context.expr[core_index] {
             MathItem::Field(ref field) => field.clone(),
-            _ => unreachable!()
+            _ => unreachable!(),
         };
         let new_elem = Operator {
             stretch_constraints: stretch_constraints,
@@ -194,6 +207,28 @@ fn make_operator(elem: &mut MExpression) {
             trailing_space: operator_attrs.rspace.expect("operator has no rspace"),
             ..Default::default()
         };
-        ::std::mem::replace(item, MathItem::Operator(new_elem));
+        context.expr[core_index] = MathItem::Operator(new_elem);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use mathmlparser::ParseContext;
+    use types::MathExpression;
+    use mathmlparser::VecMap;
+
+    #[test]
+    fn test_set_default_form() {
+        let expr = MathExpression::new();
+        let info = VecMap::new();
+        let mut context = ParseContext {
+            expr: expr,
+            mathml_info: info,
+        };
+        let context = ParseContext {
+            expr: MathExpression::new(),
+            mathml_info: VecMap::new(),
+        };
+
     }
 }
