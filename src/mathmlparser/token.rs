@@ -88,7 +88,7 @@ fn parse_token_attribute<'a>(style: &mut TokenStyle,
 
 fn adapt_to_family(text: &str, family: Option<Family>) -> Cow<str> {
     if family.is_none() {
-        if text.len() == 1 {
+        if text.chars().count() == 1 {
             let conv = convert_character_to_family(text.chars().next().unwrap(), Family::Italics);
             conv.to_string().into()
         } else {
