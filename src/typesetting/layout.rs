@@ -756,7 +756,10 @@ impl<'a> MathLayout<'a, MathBox<'a>> for Option<&'a MathItem> {
         }
     }
 
-    fn operator_properties(&self, expr: &'a  MathExpression, options: LayoutOptions<'a>) -> Option<OperatorProperties> {
+    fn operator_properties(&self,
+                           expr: &'a MathExpression,
+                           options: LayoutOptions<'a>)
+                           -> Option<OperatorProperties> {
         self.as_ref().and_then(|node| node.operator_properties(expr, options))
     }
 }
@@ -775,7 +778,10 @@ impl<'a> MathLayout<'a, MathBox<'a>> for &'a MathItem {
         }
     }
 
-    fn operator_properties(&self, expr: &'a  MathExpression, options: LayoutOptions<'a>) -> Option<OperatorProperties> {
+    fn operator_properties(&self,
+                           expr: &'a MathExpression,
+                           options: LayoutOptions<'a>)
+                           -> Option<OperatorProperties> {
         match **self {
             MathItem::Field(ref field) => field.operator_properties(expr, options),
             MathItem::Space(ref space) => space.operator_properties(expr, options),
@@ -784,11 +790,11 @@ impl<'a> MathLayout<'a, MathBox<'a>> for &'a MathItem {
             MathItem::OverUnder(ref over_under) => over_under.operator_properties(expr, options),
             MathItem::List(ref list) => (&list[..]).operator_properties(expr, options),
             MathItem::Root(ref root) => root.operator_properties(expr, options),
-            MathItem::Operator(ref operator) => operator.operator_properties(expr, options)
+            MathItem::Operator(ref operator) => operator.operator_properties(expr, options),
         }
     }
 }
 
-pub fn layout_expression<'a>(expr: &'a  MathExpression, options: LayoutOptions<'a>) -> MathBox<'a> {
+pub fn layout_expression<'a>(expr: &'a MathExpression, options: LayoutOptions<'a>) -> MathBox<'a> {
     expr.get_item(expr.root_index).layout(expr, options)
 }
