@@ -63,8 +63,6 @@ pub fn layout_strechy_list<'a>(list: &'a [Index],
         if let Some(OperatorProperties { stretch_properties: Some(stretch_props), .. }) =
             item.operator_properties(expr, options) {
             max_intrinsic_size = ::std::cmp::max(max_intrinsic_size, stretch_props.intrinsic_size);
-            // this is replaced later
-            items.push(MathBox::default());
         } else {
             let math_box = layout_list_element(item, expr, options);
             items.push(math_box);

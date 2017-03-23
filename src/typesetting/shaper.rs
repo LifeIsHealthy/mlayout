@@ -98,6 +98,8 @@ pub trait MathShaper {
 
     fn shape_string(&self, string: &str, style: LayoutStyle) -> Box<Iterator<Item = ShapedGlyph>>;
 
+    fn can_stretch_glyph(&self, glyph: u32, horizontal: bool) -> bool;
+
     fn stretch_glyph<'a>(&'a self,
                          glyph: u32,
                          horizontal: bool,
@@ -150,7 +152,6 @@ impl<'a> HarfbuzzShaper<'a> {
             .borrow_mut()
             .take()
             .unwrap();
-        // hb::hb_buffer_set_language(buffer.hb_buffer, hb::hb_language_get_default());
         let mut features: Vec<hb::hb_feature_t> = Vec::with_capacity(2);
         if style.script_level >= 1 {
             let math_variants_tag = Tag::new('s', 's', 't', 'y');
@@ -236,7 +237,7 @@ fn try_base_glyph<'a>(shaper: &HarfbuzzShaper<'a>,
     }
 }
 
-#[derive(Copy, Clone)]
+#[derive(Debug, Copy, Clone)]
 struct VariantIterator<'a> {
     shaper: &'a HarfbuzzShaper<'a>,
     glyph: u32,
@@ -265,7 +266,22 @@ impl<'a> Iterator for VariantIterator<'a> {
             None
         }
     }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        let total_variants = unsafe {
+            hb::hb_ot_math_get_glyph_variants(self.shaper.font.as_raw(),
+                                              self.glyph,
+                                              self.direction,
+                                              self.index,
+                                              &mut 0,
+                                              std::ptr::null_mut())
+        } as usize;
+        let remaining_elements = total_variants - self.index as usize;
+        (remaining_elements, Some(remaining_elements))
+    }
 }
+
+impl<'a> ExactSizeIterator for VariantIterator<'a> {}
 
 fn try_variant<'a>(shaper: &HarfbuzzShaper<'a>,
                    glyph: u32,
@@ -340,7 +356,23 @@ impl<'a> Iterator for AssemblyIterator<'a> {
             None
         }
     }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        let total_parts = unsafe {
+            hb::hb_ot_math_get_glyph_assembly(self.shaper.font.as_raw(),
+                                              self.glyph,
+                                              self.direction,
+                                              self.index,
+                                              &mut 0,
+                                              std::ptr::null_mut(),
+                                              &mut 0)
+        } as usize;
+        let remaining_elements = total_parts - self.index as usize;
+        (remaining_elements, Some(remaining_elements))
+    }
 }
+
+impl<'a> ExactSizeIterator for AssemblyIterator<'a> {}
 
 fn try_assembly<'a>(shaper: &'a HarfbuzzShaper<'a>,
                     glyph: u32,
@@ -504,6 +536,38 @@ impl<'a> MathShaper for HarfbuzzShaper<'a> {
     fn shape_string(&self, string: &str, style: LayoutStyle) -> Box<Iterator<Item = ShapedGlyph>> {
         let glyph_buffer = self.shape_with_style(string, style);
         self.layout_boxes(glyph_buffer)
+    }
+
+    fn can_stretch_glyph(&self, glyph: u32, horizontal: bool) -> bool {
+        let direction = if horizontal {
+            hb::HB_DIRECTION_LTR
+        } else {
+            hb::HB_DIRECTION_TTB
+        };
+
+        let variant_iter = VariantIterator {
+            shaper: self,
+            glyph: glyph,
+            direction: direction,
+            index: 0,
+        };
+
+        if variant_iter.len() > 0 {
+            return true;
+        }
+
+        let assembly_iter = AssemblyIterator {
+            shaper: self,
+            glyph: glyph,
+            direction: direction,
+            index: 0,
+        };
+
+        if assembly_iter.len() > 0 {
+            return true;
+        }
+
+        false
     }
 
     fn stretch_glyph<'b>(&'b self,
