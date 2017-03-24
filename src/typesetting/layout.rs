@@ -323,7 +323,7 @@ impl<'a> MathLayout<'a, MathBox<'a>> for &'a OverUnder {
             // enable flat accents if needed
             let height = options.shaper.math_constant(MathConstant::FlattenedAccentBaseHeight);
             if self.over_is_accent && nucleus.extents().ascent >= height {
-                let (_,  ref mut over_options, _) = arguments[1];
+                let (_, ref mut over_options, _) = arguments[1];
                 over_options.style.flat_accent = true;
                 over = expr.get_item(self.over).unwrap().layout(expr, *over_options);
             }
@@ -639,7 +639,8 @@ impl Operator {
                     .scale_factor_for_script_level(options.style.script_level);
                 let needed_height = needed_height / scale;
                 let needed_width = needed_width / scale;
-                let mut shape_result = options.shaper.shape_string(string, options.style.no_flat_accent_style());
+                let mut shape_result =
+                    options.shaper.shape_string(string, options.style.no_flat_accent_style());
                 let first_glyph = match shape_result.next() {
                     Some(glyph) => glyph,
                     None => return MathBox::empty(Extents::default()),

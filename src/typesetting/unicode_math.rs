@@ -475,6 +475,7 @@ mod tests {
         assert_eq!(italic_a, convert_character_to_family('A', Family::Italics));
         let latin_dotless_i = '\u{131}';
         let mathematical_dotless_i = '\u{1d6a4}';
-        assert_eq!(mathematical_dotless_i, convert_character_to_family(latin_dotless_i, Family::Italics));
+        assert_eq!(mathematical_dotless_i,
+                   convert_character_to_family(latin_dotless_i, Family::Italics));
     }
 }
