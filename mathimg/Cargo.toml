@@ -1,0 +1,17 @@
+[package]
+name = "mathimg"
+version = "0.1.0"
+authors = ["Manuel Reinhardt <manuel.jr16@gmail.com>"]
+
+
+[dependencies]
+math-render = { path = "..", version = "0.1.0" }
+freetype-rs = "0.11"
+docopt = "0.6.86"
+memmap = "0.5"
+rustc-serialize = "0.3"
+svg = "*"
+harfbuzz-sys = { git = "https://github.com/manuel-rhdt/rust-harfbuzz.git" }
+harfbuzz_rs = { git = "https://github.com/manuel-rhdt/harfbuzz_rs.git" }
+fontconfig-sys = { git = "https://github.com/manuel-rhdt/fontconfig-rs" }
+fontconfig = { git = "https://github.com/manuel-rhdt/fontconfig-rs" }

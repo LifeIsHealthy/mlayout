@@ -150,9 +150,9 @@ fn guess_operator_attributes(index: Index, context: &mut ParseContext) {
 fn find_core_operator(embellished_op: Index, context: &mut ParseContext) -> Option<Index> {
     let core_index = match context.expr[embellished_op] {
         MathItem::Field(_) => return Some(embellished_op),
-        MathItem::Atom(Atom { nucleus, .. }) => nucleus,
-        MathItem::OverUnder(OverUnder { nucleus, .. }) => nucleus,
-        MathItem::GeneralizedFraction(GeneralizedFraction { numerator, .. }) => numerator,
+        MathItem::Atom(Atom { nucleus: Some(nucleus), .. }) => nucleus,
+        MathItem::OverUnder(OverUnder { nucleus: Some(nucleus), .. }) => nucleus,
+        MathItem::GeneralizedFraction(GeneralizedFraction { numerator: Some(numerator), .. }) => numerator,
         _ => return None,
     };
     find_core_operator(core_index, context)
@@ -160,12 +160,12 @@ fn find_core_operator(embellished_op: Index, context: &mut ParseContext) -> Opti
 
 fn set_movable_limits(embellished_op: Index, context: &mut ParseContext) {
     let core_index = match context.expr[embellished_op] {
-        MathItem::Atom(Atom { nucleus, .. }) => nucleus,
-        MathItem::OverUnder(ref mut ou) => {
+        MathItem::Atom(Atom { nucleus: Some(nucleus), .. }) => nucleus,
+        MathItem::OverUnder(ref mut ou @ OverUnder { nucleus: Some(nucleus), .. }) => {
             ou.is_limits = true;
-            ou.nucleus
+            nucleus
         }
-        MathItem::GeneralizedFraction(GeneralizedFraction { numerator, .. }) => numerator,
+        MathItem::GeneralizedFraction(GeneralizedFraction { numerator: Some(numerator), .. }) => numerator,
         _ => return,
     };
     set_movable_limits(core_index, context)

@@ -8,12 +8,14 @@ mod stretchy;
 
 use types::*;
 pub use self::layout::{MathLayout, LayoutOptions, layout_expression};
-use self::shaper::MathShaper;
+use self::shaper::{MathShaper, MathGlyph};
 use self::math_box::MathBox;
 
 // Calculates the dimensions of the components and their relative positioning. However no space
 // is distributed.
-pub fn layout<'a, S: MathShaper>(expression: &'a MathExpression, shaper: &'a S) -> MathBox<'a> {
+pub fn layout<'a, S>(expression: &'a MathExpression, shaper: &'a S) -> MathBox<'a, S::Glyph>
+    where S: MathShaper<'a>
+{
     let options = LayoutOptions {
         shaper: shaper,
         style: LayoutStyle {
@@ -21,6 +23,7 @@ pub fn layout<'a, S: MathShaper>(expression: &'a MathExpression, shaper: &'a S) 
             script_level: 0,
             is_cramped: false,
             flat_accent: false,
+            stretch_constraints: None,
         },
         stretch_size: None,
         as_accent: false,

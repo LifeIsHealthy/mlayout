@@ -73,13 +73,19 @@ fn parse_numeric_entity(ent: &str) -> Result<char> {
                 let name = &ent[1..];
                 match u32::from_str_radix(name, 16).ok().and_then(std::char::from_u32) {
                     Some(c) => Ok(c),
-                    None => Err(ParsingError::from("Invalid hexadecimal character number in an entity")),
+                    None => {
+                        Err(ParsingError::from("Invalid hexadecimal character number in an \
+                                                    entity"))
+                    }
                 }
             } else {
                 let name = &ent[..];
                 match u32::from_str_radix(name, 10).ok().and_then(std::char::from_u32) {
                     Some(c) => Ok(c),
-                    None => Err(ParsingError::from("Invalid decimal character number in an entity")),
+                    None => {
+                        Err(ParsingError::from("Invalid decimal character number in an \
+                                                   entity"))
+                    }
                 }
             }
         }
@@ -100,5 +106,11 @@ mod tests {
 
         assert_eq!("Hello World!", unescape("Hello World&#x21;").unwrap());
         assert_eq!("Hello World!", unescape("Hello World&#33;").unwrap());
+    }
+
+    #[test]
+    fn test_invalid_numeric_entity() {
+        assert!(unescape("&#19FE;").is_err());
+        assert!(unescape("&#x33FG;").is_err());
     }
 }

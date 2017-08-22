@@ -1,0 +1,30 @@
+<mrow>
+    <mi>
+        x
+    </mi>
+    <munder>
+        <mo>
+            &#x2192;<!--RIGHTWARDS ARROW--></mo>
+        <mtext>
+            maps to
+        </mtext>
+    </munder>
+    <mi>
+        y
+    </mi>
+</mrow>
+<mo>,</mo>
+<mrow>
+    <mover>
+        <mrow>
+            <mi>a</mi>
+            <mo>+</mo>
+            <mi>b</mi>
+        </mrow>
+        <mover>
+            <mo>
+                &#x23DE;<!--TOP CURLY BRACKER--></mo>
+            <mi>c</mi>
+        </mover>
+    </mover>
+</mrow>

@@ -4,7 +4,7 @@ use types::{Glyph, PercentValue, WithUserData};
 use std::default::Default;
 
 use std::cell::Cell;
-use typesetting::shaper::MathShaper;
+use typesetting::shaper::{MathShaper, MathGlyph};
 
 use super::lazy_vec::LazyVec;
 
@@ -238,25 +238,21 @@ impl<T: MathBoxMetrics, U> MathBoxMetrics for WithUserData<T, U> {
 }
 
 #[derive(Debug)]
-pub enum Drawable<G> {
+pub enum Drawable<G: MathGlyph> {
     Glyph(G),
     Line { vector: Vector<i32>, thickness: u32 },
 }
 
-impl<'a> MathBoxMetrics for Drawable<(Glyph, &'a MathShaper)> {
+impl<'a, G: MathGlyph> MathBoxMetrics for Drawable<G> {
     fn advance_width(&self) -> i32 {
         match *self {
-            Drawable::Glyph((ref glyph, ref shaper)) => {
-                shaper.glyph_advance(glyph.glyph_code) * glyph.scale
-            }
+            Drawable::Glyph(glyph) => glyph.advance_width(),
             Drawable::Line { ref vector, .. } => vector.x,
         }
     }
     fn extents(&self) -> Extents<i32> {
         match *self {
-            Drawable::Glyph((ref glyph, ref shaper)) => {
-                shaper.glyph_extents(glyph.glyph_code) * glyph.scale
-            }
+            Drawable::Glyph(glyph) => glyph.extents(),
             Drawable::Line { ref vector, .. } => {
                 Extents {
                     left_side_bearing: 0,
@@ -270,18 +266,14 @@ impl<'a> MathBoxMetrics for Drawable<(Glyph, &'a MathShaper)> {
 
     fn italic_correction(&self) -> i32 {
         match *self {
-            Drawable::Glyph((ref glyph, ref shaper)) => {
-                shaper.italic_correction(glyph.glyph_code) * glyph.scale
-            }
+            Drawable::Glyph(glyph) => glyph.italic_correction(),
             Drawable::Line { .. } => 0,
         }
     }
 
     fn top_accent_attachment(&self) -> i32 {
         let value = match *self {
-            Drawable::Glyph((ref glyph, ref shaper)) => {
-                shaper.top_accent_attachment(glyph.glyph_code) * glyph.scale
-            }
+            Drawable::Glyph(glyph) => glyph.top_accent_attachment(),
             _ => 0,
         };
         if value == 0 {
@@ -293,21 +285,21 @@ impl<'a> MathBoxMetrics for Drawable<(Glyph, &'a MathShaper)> {
 }
 
 #[derive(Debug)]
-pub enum MathBoxContent<I, G> {
+pub enum MathBoxContent<I, G: MathGlyph> {
     Empty,
     Drawable(Drawable<G>),
     Boxes(I),
 }
 
-impl<I, G> Default for MathBoxContent<I, G> {
+impl<I, G: MathGlyph> Default for MathBoxContent<I, G> {
     fn default() -> Self {
         MathBoxContent::Empty
     }
 }
 
-type BoxList<'a> = LazyVec<Box<Iterator<Item = MathBox<'a>> + 'a>>;
+type BoxList<'a, G> = LazyVec<Box<Iterator<Item = MathBox<'a, G>> + 'a>>;
 
-impl<'a> MathBoxMetrics for MathBoxContent<BoxList<'a>, (Glyph, &'a MathShaper)> {
+impl<'a, G: MathGlyph> MathBoxMetrics for MathBoxContent<BoxList<'a, G>, G> {
     fn advance_width(&self) -> i32 {
         match *self {
             MathBoxContent::Empty => 0,
@@ -437,42 +429,27 @@ impl<T: MathBoxMetrics> MathBoxMetrics for CachedMetrics<T> {
     }
 }
 
-pub type Content<'a> = MathBoxContent<BoxList<'a>, (Glyph, &'a MathShaper)>;
+pub type Content<'a, G> = MathBoxContent<BoxList<'a, G>, G>;
 
-#[derive(Default)]
-pub struct MathBox<'a> {
+pub struct MathBox<'a, G: MathGlyph> {
     pub origin: Vector<i32>,
-    pub metrics: CachedMetrics<Content<'a>>,
+    pub metrics: CachedMetrics<Content<'a, G>>,
 }
 
-impl<'a> ::std::fmt::Debug for MathBox<'a> {
+impl<'a, G: MathGlyph> Default for MathBox<'a, G> {
+    fn default() -> Self {
+        MathBox { origin: Vector::default(), metrics: CachedMetrics::default() }
+    }
+}
+
+impl<'a, G: MathGlyph> ::std::fmt::Debug for MathBox<'a, G> {
     fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
         write!(f, "MathBox")
     }
 }
 
-impl<'a> MathBox<'a> {
-    pub fn first_glyph(&self) -> Option<Glyph> {
-        match self.metrics.content {
-            MathBoxContent::Drawable(Drawable::Glyph((glyph, _))) => Some(glyph),
-            MathBoxContent::Boxes(ref boxes) => {
-                boxes.as_slice().first().and_then(|math_box| math_box.first_glyph())
-            }
-            _ => None,
-        }
-    }
-
-    pub fn last_glyph(&self) -> Option<Glyph> {
-        match self.metrics.content {
-            MathBoxContent::Drawable(Drawable::Glyph((glyph, _))) => Some(glyph),
-            MathBoxContent::Boxes(ref boxes) => {
-                boxes.as_slice().last().and_then(|math_box| math_box.last_glyph())
-            }
-            _ => None,
-        }
-    }
-
-    fn with_content(content: Content<'a>) -> Self {
+impl<'a, G: MathGlyph> MathBox<'a, G> {
+    fn with_content(content: Content<'a, G>) -> Self {
         let cached = CachedMetrics::new(content);
         MathBox {
             metrics: cached,
@@ -496,15 +473,15 @@ impl<'a> MathBox<'a> {
         math_box
     }
 
-    pub fn with_glyph(glyph: Glyph, shaper: &'a MathShaper) -> Self {
-        MathBox::with_content(MathBoxContent::Drawable(Drawable::Glyph((glyph, shaper))))
+    pub fn with_glyph(glyph: G) -> Self {
+        MathBox::with_content(MathBoxContent::Drawable(Drawable::Glyph(glyph)))
     }
 
-    pub fn with_vec(vec: Vec<MathBox<'a>>) -> Self {
+    pub fn with_vec(vec: Vec<MathBox<'a, G>>) -> Self {
         MathBox::with_content(MathBoxContent::Boxes(LazyVec::with_vec(vec)))
     }
 
-    pub fn with_iter(iter: Box<Iterator<Item = MathBox<'a>> + 'a>) -> Self {
+    pub fn with_iter(iter: Box<Iterator<Item = MathBox<'a, G>> + 'a>) -> Self {
         MathBox::with_content(MathBoxContent::Boxes(LazyVec::with_iter(iter)))
     }
 
@@ -515,12 +492,32 @@ impl<'a> MathBox<'a> {
         }
     }
 
-    pub fn content(&self) -> &Content<'a> {
+    pub fn content(&self) -> &Content<'a, G> {
         &self.metrics.content
+    }
+
+    pub fn first_glyph(&self) -> Option<&G> {
+        match self.metrics.content {
+            MathBoxContent::Drawable(Drawable::Glyph(ref glyph)) => Some(glyph),
+            MathBoxContent::Boxes(ref boxes) => {
+                boxes.as_slice().first().and_then(|math_box| math_box.first_glyph())
+            }
+            _ => None,
+        }
+    }
+
+    pub fn last_glyph(&self) -> Option<&G> {
+        match self.metrics.content {
+            MathBoxContent::Drawable(Drawable::Glyph(ref glyph)) => Some(glyph),
+            MathBoxContent::Boxes(ref boxes) => {
+                boxes.as_slice().last().and_then(|math_box| math_box.last_glyph())
+            }
+            _ => None,
+        }
     }
 }
 
-impl<'a> MathBoxMetrics for MathBox<'a> {
+impl<'a, G: MathGlyph> MathBoxMetrics for MathBox<'a, G> {
     fn advance_width(&self) -> i32 {
         self.metrics.advance_width()
     }

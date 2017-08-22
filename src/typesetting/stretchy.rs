@@ -4,10 +4,10 @@ use super::layout::{OperatorProperties, MathLayout};
 use types::{MathExpression, Index};
 use math_box::{Extents, MathBoxMetrics};
 
-fn indices_of_stretchy_elements<'a>(list: &[Index],
-                                    expr: &'a MathExpression,
-                                    options: LayoutOptions<'a>)
-                                    -> Vec<Index> {
+fn indices_of_stretchy_elements<'a, S: MathShaper<'a>>(list: &[Index],
+                                                   expr: &'a MathExpression,
+                                                   options: LayoutOptions<'a, S>)
+                                                   -> Vec<Index> {
     list.iter()
         .cloned()
         .filter(|&index| {
@@ -19,11 +19,12 @@ fn indices_of_stretchy_elements<'a>(list: &[Index],
         .collect()
 }
 
-pub fn layout_list_element<'a, T>(item: T,
-                                  expr: &'a MathExpression,
-                                  options: LayoutOptions<'a>)
-                                  -> MathBox<'a>
-    where T: MathLayout<'a, MathBox<'a>>
+pub fn layout_list_element<'a, T, S>(item: T,
+                                     expr: &'a MathExpression,
+                                     options: LayoutOptions<'a, S>)
+                                     -> MathBox<'a, S::Glyph>
+    where S: MathShaper<'a>,
+          T: MathLayout<'a, MathBox<'a, S::Glyph>, S>
 {
     if let Some(OperatorProperties {
                     leading_space,
@@ -43,10 +44,11 @@ pub fn layout_list_element<'a, T>(item: T,
 }
 
 
-pub fn layout_strechy_list<'a>(list: &'a [Index],
-                               expr: &'a MathExpression,
-                               options: LayoutOptions<'a>)
-                               -> Box<Iterator<Item = MathBox<'a>> + 'a> {
+pub fn layout_strechy_list<'a, S: 'a + MathShaper<'a>>
+    (list: &'a [Index],
+     expr: &'a MathExpression,
+     options: LayoutOptions<'a, S>)
+     -> Box<Iterator<Item = MathBox<'a, S::Glyph>> + 'a> {
     let stretchy_indices = indices_of_stretchy_elements(list, expr, options);
 
     if stretchy_indices.is_empty() {

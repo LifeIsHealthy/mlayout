@@ -10,7 +10,8 @@ quick-xml = "0.4"
 harfbuzz-sys = { git = "https://github.com/manuel-rhdt/rust-harfbuzz.git" }
 harfbuzz_rs = { git = "https://github.com/manuel-rhdt/harfbuzz_rs.git" }
 bitflags = "0.7"
-vec_map = "0.7.*"
+vec_map = "*"
+stash = "*"
 
 [dev-dependencies]
 image = "*"

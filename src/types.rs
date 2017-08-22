@@ -1,6 +1,11 @@
+use stash::Stash;
+
+use std;
 use std::default::Default;
 use std::fmt;
 use std::ops::{Mul, Div};
+
+use typesetting::math_box::Vector;
 
 /// An identifier of a glyph inside a font.
 pub type GlyphCode = u32;
@@ -20,12 +25,15 @@ impl<T: Default, U> Default for WithUserData<T, U> {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Copy, Clone)]
-pub struct Index(isize);
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
+pub struct Index(u32);
 
 impl ::std::convert::From<usize> for Index {
     fn from(num: usize) -> Self {
-        Index(num as isize)
+        if num > std::u32::MAX as usize {
+            panic!("index overflow");
+        }
+        Index(num as u32)
     }
 }
 
@@ -35,54 +43,30 @@ impl ::std::convert::Into<usize> for Index {
     }
 }
 
-impl Index {
-    pub fn is_none(self) -> bool {
-        self.0 < 0
-    }
-
-    pub fn is_some(self) -> bool {
-        !self.is_none()
-    }
-}
-
-impl Default for Index {
-    fn default() -> Index {
-        Index(-1)
-    }
-}
-
-#[derive(Default, Debug, Clone)]
+#[derive(Default, Debug)]
 pub struct MathExpression {
-    entries: Vec<MathItem>,
-    pub root_index: Index,
+    entries: Stash<MathItem, Index>,
+    pub root_index: Option<Index>,
 }
 
 impl MathExpression {
     pub fn new() -> MathExpression {
         MathExpression {
-            entries: Vec::new(),
-            root_index: Index(-1),
+            entries: Stash::default(),
+            root_index: None,
         }
     }
 
     pub fn add_item(&mut self, item: MathItem) -> Index {
-        let index = Index(self.entries.len() as isize);
-        self.entries.push(item);
-        index
+        self.entries.put(item)
     }
 
     pub fn get_item(&self, index: Index) -> Option<&MathItem> {
-        if index.is_none() {
-            return None;
-        }
-        self.entries.get(index.0 as usize)
+        self.entries.get(index)
     }
 
     pub fn get_item_mut(&mut self, index: Index) -> Option<&mut MathItem> {
-        if index.is_none() {
-            return None;
-        }
-        self.entries.get_mut(index.0 as usize)
+        self.entries.get_mut(index)
     }
 }
 
@@ -102,7 +86,7 @@ impl ::std::ops::IndexMut<Index> for MathExpression {
 
 /// A `MathItem` is the abstract representation of mathematical notation that manages the layout
 /// of its subexpressions.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, PartialEq)]
 pub enum MathItem {
     /// A simple element displaying a single field without special formatting.
     Field(Field),
@@ -200,31 +184,31 @@ impl MathSpace {
 
 /// An expression that consists of a base (called nucleus) and attachments at each corner (e.g.
 /// subscripts and superscripts).
-#[derive(Default, Debug, Copy, Clone, PartialEq, Eq)]
+#[derive(Default, Debug, PartialEq, Eq)]
 pub struct Atom {
     /// The base of the atom.
-    pub nucleus: Index,
+    pub nucleus: Option<Index>,
     /// top left attachment
-    pub top_left: Index,
+    pub top_left: Option<Index>,
     /// top right attachment
-    pub top_right: Index,
+    pub top_right: Option<Index>,
     /// bottom left attachment
-    pub bottom_left: Index,
+    pub bottom_left: Option<Index>,
     /// bottom right attachment
-    pub bottom_right: Index,
+    pub bottom_right: Option<Index>,
 }
 
 
 /// An expression that consists of a base (called nucleus) and attachments that go above or below
 /// the nucleus like e.g. accents.
-#[derive(Debug, Default, Copy, Clone, PartialEq, Eq)]
+#[derive(Debug, Default, PartialEq, Eq)]
 pub struct OverUnder {
     /// the base
-    pub nucleus: Index,
+    pub nucleus: Option<Index>,
     /// the `Element` to go above the base
-    pub over: Index,
+    pub over: Option<Index>,
     /// the `Element` to go below the base
-    pub under: Index,
+    pub under: Option<Index>,
     /// the `over` element should be rendered as an accent
     pub over_is_accent: bool,
     /// the `under` element should be rendered as an accent
@@ -243,12 +227,12 @@ pub struct OverUnder {
 /// This can either be rendered as a fraction (with a line separating the numerator and the
 /// denominator) or as a stack with no separating line (setting the `thickness`-parameter to a
 /// value of 0).
-#[derive(Debug, Default, Copy, Clone, PartialEq)]
+#[derive(Debug, Default, PartialEq)]
 pub struct GeneralizedFraction {
     /// The field above the fraction bar.
-    pub numerator: Index,
+    pub numerator: Option<Index>,
     /// The field below the fraction bar.
-    pub denominator: Index,
+    pub denominator: Option<Index>,
     /// Thickness of the fraction line. If this is zero the fraction is drawn as a stack. If
     /// thickness is None the default fraction thickness is used.
     pub thickness: Option<Length>,
@@ -256,12 +240,12 @@ pub struct GeneralizedFraction {
 
 /// An expression consisting of a radical symbol encapsulating the radicand and an optional degree
 /// expression that is displayed above the beginning of the surd.
-#[derive(Debug, Default, Copy, Clone, PartialEq, Eq)]
+#[derive(Debug, Default, PartialEq, Eq)]
 pub struct Root {
     /// The expression "inside" of the radical symbol.
-    pub radicand: Index,
+    pub radicand: Option<Index>,
     /// The degree of the radical.
-    pub degree: Index,
+    pub degree: Option<Index>,
 }
 
 #[derive(Debug, Default, Copy, Clone, PartialEq)]
@@ -454,8 +438,10 @@ pub struct LayoutStyle {
     pub script_level: u8,
     /// If `true` superscripts and similar protrude less at the top.
     pub is_cramped: bool,
-    /// If `true` display a flatter version of the accent.
+    /// If `true`, try to display flatter versions of accents.
     pub flat_accent: bool,
+    /// Determines if the expression should grow to meet the specified constraints.
+    pub stretch_constraints: Option<Vector<i32>>,
 }
 
 impl LayoutStyle {
@@ -533,6 +519,7 @@ impl Default for LayoutStyle {
             script_level: 0,
             is_cramped: false,
             flat_accent: false,
+            stretch_constraints: None,
         }
     }
 }

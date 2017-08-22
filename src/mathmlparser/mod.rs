@@ -163,7 +163,7 @@ pub fn parse<R: BufRead>(file: R) -> Result<MathExpression> {
 
     match parse_element(&mut parser, root_elem, std::iter::empty(), &mut context) {
         Ok(index) => {
-            context.expr.root_index = index;
+            context.expr.root_index = Some(index);
             Ok(context.expr)
         }
         Err(err) => Err(err),
@@ -266,7 +266,7 @@ fn parse_list_schema<'a, A>(content: Vec<Index>,
         "mrow" | "math" => Ok(content),
         "msqrt" => {
             let item = MathItem::Root(Root {
-                                          radicand: content,
+                                          radicand: Some(content),
                                           ..Default::default()
                                       });
             Ok(context.expr.add_item(item))
