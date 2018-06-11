@@ -1,0 +1,58 @@
+<mrow>
+    <mi>Z</mi>
+    <mo>=</mo>
+    <mo stretchy="false">&#x222b;</mo>
+    <mi mathvariant="script">D</mi>
+    <mrow>
+        <mo stretchy="true">[</mo>
+        <mrow>
+            <mi>m</mi>
+            <mo stretchy="false">(</mo>
+            <mi mathvariant="bold">x</mi>
+            <mo stretchy="false">)</mo>
+        </mrow>
+        <mo stretchy="true">]</mo>
+    </mrow>
+    <mi>exp</mi>
+    <mrow>
+        <mo stretchy="true">{</mo>
+        <mrow>
+            <mo>-</mo>
+            <mi>&#x3b2;</mi>
+            <mrow>
+                <mo stretchy="true">(</mo>
+                <mrow>
+                    <mi mathvariant="script">F</mi>
+                    <mrow>
+                        <mo stretchy="true">[</mo>
+                        <mrow>
+                            <mi>m</mi>
+                            <mo stretchy="false">(</mo>
+                            <mi mathvariant="bold">x</mi>
+                            <mo stretchy="false">)</mo>
+                        </mrow>
+                        <mo stretchy="true">]</mo>
+                    </mrow>
+                    <mo>-</mo>
+                    <mo stretchy="false">&#x222b;</mo>
+                    <msup>
+                        <mi mathvariant="normal">d</mi>
+                        <mi>d</mi>
+                    </msup>
+                    <mi>x</mi>
+                    <mspace width="0.278em"/>
+                    <mi>h</mi>
+                    <mo stretchy="false">(</mo>
+                    <mi mathvariant="bold">x</mi>
+                    <mo rspace="0.167em" stretchy="false">)</mo>
+                    <mi>m</mi>
+                    <mo stretchy="false">(</mo>
+                    <mi mathvariant="bold">x</mi>
+                    <mo stretchy="false">)</mo>
+                </mrow>
+                <mo stretchy="true">)</mo>
+            </mrow>
+        </mrow>
+        <mo stretchy="true">}</mo>
+    </mrow>
+</mrow>

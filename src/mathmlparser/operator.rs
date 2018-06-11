@@ -1,5 +1,5 @@
-use types::{Length, MathItem, StretchConstraints, Operator, Index, Atom, OverUnder,
-            GeneralizedFraction};
+use types::{Atom, GeneralizedFraction, Length, MathExpression, MathItem, Operator, OverUnder,
+            StretchConstraints};
 
 use super::{FromXmlAttribute, ParseContext};
 use super::operator_dict;
@@ -46,12 +46,14 @@ impl FromXmlAttribute for Form {
             b"prefix" => Ok(Form::Prefix),
             b"infix" => Ok(Form::Infix),
             b"postfix" => Ok(Form::Postfix),
-            _ => Err(FormParsingError { unknown_str: String::from_utf8_lossy(s).into_owned() }),
+            _ => Err(FormParsingError {
+                unknown_str: String::from_utf8_lossy(s).into_owned(),
+            }),
         }
     }
 }
 
-#[derive(Debug, Copy, Clone, Default)]
+#[derive(Debug, Clone, Default)]
 pub struct Attributes {
     pub character: Option<char>,
     pub form: Option<Form>,
@@ -74,65 +76,86 @@ impl Attributes {
 
 // (Embellished) operators are treated specially because their default attribute values depend
 // on the surrounding elements.
-pub fn process_operators(list: &mut Vec<Index>, context: &mut ParseContext) {
+//
+// After we have fully parsed a `mrow` of math elements we have to look at it again to find out
+// which default attributes to apply to the operators. For every operator this depends on whether it is at the
+// beginning/end or in the middle of a `mrow` (ignoring any whitespace elements).
+pub fn process_operators(list: &mut Vec<MathExpression>, context: &mut ParseContext) {
     // filter out all whitespace elements
-    let non_whitespace_list = list.iter()
-        .cloned()
-        .filter(|&index| {
-                    context.mathml_info
-                        .get(index.into())
-                        .map(|info| !info.is_space)
-                        .unwrap_or(true)
-                })
+    let non_whitespace_list = list.iter_mut()
+        .filter(|expr| {
+            context
+                .info_for_expr(&**expr)
+                .map(|info| !info.is_space)
+                .unwrap_or(true)
+        })
         .collect::<Vec<_>>();
 
-    for &index in &non_whitespace_list {
-        if !context.mathml_info
-                .get(index.into())
-                .map(|info| info.is_operator())
-                .unwrap_or(false) {
+    let len = non_whitespace_list.len();
+    for (i, mut expr) in non_whitespace_list.into_iter().enumerate() {
+        if !context
+            .info_for_expr(&*expr)
+            .map(|info| info.is_operator())
+            .unwrap_or(false)
+        {
             // current element is not an operator, nothing to do
             continue;
         }
-        if non_whitespace_list.len() > 1 {
-            if index == *non_whitespace_list.first().unwrap() {
-                set_default_form(index, Form::Prefix, context);
-            } else if index == *non_whitespace_list.last().unwrap() {
-                set_default_form(index, Form::Postfix, context);
+        if len > 1 {
+            if i == 0 {
+                set_default_form(&expr, Form::Prefix, context);
+            } else if i == len - 1 {
+                set_default_form(&expr, Form::Postfix, context);
             }
         }
 
-        set_default_form(index, Form::Infix, context);
-        guess_operator_attributes(index, context);
-        make_operator(index, context);
+        set_default_form(&expr, Form::Infix, context);
+        guess_operator_attributes(&expr, context);
+        make_operator(&mut expr, context);
     }
 }
 
-pub fn guess_if_operator_with_form(index: Index, form: Form, context: &mut ParseContext) -> Index {
-    set_default_form(index, form, context);
-    guess_operator_attributes(index, context);
-    make_operator(index, context);
-    index
+/// Guess the default attributes of a math operator.
+///
+/// This function will create a `MathExpression` representing an operator with the correct default
+/// arguments according to the MathML spec.
+///
+/// # Arguments
+/// - `expr`: The operator whose attributes to guess.
+/// - `form`: Which default form to assume (this has to be decided given the surrounding elements).
+/// - `context`: The context for the MathML parser.
+pub(super) fn guess_if_operator_with_form(
+    mut expr: MathExpression,
+    form: Form,
+    context: &mut ParseContext,
+) -> MathExpression {
+    set_default_form(&expr, form, context);
+    guess_operator_attributes(&expr, context);
+    make_operator(&mut expr, context);
+    expr
 }
 
-fn set_default_form(index: Index, form: Form, context: &mut ParseContext) {
-    let info = context.mathml_info.get_mut(index.into());
-    let mut operator_attrs = match info.and_then(|info| info.operator_attrs.as_mut()) {
+fn set_default_form(expr: &MathExpression, form: Form, context: &mut ParseContext) {
+    let info = context.info_for_expr_mut(expr);
+    let operator_attrs = info.and_then(|info| info.operator_attrs.as_mut());
+    let operator_attrs = match operator_attrs {
         Some(operator_attrs) => operator_attrs,
         None => return,
     };
     operator_attrs.form = operator_attrs.form.or(Some(form))
 }
 
-fn guess_operator_attributes(index: Index, context: &mut ParseContext) {
-    let info = context.mathml_info.get_mut(index.into());
-    let mut operator_attrs = match info.and_then(|info| info.operator_attrs.as_mut()) {
+fn guess_operator_attributes(expr: &MathExpression, context: &mut ParseContext) {
+    let info = context.info_for_expr_mut(expr);
+    let operator_attrs = info.and_then(|info| info.operator_attrs.as_mut());
+    let operator_attrs = match operator_attrs {
         Some(operator_attrs) => operator_attrs,
         None => return,
     };
 
     let form = operator_attrs.form.expect("operator has no form");
-    let entry = operator_attrs.character
+    let entry = operator_attrs
+        .character
         .and_then(|chr| operator_dict::find_entry(chr, form))
         .unwrap_or_default();
 
@@ -143,38 +166,65 @@ fn guess_operator_attributes(index: Index, context: &mut ParseContext) {
         operator_attrs.rspace = Some(Length::em(entry.rspace as f32 / 18.0f32));
     }
 
-    operator_attrs.flags = (operator_attrs.user_overrides & operator_attrs.flags) |
-                           (!operator_attrs.user_overrides & entry.flags);
+    operator_attrs.flags = (operator_attrs.user_overrides & operator_attrs.flags)
+        | (!operator_attrs.user_overrides & entry.flags);
 }
 
-fn find_core_operator(embellished_op: Index, context: &mut ParseContext) -> Option<Index> {
-    let core_index = match context.expr[embellished_op] {
-        MathItem::Field(_) => return Some(embellished_op),
-        MathItem::Atom(Atom { nucleus: Some(nucleus), .. }) => nucleus,
-        MathItem::OverUnder(OverUnder { nucleus: Some(nucleus), .. }) => nucleus,
-        MathItem::GeneralizedFraction(GeneralizedFraction { numerator: Some(numerator), .. }) => numerator,
+/// Recursively walk the MathExpression tree to find the core of an embellished operator.
+fn find_core_operator<'a>(
+    embellished_op: &'a mut MathExpression,
+    context: &mut ParseContext,
+) -> Option<&'a mut MathExpression> {
+
+    if let &mut MathItem::Field(_) = embellished_op.item.as_mut() {
+        return Some(embellished_op)
+    }
+
+    let core = match embellished_op.item.as_mut() {
+        &mut MathItem::Atom(Atom {
+            nucleus: Some(ref mut nucleus),
+            ..
+        }) => nucleus,
+        &mut MathItem::OverUnder(OverUnder {
+            nucleus: Some(ref mut nucleus),
+            ..
+        }) => nucleus,
+        &mut MathItem::GeneralizedFraction(GeneralizedFraction {
+            numerator: Some(ref mut numerator),
+            ..
+        }) => numerator,
         _ => return None,
     };
-    find_core_operator(core_index, context)
+    find_core_operator(core, context)
 }
 
-fn set_movable_limits(embellished_op: Index, context: &mut ParseContext) {
-    let core_index = match context.expr[embellished_op] {
-        MathItem::Atom(Atom { nucleus: Some(nucleus), .. }) => nucleus,
-        MathItem::OverUnder(ref mut ou @ OverUnder { nucleus: Some(nucleus), .. }) => {
+fn set_movable_limits(embellished_op: &mut MathExpression, context: &mut ParseContext) {
+    let mut core_expr = match *embellished_op.item {
+        MathItem::Atom(Atom {
+            nucleus: Some(ref mut nucleus),
+            ..
+        }) => nucleus,
+        MathItem::OverUnder(ref mut ou) => {
             ou.is_limits = true;
-            nucleus
+            match ou.nucleus {
+                Some(ref mut nucleus) => nucleus,
+                None => return,
+            }
         }
-        MathItem::GeneralizedFraction(GeneralizedFraction { numerator: Some(numerator), .. }) => numerator,
+        MathItem::GeneralizedFraction(GeneralizedFraction {
+            numerator: Some(ref mut numerator),
+            ..
+        }) => numerator,
         _ => return,
     };
-    set_movable_limits(core_index, context)
+    set_movable_limits(&mut core_expr, context)
 }
 
-fn make_operator(index: Index, context: &mut ParseContext) {
+/// Replace the `MathExpression` that represents the core operator by a `Operator`.
+fn make_operator(expr: &mut MathExpression, context: &mut ParseContext) {
     let operator_attrs = {
-        let info = context.mathml_info.get(index.into());
-        match info.and_then(|info| info.operator_attrs) {
+        let info = context.info_for_expr(&*expr);
+        match info.and_then(|info| info.operator_attrs.clone()) {
             Some(operator_attrs) => operator_attrs,
             None => return,
         }
@@ -183,19 +233,19 @@ fn make_operator(index: Index, context: &mut ParseContext) {
     let flags = operator_attrs.flags;
 
     if flags.contains(MOVABLE_LIMITS) {
-        set_movable_limits(index, context);
+        set_movable_limits(expr, context);
     }
 
-    if let Some(core_index) = find_core_operator(index, context) {
+    if let Some(ref mut core_expr) = find_core_operator(expr, context) {
         let stretch_constraints = if flags.contains(STRETCHY) {
             Some(StretchConstraints {
-                     symmetric: flags.contains(SYMMETRIC),
-                     ..Default::default()
-                 })
+                symmetric: flags.contains(SYMMETRIC),
+                ..Default::default()
+            })
         } else {
             None
         };
-        let field = match context.expr[core_index] {
+        let field = match *core_expr.item {
             MathItem::Field(ref field) => field.clone(),
             _ => unreachable!(),
         };
@@ -207,7 +257,7 @@ fn make_operator(index: Index, context: &mut ParseContext) {
             trailing_space: operator_attrs.rspace.expect("operator has no rspace"),
             ..Default::default()
         };
-        context.expr[core_index] = MathItem::Operator(new_elem);
+        core_expr.item = Box::new(MathItem::Operator(new_elem));
     }
 }
 
@@ -215,20 +265,16 @@ fn make_operator(index: Index, context: &mut ParseContext) {
 mod tests {
     use mathmlparser::ParseContext;
     use types::MathExpression;
-    use mathmlparser::VecMap;
+    use stash::Stash;
 
     #[test]
     fn test_set_default_form() {
-        let expr = MathExpression::new();
-        let info = VecMap::new();
+        let info = Stash::new();
         let mut context = ParseContext {
-            expr: expr,
             mathml_info: info,
         };
         let context = ParseContext {
-            expr: MathExpression::new(),
-            mathml_info: VecMap::new(),
+            mathml_info: Stash::new(),
         };
-
     }
 }

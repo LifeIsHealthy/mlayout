@@ -5,28 +5,24 @@ extern crate harfbuzz_rs;
 
 use std::path;
 
-use math_render::*;
 use math_render::math_box::*;
 use math_render::shaper::*;
 
 use self::svg::Document;
-use self::svg::node::element::{Rectangle, Line, Group, Path, Description};
+use self::svg::node::element::{Rectangle, Line, Group, Path};
 use self::svg::node::element::path::Data;
-use self::svg::node::{Node, Text};
+use self::svg::node::{Node};
 
 use freetype::{face, Vector};
 use freetype::face::Face as FT_Face;
-use freetype::error::FtResult;
 use freetype::outline::Curve;
-
-use harfbuzz_rs::{Face, FontFuncsBuilder, GlyphExtents};
 
 pub struct Flags {
     pub show_ink_bounds: bool,
     pub show_logical_bounds: bool,
 }
 
-pub fn render<'a, T: AsRef<path::Path>>(math_box: MathBox<'a>,
+pub fn render<'a, T: AsRef<path::Path>>(math_box: MathBox,
                                         _: &HarfbuzzShaper,
                                         font: &'a FT_Face,
                                         flags: Flags,
@@ -95,8 +91,8 @@ pub fn render<'a, T: AsRef<path::Path>>(math_box: MathBox<'a>,
 }
 
 
-fn generate_svg<'a, F>(node: &mut Group, math_box: &MathBox<'a>, func: &F)
-    where F: Fn(&mut Group, &MathBox<'a>)
+fn generate_svg<'a, F>(node: &mut Group, math_box: &MathBox, func: &F)
+    where F: Fn(&mut Group, &MathBox)
 {
     let content = math_box.content();
     match *content {
@@ -119,7 +115,7 @@ fn generate_svg<'a, F>(node: &mut Group, math_box: &MathBox<'a>, func: &F)
     }
 }
 
-fn draw_filled<'a, T: Node>(doc: &mut T, math_box: &MathBox<'a>) {
+fn draw_filled<'a, T: Node>(doc: &mut T, math_box: &MathBox) {
     if let MathBoxContent::Drawable(Drawable::Line { vector, thickness }) = *math_box.content() {
         let line = Line::new()
             .set("x1", math_box.origin.x)
@@ -133,8 +129,8 @@ fn draw_filled<'a, T: Node>(doc: &mut T, math_box: &MathBox<'a>) {
 
         doc.append(line);
     }
-    if let MathBoxContent::Empty = *math_box.content() {
-        let rect = Rectangle::new()
+    if let MathBoxContent::Empty(_) = *math_box.content() {
+        let _rect = Rectangle::new()
             .set("x", math_box.origin.x)
             .set("y", math_box.origin.y - math_box.extents().ascent)
             .set("width", math_box.extents().width)
@@ -147,7 +143,7 @@ fn draw_filled<'a, T: Node>(doc: &mut T, math_box: &MathBox<'a>) {
     }
 }
 
-fn draw_ink_rect<'a, T: Node>(group: &mut T, math_box: &MathBox<'a>) {
+fn draw_ink_rect<'a, T: Node>(group: &mut T, math_box: &MathBox) {
     if let MathBoxContent::Drawable(Drawable::Glyph(_)) = *math_box.content() {
 
         let ink_bounds = math_box.bounds();
@@ -163,7 +159,7 @@ fn draw_ink_rect<'a, T: Node>(group: &mut T, math_box: &MathBox<'a>) {
     }
 }
 
-fn draw_logical_bounds<'a, T: Node>(group: &mut T, math_box: &MathBox<'a>) {
+fn draw_logical_bounds<'a, T: Node>(group: &mut T, math_box: &MathBox) {
     if let MathBoxContent::Drawable(Drawable::Glyph(_)) = *math_box.content() {
         let logical_bounds = math_box.bounds().normalize();
 
@@ -187,7 +183,7 @@ fn draw_logical_bounds<'a, T: Node>(group: &mut T, math_box: &MathBox<'a>) {
     }
 }
 
-fn draw_italic_correction<'a, T: Node>(doc: &mut T, math_box: &MathBox<'a>) {
+fn draw_italic_correction<'a, T: Node>(doc: &mut T, math_box: &MathBox) {
     if let MathBoxContent::Drawable(Drawable::Glyph(_)) = *math_box.content() {
         let ink_bounds = math_box.bounds().normalize();
 
@@ -216,7 +212,7 @@ fn draw_italic_correction<'a, T: Node>(doc: &mut T, math_box: &MathBox<'a>) {
     }
 }
 
-fn draw_top_accent_attachment<'a, T: Node>(doc: &mut T, math_box: &MathBox<'a>) {
+fn draw_top_accent_attachment<'a, T: Node>(doc: &mut T, math_box: &MathBox) {
     let line = Line::new()
         .set("x1", math_box.top_accent_attachment() + math_box.origin.x)
         .set("y1", math_box.origin.y + math_box.extents().descent + 200)
@@ -225,9 +221,9 @@ fn draw_top_accent_attachment<'a, T: Node>(doc: &mut T, math_box: &MathBox<'a>) 
     doc.append(line);
 }
 
-fn draw_glyph<'a, T: Node>(doc: &mut T, math_box: &MathBox<'a>, face: &FT_Face) {
+fn draw_glyph<'a, T: Node>(doc: &mut T, math_box: &MathBox, face: &FT_Face) {
     let (glyph, scale_x, scale_y) =
-        if let MathBoxContent::Drawable(Drawable::Glyph((Glyph { glyph_code, scale }, ..))) =
+        if let MathBoxContent::Drawable(Drawable::Glyph(MathGlyph { glyph_code, scale, .. })) =
             *math_box.content() {
             (glyph_code, scale.as_scale_mult(), scale.as_scale_mult())
         } else {

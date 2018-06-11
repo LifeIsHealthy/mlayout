@@ -10,7 +10,6 @@ quick-xml = "0.4"
 harfbuzz-sys = { git = "https://github.com/manuel-rhdt/rust-harfbuzz.git" }
 harfbuzz_rs = { git = "https://github.com/manuel-rhdt/harfbuzz_rs.git" }
 bitflags = "0.7"
-vec_map = "*"
 stash = "*"
 
 [dev-dependencies]
@@ -25,3 +24,6 @@ rustc-serialize = "0.3"
 default = ["mathml_parser"]
 
 mathml_parser = []
+
+[workspace]
+members = ["mathimg"]

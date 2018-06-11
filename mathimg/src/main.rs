@@ -20,7 +20,7 @@ use freetype::face;
 use freetype::Face as FT_Face;
 
 use harfbuzz_sys::*;
-use harfbuzz_rs::{Face, Blob, FontFuncsBuilder, GlyphExtents, HarfbuzzObject};
+use harfbuzz_rs::{Face, FontFuncsBuilder, GlyphExtents, HarfbuzzObject};
 
 use math_render::mathmlparser;
 use math_render::shaper::HarfbuzzShaper;

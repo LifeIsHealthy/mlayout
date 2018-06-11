@@ -2,6 +2,8 @@ use std::cmp::{max, min};
 use std::ops::{Add, Div, Mul, Sub};
 use types::PercentValue;
 use std::default::Default;
+use std::any::Any;
+use std::sync::Arc;
 
 use typesetting::shaper::MathGlyph;
 
@@ -228,21 +230,21 @@ pub trait MathBoxMetrics {
 }
 
 #[derive(Debug)]
-pub enum Drawable<G: MathGlyph> {
-    Glyph(G),
+pub enum Drawable {
+    Glyph(MathGlyph),
     Line { vector: Vector<i32>, thickness: u32 },
 }
 
-impl<'a, G: MathGlyph> MathBoxMetrics for Drawable<G> {
+impl MathBoxMetrics for Drawable {
     fn advance_width(&self) -> i32 {
         match *self {
-            Drawable::Glyph(glyph) => glyph.advance_width(),
+            Drawable::Glyph(glyph) => glyph.advance_width,
             Drawable::Line { ref vector, .. } => vector.x,
         }
     }
     fn extents(&self) -> Extents<i32> {
         match *self {
-            Drawable::Glyph(glyph) => glyph.extents(),
+            Drawable::Glyph(glyph) => glyph.extents,
             Drawable::Line { ref vector, .. } => Extents {
                 left_side_bearing: 0,
                 width: vector.x,
@@ -254,14 +256,14 @@ impl<'a, G: MathGlyph> MathBoxMetrics for Drawable<G> {
 
     fn italic_correction(&self) -> i32 {
         match *self {
-            Drawable::Glyph(glyph) => glyph.italic_correction(),
+            Drawable::Glyph(glyph) => glyph.italic_correction,
             Drawable::Line { .. } => 0,
         }
     }
 
     fn top_accent_attachment(&self) -> i32 {
         let value = match *self {
-            Drawable::Glyph(glyph) => glyph.top_accent_attachment(),
+            Drawable::Glyph(glyph) => glyph.top_accent_attachment,
             _ => 0,
         };
         if value == 0 {
@@ -273,35 +275,47 @@ impl<'a, G: MathGlyph> MathBoxMetrics for Drawable<G> {
 }
 
 #[derive(Debug)]
-pub enum MathBoxContent<G: MathGlyph> {
+pub enum MathBoxContent {
     /// Represents a box without any content
-    Empty,
-    Drawable(Drawable<G>),
+    Empty(Extents<i32>),
+    Drawable(Drawable),
     /// A vector of boxes that are logically inside the parent box.
     ///
     /// If this `Vec` is empty then thix box is considered empty.
-    Boxes(Vec<MathBox<G>>),
+    Boxes(Vec<MathBox>),
 }
 
-pub struct MathBox<G: MathGlyph> {
+#[derive(Debug)]
+pub struct MathBox {
     pub origin: Vector<i32>,
-    content: MathBoxContent<G>,
+    pub content: MathBoxContent,
+    pub user_data: Option<Arc<Any>>,
 }
 
-impl<G: MathGlyph> Default for MathBoxContent<G> {
+impl Default for MathBoxContent {
     fn default() -> Self {
-        MathBoxContent::Empty
+        MathBoxContent::Empty(Extents::default())
     }
 }
 
-impl<'a, G: MathGlyph> MathBoxMetrics for MathBoxContent<G> {
+impl Default for MathBox {
+    fn default() -> Self {
+        MathBox {
+            origin: Vector::default(),
+            content: MathBoxContent::default(),
+            user_data: None,
+        }
+    }
+}
+
+impl MathBoxMetrics for MathBoxContent {
     fn advance_width(&self) -> i32 {
         match *self {
-            MathBoxContent::Empty => 0,
+            MathBoxContent::Empty(ref extents) => extents.width,
             MathBoxContent::Drawable(ref drawable) => drawable.advance_width(),
             MathBoxContent::Boxes(ref boxes) => boxes
                 .iter()
-                .map(|&item| item.origin.x + item.advance_width())
+                .map(|item| item.origin.x + item.advance_width())
                 .max()
                 .unwrap_or_default(),
         }
@@ -309,7 +323,7 @@ impl<'a, G: MathGlyph> MathBoxMetrics for MathBoxContent<G> {
 
     fn extents(&self) -> Extents<i32> {
         match *self {
-            MathBoxContent::Empty => Extents::default(),
+            MathBoxContent::Empty(ref extents) => *extents,
             MathBoxContent::Drawable(ref drawable) => drawable.extents(),
             MathBoxContent::Boxes(ref boxes) => {
                 let slice = boxes.as_slice();
@@ -346,7 +360,7 @@ impl<'a, G: MathGlyph> MathBoxMetrics for MathBoxContent<G> {
 
     fn italic_correction(&self) -> i32 {
         match *self {
-            MathBoxContent::Empty => 0,
+            MathBoxContent::Empty(_) => 0,
             MathBoxContent::Drawable(ref drawable) => drawable.italic_correction(),
             MathBoxContent::Boxes(ref boxes) => boxes
                 .as_slice()
@@ -372,31 +386,17 @@ impl<'a, G: MathGlyph> MathBoxMetrics for MathBoxContent<G> {
     }
 }
 
-impl<G: MathGlyph> Default for MathBox<G> {
-    fn default() -> Self {
-        MathBox {
-            origin: Vector::default(),
-            content: Default::default(),
-        }
-    }
-}
-
-impl<G: MathGlyph> ::std::fmt::Debug for MathBox<G> {
-    fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
-        write!(f, "MathBox")
-    }
-}
-
-impl<G: MathGlyph> MathBox<G> {
-    fn with_content(content: MathBoxContent<G>) -> Self {
+impl MathBox {
+    fn with_content(content: MathBoxContent) -> Self {
         MathBox {
             content: content,
             origin: Vector::default(),
+            user_data: None,
         }
     }
 
     pub fn empty(extents: Extents<i32>) -> Self {
-        MathBox::with_content(MathBoxContent::Empty)
+        MathBox::with_content(MathBoxContent::Empty(extents))
     }
 
     pub fn with_line(from: Vector<i32>, to: Vector<i32>, thickness: u32) -> Self {
@@ -408,11 +408,11 @@ impl<G: MathGlyph> MathBox<G> {
         math_box
     }
 
-    pub fn with_glyph(glyph: G) -> Self {
+    pub fn with_glyph(glyph: MathGlyph) -> Self {
         MathBox::with_content(MathBoxContent::Drawable(Drawable::Glyph(glyph)))
     }
 
-    pub fn with_vec(vec: Vec<MathBox<G>>) -> Self {
+    pub fn with_vec(vec: Vec<MathBox>) -> Self {
         MathBox::with_content(MathBoxContent::Boxes(vec))
     }
 
@@ -423,12 +423,12 @@ impl<G: MathGlyph> MathBox<G> {
         }
     }
 
-    pub(crate) fn content(&self) -> &MathBoxContent<G> {
+    pub fn content(&self) -> &MathBoxContent {
         &self.content
     }
 
     /// recursive search for a glyph at the leftmost position
-    pub fn first_glyph(&self) -> Option<&G> {
+    pub fn first_glyph(&self) -> Option<&MathGlyph> {
         match *self.content() {
             MathBoxContent::Drawable(Drawable::Glyph(ref glyph)) => Some(glyph),
             MathBoxContent::Boxes(ref boxes) => boxes.first().and_then(|node| node.first_glyph()),
@@ -436,7 +436,7 @@ impl<G: MathGlyph> MathBox<G> {
         }
     }
 
-    pub fn last_glyph(&self) -> Option<&G> {
+    pub fn last_glyph(&self) -> Option<&MathGlyph> {
         match *self.content() {
             MathBoxContent::Drawable(Drawable::Glyph(ref glyph)) => Some(glyph),
             MathBoxContent::Boxes(ref boxes) => boxes.last().and_then(|node| node.last_glyph()),
@@ -445,7 +445,7 @@ impl<G: MathGlyph> MathBox<G> {
     }
 }
 
-impl<G: MathGlyph> MathBoxMetrics for MathBox<G> {
+impl MathBoxMetrics for MathBox {
     fn advance_width(&self) -> i32 {
         self.content.advance_width()
     }

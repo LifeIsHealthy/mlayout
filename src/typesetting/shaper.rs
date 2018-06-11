@@ -3,13 +3,14 @@ extern crate harfbuzz_sys as hb;
 
 use std;
 use std::cell::RefCell;
+use std::cmp::min;
 use std::str::FromStr;
 
-use types::{CornerPosition, PercentValue, LayoutStyle};
-use super::math_box::{Vector, Extents, MathBoxMetrics, MathBox};
 pub use self::harfbuzz_rs::Position;
-use self::harfbuzz_rs::{Font, FontFuncsBuilder, GlyphBuffer, Tag, Blob, HarfbuzzObject,
+use self::harfbuzz_rs::{Blob, Font, FontFuncsBuilder, GlyphBuffer, HarfbuzzObject, Tag,
                         UnicodeBuffer};
+use super::math_box::{Drawable, Extents, MathBox, MathBoxContent, MathBoxMetrics, Vector};
+use types::{CornerPosition, LayoutStyle, PercentValue};
 
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
 #[repr(C)]
@@ -72,24 +73,32 @@ pub enum MathConstant {
     RadicalDegreeBottomRaisePercent,
 }
 
-pub trait MathGlyph: MathBoxMetrics {
-    fn origin(&self) -> Vector<i32> {
-        Vector::default()
-    }
-
-    fn math_kerning(&self, corner: CornerPosition, correction_height: Position) -> Position {
-        0
-    }
+/// A structure that describes an individual glyph in a font.
+#[derive(Default, Debug, Copy, Clone, PartialEq, Eq)]
+pub struct MathGlyph {
+    /// The font-specific glyph code
+    pub glyph_code: u32,
+    /// The Offset at which the glyph should be rendered.
+    pub offset: Vector<i32>,
+    /// The glyph's advance width.
+    pub advance_width: i32,
+    /// The exact dimensions of the glyph's outline.
+    pub extents: Extents<i32>,
+    /// The italic correction to apply after this glyph.
+    pub italic_correction: i32,
+    /// The x-coordinate where a top accent should be attached.
+    pub top_accent_attachment: i32,
+    /// The size at which this glyph should be rendered relative to the other glyphs.
+    /// 
+    /// This is used to render subscripts and superscripts in a smaller size.
+    pub scale: PercentValue,
 }
 
-pub trait MathShaper<'a> {
-    /// The  
-    type Glyph: MathGlyph;
-
-    /// Returns the unscaled value of the constant `c`.
+pub trait MathShaper {
+    /// Returns value of a constant for the current font.
     fn math_constant(&self, c: MathConstant) -> i32;
 
-    fn shape(&self, string: &str, style: LayoutStyle) -> MathBox<'a, Self::Glyph>;
+    fn shape(&self, string: &str, style: LayoutStyle) -> MathBox;
 
     /// Returns a pointer to an OpenType-Math table.
     fn get_math_table(&self) -> &[u8];
@@ -99,16 +108,32 @@ pub trait MathShaper<'a> {
     fn ppem(&self) -> (Position, Position) {
         (self.em_size(), self.em_size())
     }
-}
 
+    fn is_stretchable(&self, glyph: u32, horizontal: bool) -> bool;
+
+    fn stretch_glyph(
+        &self,
+        glyph: u32,
+        horizontal: bool,
+        target_size: u32,
+        style: LayoutStyle,
+    ) -> MathBox;
+
+    fn math_kerning(
+        &self,
+        glyph: &MathGlyph,
+        corner: CornerPosition,
+        correction_height: Position,
+    ) -> Position;
+}
 
 #[derive(Debug, Copy, Clone)]
 pub struct HarfbuzzGlyph<'a> {
     pub origin: Vector<i32>,
     pub advance: Vector<i32>,
-    pub scale: PercentValue,
     pub glyph: u32,
     pub cluster: u32,
+    pub scale: PercentValue,
     shaper: &'a HarfbuzzShaper<'a>,
 }
 
@@ -132,37 +157,64 @@ impl<'a> MathBoxMetrics for HarfbuzzGlyph<'a> {
 
     fn italic_correction(&self) -> i32 {
         unsafe {
-            hb::hb_ot_math_get_glyph_italics_correction(self.shaper.font.as_raw(), self.glyph) *
-            self.scale
+            hb::hb_ot_math_get_glyph_italics_correction(self.shaper.font.as_raw(), self.glyph)
+                * self.scale
         }
     }
 
     fn top_accent_attachment(&self) -> i32 {
         unsafe {
-            hb::hb_ot_math_get_glyph_top_accent_attachment(self.shaper.font.as_raw(), self.glyph) *
-            self.scale
+            hb::hb_ot_math_get_glyph_top_accent_attachment(self.shaper.font.as_raw(), self.glyph)
+                * self.scale
         }
     }
 }
 
-impl<'a> MathGlyph for HarfbuzzGlyph<'a> {
+impl<'a> HarfbuzzGlyph<'a> {
     fn origin(&self) -> Vector<i32> {
         let mut origin = self.origin;
         origin.y = -origin.y;
         origin * self.scale
     }
 
-    fn math_kerning(&self, corner: CornerPosition, correction_height: Position) -> Position {
-        unsafe {
-            hb::hb_ot_math_get_glyph_kerning(self.shaper.font.as_raw(),
-                                             self.glyph,
-                                             std::mem::transmute(corner),
-                                             correction_height / self.scale) *
-            self.scale
+    fn new(
+        shaper: &'a HarfbuzzShaper<'a>,
+        pos: hb::hb_glyph_position_t,
+        info: hb::hb_glyph_info_t,
+        style: LayoutStyle,
+    ) -> Self {
+        let origin = Vector {
+            x: pos.x_offset,
+            y: pos.y_offset,
+        };
+        let advance = Vector {
+            x: pos.x_advance,
+            y: pos.y_advance,
+        };
+        HarfbuzzGlyph {
+            shaper: shaper,
+            origin: origin,
+            advance: advance,
+            glyph: info.codepoint,
+            cluster: info.cluster,
+            scale: shaper.scale_factor(style),
         }
     }
 }
 
+impl<'a> From<HarfbuzzGlyph<'a>> for MathGlyph {
+    fn from(hbglyph: HarfbuzzGlyph<'a>) -> MathGlyph {
+        MathGlyph {
+            glyph_code: hbglyph.glyph,
+            offset: hbglyph.origin(),
+            advance_width: hbglyph.advance_width(),
+            extents: hbglyph.extents(),
+            italic_correction: hbglyph.italic_correction(),
+            top_accent_attachment: hbglyph.top_accent_attachment(),
+            scale: hbglyph.scale,
+        }
+    }
+}
 
 /// The basic font structure used
 #[derive(Debug, Clone)]
@@ -187,9 +239,10 @@ impl<'a> HarfbuzzShaper<'a> {
         }
     }
 
-    fn scale_factor_for_script_level(&self, script_level: u8) -> PercentValue {
-        let percent = if script_level >= 1 {
-            if script_level >= 2 {
+    // Return the font's scale factor for a given script level.
+    fn scale_factor(&self, style: LayoutStyle) -> PercentValue {
+        let percent = if style.script_level >= 1 {
+            if style.script_level >= 2 {
                 self.math_constant(MathConstant::ScriptScriptPercentScaleDown)
             } else {
                 self.math_constant(MathConstant::ScriptPercentScaleDown)
@@ -200,138 +253,105 @@ impl<'a> HarfbuzzShaper<'a> {
         PercentValue::new(percent as u8)
     }
 
-    fn glyph_from_index(&self, glyph_index: u32) -> HarfbuzzGlyph {
-        let (h_origin, v_origin) = self.font.get_glyph_h_origin(glyph_index).unwrap();
-        let h_advance = self.font.get_glyph_h_advance(glyph_index);
-        let v_advance = self.font.get_glyph_v_advance(glyph_index);
-        HarfbuzzGlyph {
-            shaper: self,
-            glyph: glyph_index,
-            origin: Vector {
-                x: h_origin,
-                y: v_origin,
-            },
-            advance: Vector {
-                x: h_advance,
-                y: v_advance,
-            },
-            scale: PercentValue::default(),
-            cluster: 0,
-        }
-    }
+    fn shape_with_style(&self, string: &str, style: LayoutStyle) -> MathBox {
+        let mut buffer = self.buffer.borrow_mut().take().unwrap();
 
-    fn shape_with_style(&self, string: &str, style: LayoutStyle) -> MathBox<'a, HarfbuzzGlyph<'a>> {
-        let mut buffer = self.buffer
-            .borrow_mut()
-            .take()
-            .unwrap();
-
-        println!("shape: {:?}", string);
         buffer = buffer.add_str(string);
         *self.buffer.borrow_mut() = Some(buffer);
-
         self.do_shape(&self.font, style)
     }
 
-    fn shape_glyph_indices<I>(&self, indices: I, style: LayoutStyle) -> MathBox<'a, HarfbuzzGlyph<'a>>
-        where I: Iterator<Item = u32>
-    {
-        let buffer = self.buffer
-            .borrow_mut()
-            .take()
-            .unwrap();
-        print!("shape glyphs: ");
-        for (cluster, codepoint) in indices.enumerate() {
-            print!("0x{:X} ", codepoint);
-            unsafe {
-                hb::hb_buffer_add(buffer.as_raw(), codepoint, cluster as u32);
-            }
+    fn glyph_from_index(&self, glyph_index: u32, style: LayoutStyle) -> MathGlyph {
+        let buffer = self.buffer.borrow_mut().take().unwrap();
+        unsafe {
+            hb::hb_buffer_add(buffer.as_raw(), glyph_index, 0);
         }
-        println!();
         unsafe {
             hb::hb_buffer_set_content_type(buffer.as_raw(), hb::HB_BUFFER_CONTENT_TYPE_UNICODE);
         }
-        *self.buffer.borrow_mut() = Some(buffer);
 
-        self.do_shape(&self.no_cmap_font, style)
+        *self.buffer.borrow_mut() = Some(buffer);
+        let math_box = self.do_shape(&self.no_cmap_font, style);
+        match math_box.content {
+            MathBoxContent::Boxes(_) => panic!("No single glyph was shaped"),
+            MathBoxContent::Drawable(Drawable::Glyph(glyph)) => glyph,
+            _ => unreachable!(),
+        }
     }
 
-    fn do_shape(&self, font: &Font, style: LayoutStyle) -> MathBox<'a, HarfbuzzGlyph<'a>> {
+    fn do_shape(&self, font: &Font, style: LayoutStyle) -> MathBox {
         let mut features: Vec<hb::hb_feature_t> = Vec::with_capacity(2);
         if style.script_level >= 1 {
             let math_variants_tag = Tag::new('s', 's', 't', 'y');
             let variant_num = style.script_level as u32;
 
             features.push(hb::hb_feature_t {
-                              tag: math_variants_tag.0,
-                              value: variant_num,
-                              start: 0,
-                              end: std::u32::MAX,
-                          })
+                tag: math_variants_tag.0,
+                value: variant_num,
+                start: 0,
+                end: std::u32::MAX,
+            })
         }
-        //if style.flat_accent {
-        features.push(hb::hb_feature_t {
-                          tag: Tag::new('f', 'l', 'a', 'c').0,
-                          value: 1,
-                          start: 0,
-                          end: std::u32::MAX,
-                      });
-        //}
+        if style.flat_accent {
+            features.push(hb::hb_feature_t {
+                tag: Tag::new('f', 'l', 'a', 'c').0,
+                value: 1,
+                start: 0,
+                end: std::u32::MAX,
+            });
+        }
 
         let buffer = self.buffer
             .borrow_mut()
             .take()
-            .unwrap();
-        let glyph_buffer = buffer.set_script(Tag::from_str("Math").unwrap()).shape(font, &features);
-        let shaped_glyphs = self.layout_boxes(&glyph_buffer, style);
-        let math_box = self.math_box_from_glyphs(shaped_glyphs, style);
-
+            .expect("Buffer not available");
+        let glyph_buffer = buffer
+            .set_script(Tag::from_str("Math").unwrap())
+            .shape(font, &features);
+        let math_box = {
+            let shaped_glyphs = self.layout_boxes(&glyph_buffer, style);
+            self.math_box_from_glyphs(shaped_glyphs, style)
+        };
         *self.buffer.borrow_mut() = Some(glyph_buffer.clear());
 
         math_box
     }
 
-    fn layout_boxes(&self, glyph_buffer: &GlyphBuffer, style: LayoutStyle) -> Vec<HarfbuzzGlyph> {
+    fn layout_boxes<'b>(
+        &'b self,
+        glyph_buffer: &'b GlyphBuffer,
+        style: LayoutStyle,
+    ) -> impl 'b + Iterator<Item = MathGlyph> {
         let positions = glyph_buffer.get_glyph_positions();
         let infos = glyph_buffer.get_glyph_infos();
-        positions.iter()
+        positions
+            .iter()
             .zip(infos.iter())
             .map(move |(pos, info)| {
-                let origin = Vector {
-                    x: pos.x_offset,
-                    y: pos.y_offset,
-                };
-                let advance = Vector {
-                    x: pos.x_advance,
-                    y: pos.y_advance,
-                };
-                HarfbuzzGlyph {
-                    origin: origin,
-                    advance: advance,
-                    glyph: info.codepoint,
-                    scale: self.scale_factor_for_script_level(style.script_level),
-                    shaper: self,
-                    cluster: info.cluster,
-                }
+                let hb_glyph = HarfbuzzGlyph::new(self, *pos, *info, style);
+                hb_glyph.into()
             })
-            .collect()
     }
 
-    fn math_box_from_glyphs<I>(&self, glyphs: I, style: LayoutStyle) -> MathBox<'a, HarfbuzzGlyph>
-        where I: 'a + IntoIterator<Item = HarfbuzzGlyph<'a>>
-    {
+    fn math_box_from_glyphs(
+        &self,
+        glyphs: impl Iterator<Item = MathGlyph>,
+        _style: LayoutStyle,
+    ) -> MathBox {
         let mut cursor = Vector { x: 0, y: 0 };
-        let scale = self.scale_factor_for_script_level(style.script_level);
-        let iterator = glyphs.into_iter().map(move |mut glyph| {
-            glyph.scale = scale;
-            let origin = glyph.origin();
-            let advance = glyph.advance_width();
+        let iterator = glyphs.into_iter().map(move |glyph| {
+            let advance = glyph.advance_width;
             let mut math_box = MathBox::with_glyph(glyph);
-            math_box.origin = origin + cursor;
+            math_box.origin = cursor;
             cursor.x += advance;
             math_box
         });
-        MathBox::with_iter(Box::new(iterator))
+        let mut boxes = iterator.collect::<Vec<_>>();
+        if boxes.len() == 1 {
+            boxes.remove(0)
+        } else {
+            MathBox::with_vec(boxes)
+        }
     }
 }
 
@@ -343,23 +363,7 @@ fn point_with_offset(offset: i32, horizontal: bool) -> Vector<i32> {
     }
 }
 
-//fn get_single_glyph(shaper: &HarfbuzzShaper, glyph: u32, horizontal: bool) -> HarfbuzzGlyph {
-//    let advance = if horizontal {
-//        shaper.font.get_glyph_h_advance(glyph)
-//    } else {
-//        shaper.font.get_glyph_v_advance(glyph)
-//    };
-//
-//    HarfbuzzGlyph {
-//        glyph: glyph,
-//        origin: Default::default(),
-//        advance: point_with_offset(advance, horizontal),
-//    }
-//}
-
-impl<'a> MathShaper<'a> for HarfbuzzShaper<'a> {
-    type Glyph = HarfbuzzGlyph<'a>;
-
+impl<'a> MathShaper for HarfbuzzShaper<'a> {
     fn math_constant(&self, c: MathConstant) -> i32 {
         unsafe { hb::hb_ot_math_get_constant(self.font.as_raw(), std::mem::transmute(c)) }
     }
@@ -372,85 +376,107 @@ impl<'a> MathShaper<'a> for HarfbuzzShaper<'a> {
         blob.get_data()
     }
 
-    fn shape(&self, string: &str, style: LayoutStyle) -> MathBox<'a, HarfbuzzGlyph<'a>> {
+    fn shape(&self, string: &str, style: LayoutStyle) -> MathBox {
         self.shape_with_style(string, style)
     }
 
-    //    fn is_stretchable(&self, glyph: u32, horizontal: bool) -> bool {
-    //        let direction = if horizontal {
-    //            hb::HB_DIRECTION_LTR
-    //        } else {
-    //            hb::HB_DIRECTION_TTB
-    //        };
-    //
-    //        let variant_iter = VariantIterator {
-    //            shaper: self,
-    //            glyph: glyph,
-    //            direction: direction,
-    //            index: 0,
-    //        };
-    //
-    //        if variant_iter.len() > 0 {
-    //            return true;
-    //        }
-    //
-    //        let assembly_iter = AssemblyIterator {
-    //            shaper: self,
-    //            glyph: glyph,
-    //            direction: direction,
-    //            index: 0,
-    //        };
-    //
-    //        if assembly_iter.len() > 0 {
-    //            return true;
-    //        }
-    //
-    //        false
-    //    }
-    //
-    //    fn stretch_glyph<'b>(&'b self,
-    //                         glyph: u32,
-    //                         horizontal: bool,
-    //                         as_accent: bool,
-    //                         target_size: u32)
-    //                         -> Box<Iterator<Item = Self::Glyph> + 'b> {
-    //        let base_glyph = get_single_glyph(self, glyph, horizontal);
-    //
-    //        let mut glyphs = try_base_glyph(base_glyph, horizontal, target_size)
-    //            .or_else(|| try_variant(self, glyph, horizontal, as_accent, target_size))
-    //            .or_else(|| try_assembly(self, glyph, horizontal, target_size))
-    //            .map(|glyphs| glyphs.collect::<Vec<_>>())
-    //            .unwrap_or_else(|| vec![base_glyph]);
-    //
-    //        let result = {
-    //            let glyph_indices = glyphs.iter().map(|shaped_glyph| shaped_glyph.glyph);
-    //            let mut layout_style = LayoutStyle::new();
-    //            layout_style.flat_accent = true;
-    //            self.shape_glyph_indices(glyph_indices, LayoutStyle::new())
-    //        };
-    //        for (ref mut original_glyph, shaped_glyph) in glyphs.iter_mut().zip(result) {
-    //            original_glyph.glyph = shaped_glyph.glyph;
-    //        }
-    //        Box::new(glyphs.into_iter())
-    //    }
+    fn is_stretchable(&self, glyph: u32, horizontal: bool) -> bool {
+        let direction = if horizontal {
+            hb::HB_DIRECTION_LTR
+        } else {
+            hb::HB_DIRECTION_TTB
+        };
+
+        let variant_iter = VariantIterator {
+            shaper: self,
+            glyph: glyph,
+            direction: direction,
+            index: 0,
+        };
+
+        if variant_iter.len() > 0 {
+            return true;
+        }
+
+        let assembly_iter = AssemblyIterator {
+            shaper: self,
+            glyph: glyph,
+            direction: direction,
+            index: 0,
+        };
+
+        if assembly_iter.len() > 0 {
+            return true;
+        }
+
+        false
+    }
+
+    fn stretch_glyph(
+        &self,
+        glyph: u32,
+        horizontal: bool,
+        target_size: u32,
+        style: LayoutStyle,
+    ) -> MathBox {
+        // rescale target size for the current layout
+        let target_size = target_size / self.scale_factor(style);
+
+        let glyphs = try_base_glyph(self, glyph, horizontal, target_size, style)
+            .or_else(|| try_variant(self, glyph, horizontal, target_size, style))
+            .or_else(|| try_assembly(self, glyph, horizontal, target_size, style))
+            .unwrap_or_else(|| MathBox::with_glyph(self.glyph_from_index(glyph, style)));
+
+        // let result = {
+        //     let glyph_indices = glyphs.iter().map(|shaped_glyph| shaped_glyph.glyph);
+        //     let mut layout_style = LayoutStyle::new();
+        //     layout_style.flat_accent = true;
+        //     self.shape_glyph_indices(glyph_indices, LayoutStyle::new())
+        // };
+        // for (ref mut original_glyph, shaped_glyph) in glyphs.iter_mut().zip(result) {
+        //     original_glyph.glyph = shaped_glyph.glyph;
+        // }
+        glyphs
+    }
 
     fn em_size(&self) -> Position {
         self.font.face().upem() as Position
     }
+
+    fn math_kerning(
+        &self,
+        glyph: &MathGlyph,
+        corner: CornerPosition,
+        correction_height: Position,
+    ) -> Position {
+        unsafe {
+            hb::hb_ot_math_get_glyph_kerning(
+                self.font.as_raw(),
+                glyph.glyph_code,
+                std::mem::transmute(corner),
+                correction_height / glyph.scale,
+            ) * glyph.scale
+        }
+    }
 }
 
-fn try_base_glyph<'a>(glyph: HarfbuzzGlyph<'a>,
-                      horizontal: bool,
-                      target_size: u32)
-                      -> Option<Box<Iterator<Item = HarfbuzzGlyph<'a>> + 'a>> {
+fn try_base_glyph<'a>(
+    shaper: &HarfbuzzShaper,
+    glyph: u32,
+    horizontal: bool,
+    target_size: u32,
+    style: LayoutStyle,
+) -> Option<MathBox> {
+    let glyph = shaper.glyph_from_index(glyph, style);
+
     let advance = if horizontal {
-        glyph.advance.x
+        glyph.extents.width
     } else {
-        glyph.advance.y
+        -glyph.extents.height()
     };
 
     if advance >= target_size as i32 {
-        Some(Box::new(std::iter::once(glyph)))
+        Some(MathBox::with_glyph(glyph))
     } else {
         None
     }
@@ -471,12 +497,14 @@ impl<'a> Iterator for VariantIterator<'a> {
         let mut glyph_variant: hb::hb_ot_math_glyph_variant_t = unsafe { ::std::mem::zeroed() };
         let mut num_elements: u32 = 1;
         unsafe {
-            hb::hb_ot_math_get_glyph_variants(self.shaper.font.as_raw(),
-                                              self.glyph,
-                                              self.direction,
-                                              self.index,
-                                              &mut num_elements,
-                                              &mut glyph_variant)
+            hb::hb_ot_math_get_glyph_variants(
+                self.shaper.font.as_raw(),
+                self.glyph,
+                self.direction,
+                self.index,
+                &mut num_elements,
+                &mut glyph_variant,
+            )
         };
         self.index += 1;
         if num_elements == 1 {
@@ -488,12 +516,14 @@ impl<'a> Iterator for VariantIterator<'a> {
 
     fn size_hint(&self) -> (usize, Option<usize>) {
         let total_variants = unsafe {
-            hb::hb_ot_math_get_glyph_variants(self.shaper.font.as_raw(),
-                                              self.glyph,
-                                              self.direction,
-                                              self.index,
-                                              &mut 0,
-                                              std::ptr::null_mut())
+            hb::hb_ot_math_get_glyph_variants(
+                self.shaper.font.as_raw(),
+                self.glyph,
+                self.direction,
+                self.index,
+                &mut 0,
+                std::ptr::null_mut(),
+            )
         } as usize;
         let remaining_elements = total_variants - self.index as usize;
         (remaining_elements, Some(remaining_elements))
@@ -502,12 +532,13 @@ impl<'a> Iterator for VariantIterator<'a> {
 
 impl<'a> ExactSizeIterator for VariantIterator<'a> {}
 
-fn try_variant<'a>(shaper: &'a HarfbuzzShaper<'a>,
-                   glyph: u32,
-                   horizontal: bool,
-                   as_accent: bool,
-                   target_size: u32)
-                   -> Option<Box<Iterator<Item = HarfbuzzGlyph<'a>> + 'a>> {
+fn try_variant<'a>(
+    shaper: &'a HarfbuzzShaper<'a>,
+    glyph: u32,
+    horizontal: bool,
+    target_size: u32,
+    style: LayoutStyle,
+) -> Option<MathBox> {
     let direction = if horizontal {
         hb::HB_DIRECTION_LTR
     } else {
@@ -521,31 +552,23 @@ fn try_variant<'a>(shaper: &'a HarfbuzzShaper<'a>,
         index: 0,
     };
 
-    let variant =
-        if as_accent {
-            // return the largest variant that is smaller than the target size
-            iter.filter(|&variant| variant.advance <= target_size as i32)
-                .max_by_key(|&variant| variant.advance)
-        } else {
-            // return the smallest variant that is larger than the target size
-            iter.filter(|&variant| variant.advance >= target_size as i32)
-                .min_by_key(|&variant| variant.advance)
-        };
+    let variant = if style.as_accent {
+        // return the largest variant that is smaller than the target size
+        iter.filter(|&variant| variant.advance <= target_size as i32)
+            .max_by_key(|&variant| variant.advance)
+    } else {
+        // return the smallest variant that is larger than the target size
+        iter.filter(|&variant| variant.advance >= target_size as i32)
+            .min_by_key(|&variant| variant.advance)
+    };
 
     let variant = match variant {
         Some(variant) => variant,
         None => return None,
     };
 
-    let glyph = HarfbuzzGlyph {
-        glyph: variant.glyph,
-        cluster: 0,
-        origin: Default::default(),
-        advance: point_with_offset(variant.advance, horizontal),
-        scale: PercentValue::new(100),
-        shaper: shaper,
-    };
-    Some(Box::new(std::iter::once(glyph)))
+    let glyph = shaper.glyph_from_index(variant.glyph, style);
+    Some(MathBox::with_glyph(glyph))
 }
 
 struct AssemblyIterator<'a> {
@@ -563,13 +586,15 @@ impl<'a> Iterator for AssemblyIterator<'a> {
         let mut num_elements: u32 = 1;
         let mut italics_correction: i32 = 0;
         unsafe {
-            hb::hb_ot_math_get_glyph_assembly(self.shaper.font.as_raw(),
-                                              self.glyph,
-                                              self.direction,
-                                              self.index,
-                                              &mut num_elements,
-                                              &mut glyph_part,
-                                              &mut italics_correction)
+            hb::hb_ot_math_get_glyph_assembly(
+                self.shaper.font.as_raw(),
+                self.glyph,
+                self.direction,
+                self.index,
+                &mut num_elements,
+                &mut glyph_part,
+                &mut italics_correction,
+            )
         };
         self.index += 1;
         if num_elements == 1 {
@@ -581,13 +606,15 @@ impl<'a> Iterator for AssemblyIterator<'a> {
 
     fn size_hint(&self) -> (usize, Option<usize>) {
         let total_parts = unsafe {
-            hb::hb_ot_math_get_glyph_assembly(self.shaper.font.as_raw(),
-                                              self.glyph,
-                                              self.direction,
-                                              self.index,
-                                              &mut 0,
-                                              std::ptr::null_mut(),
-                                              &mut 0)
+            hb::hb_ot_math_get_glyph_assembly(
+                self.shaper.font.as_raw(),
+                self.glyph,
+                self.direction,
+                self.index,
+                &mut 0,
+                std::ptr::null_mut(),
+                &mut 0,
+            )
         } as usize;
         let remaining_elements = total_parts - self.index as usize;
         (remaining_elements, Some(remaining_elements))
@@ -596,11 +623,13 @@ impl<'a> Iterator for AssemblyIterator<'a> {
 
 impl<'a> ExactSizeIterator for AssemblyIterator<'a> {}
 
-fn try_assembly<'a>(shaper: &'a HarfbuzzShaper<'a>,
-                    glyph: u32,
-                    horizontal: bool,
-                    target_size: u32)
-                    -> Option<Box<Iterator<Item = HarfbuzzGlyph> + 'a>> {
+fn try_assembly<'a>(
+    shaper: &'a HarfbuzzShaper<'a>,
+    glyph: u32,
+    horizontal: bool,
+    target_size: u32,
+    style: LayoutStyle,
+) -> Option<MathBox> {
     let direction = if horizontal {
         hb::HB_DIRECTION_LTR
     } else {
@@ -662,17 +691,16 @@ fn try_assembly<'a>(shaper: &'a HarfbuzzShaper<'a>,
         //
         assembly_iter.index = 0;
         for (index, part) in assembly_iter.by_ref().enumerate() {
-            let will_be_repeated = repeat_count_ext >= 2 &&
-                                   part.flags == hb::HB_MATH_GLYPH_PART_FLAG_EXTENDER;
+            let will_be_repeated =
+                repeat_count_ext >= 2 && part.flags == hb::HB_MATH_GLYPH_PART_FLAG_EXTENDER;
             if index < (part_count_ext + part_count_non_ext - 1) as usize || will_be_repeated {
-                connector_overlap = ::std::cmp::min(connector_overlap, part.end_connector_length);
+                connector_overlap = min(connector_overlap, part.end_connector_length);
             }
             if index > 0 || will_be_repeated {
-                connector_overlap = ::std::cmp::min(connector_overlap, part.start_connector_length);
+                connector_overlap = min(connector_overlap, part.start_connector_length);
             }
         }
         if connector_overlap < min_connector_overlap {
-            println!("{:?} < {:?}", connector_overlap, min_connector_overlap);
             return None;
         };
         connector_overlap
@@ -689,33 +717,30 @@ fn try_assembly<'a>(shaper: &'a HarfbuzzShaper<'a>,
             } else {
                 1
             } as usize;
-            ::std::iter::repeat(part).take(repeat_count)
+            std::iter::repeat(part).take(repeat_count)
         })
         // Offset the each glyph from the previous glyph by the advance of the part minus the
         // connector overlap.
         .scan(/* initial offset */ 0, move |current_offset, part| {
             let delta_offset = part.full_advance - connector_overlap;
-            let mut origin = point_with_offset(*current_offset, horizontal);
-            let mut glyph = shaper.glyph_from_index(part.glyph);
-            let extents = glyph.extents();
-            if horizontal {
-                origin.x -= extents.left_side_bearing;
-            } else {
-                origin.y += extents.descent;
-            }
-            glyph.origin = origin;
-            glyph.advance = Vector::default();
+            let origin = point_with_offset(*current_offset, horizontal);
+            let glyph = shaper.glyph_from_index(part.glyph, style);
+
+            let mut math_box = MathBox::with_glyph(glyph);
+            math_box.origin = origin;
 
             *current_offset += delta_offset;
-            Some((glyph, part.full_advance))
-        })
-        // Make sure that the last part's advance is added to the assembly.
-        .enumerate()
-        .map(move |(index, (glyph, advance))| if index >= (part_count - 1) as usize {
-            HarfbuzzGlyph { advance: point_with_offset(advance, horizontal), ..glyph }
-        } else {
-            glyph
+            Some(math_box)
         });
 
-    Some(Box::new(result))
+    Some(MathBox::with_vec(result.collect()))
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn test_assembly() {}
+
 }

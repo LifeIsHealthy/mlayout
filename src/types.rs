@@ -1,92 +1,41 @@
-use stash::Stash;
-
-use std;
 use std::default::Default;
 use std::fmt;
 use std::ops::{Mul, Div};
+use std::any::Any;
+use std::sync::Arc;
 
 use typesetting::math_box::Vector;
+use typesetting::MathLayout;
 
 /// An identifier of a glyph inside a font.
 pub type GlyphCode = u32;
 
-#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash)]
-pub struct WithUserData<T, U> {
-    pub inner: T,
-    pub user_data: Option<U>,
-}
-
-impl<T: Default, U> Default for WithUserData<T, U> {
-    fn default() -> WithUserData<T, U> {
-        WithUserData {
-            inner: T::default(),
-            user_data: None,
-        }
-    }
-}
-
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
-pub struct Index(u32);
-
-impl ::std::convert::From<usize> for Index {
-    fn from(num: usize) -> Self {
-        if num > std::u32::MAX as usize {
-            panic!("index overflow");
-        }
-        Index(num as u32)
-    }
-}
-
-impl ::std::convert::Into<usize> for Index {
-    fn into(self) -> usize {
-        self.0 as usize
-    }
-}
-
-#[derive(Default, Debug)]
+#[derive(Debug, Default)]
 pub struct MathExpression {
-    entries: Stash<MathItem, Index>,
-    pub root_index: Option<Index>,
+    pub(crate) item: Box<MathItem>,
+    pub user_data: Option<Arc<Any>>,
 }
 
 impl MathExpression {
-    pub fn new() -> MathExpression {
+    pub fn new<U: Any>(expr: MathItem, user_data: U) -> MathExpression {
         MathExpression {
-            entries: Stash::default(),
-            root_index: None,
+            item: Box::new(expr),
+            user_data: Some(Arc::new(user_data)),
         }
     }
 
-    pub fn add_item(&mut self, item: MathItem) -> Index {
-        self.entries.put(item)
+    pub fn set_user_data<U: Any>(&mut self, user_data: U) {
+        self.user_data = Some(Arc::new(user_data));
     }
 
-    pub fn get_item(&self, index: Index) -> Option<&MathItem> {
-        self.entries.get(index)
-    }
-
-    pub fn get_item_mut(&mut self, index: Index) -> Option<&mut MathItem> {
-        self.entries.get_mut(index)
-    }
-}
-
-impl ::std::ops::Index<Index> for MathExpression {
-    type Output = MathItem;
-
-    fn index(&self, index: Index) -> &MathItem {
-        self.get_item(index).expect("Invalid Index for MathExpression.")
-    }
-}
-
-impl ::std::ops::IndexMut<Index> for MathExpression {
-    fn index_mut(&mut self, index: Index) -> &mut MathItem {
-        self.get_item_mut(index).expect("Invalid Index for MathExpression.")
+    pub fn downcast_user_data_ref<U: Any>(&self) -> Option<&U> {
+        self.user_data.as_ref().and_then(|x| x.downcast_ref())
     }
 }
 
 /// A `MathItem` is the abstract representation of mathematical notation that manages the layout
 /// of its subexpressions.
-#[derive(Debug, PartialEq)]
+#[derive(Debug)]
 pub enum MathItem {
     /// A simple element displaying a single field without special formatting.
     Field(Field),
@@ -107,8 +56,10 @@ pub enum MathItem {
     /// A symbol that can grow horizontally or vertically to match the size of its surrounding
     /// elements.
     Operator(Operator),
-    /// A list of math items to be laid out sequentially.
-    List(Vec<Index>),
+    /// A list of math expressions to be laid out sequentially.
+    List(Vec<MathExpression>),
+    /// Any math expression of another type.
+    Other(Box<MathLayout>),
 }
 
 impl Default for MathItem {
@@ -137,6 +88,9 @@ pub enum Field {
     /// OpenType.
     Unicode(String),
     /// Represents a specific glyph in the current font.
+    /// 
+    /// *Beware*: This is not yet implemented!
+    // TODO
     Glyph(Glyph),
 }
 impl Default for Field {
@@ -184,31 +138,31 @@ impl MathSpace {
 
 /// An expression that consists of a base (called nucleus) and attachments at each corner (e.g.
 /// subscripts and superscripts).
-#[derive(Default, Debug, PartialEq, Eq)]
+#[derive(Default, Debug)]
 pub struct Atom {
     /// The base of the atom.
-    pub nucleus: Option<Index>,
+    pub nucleus: Option<MathExpression>,
     /// top left attachment
-    pub top_left: Option<Index>,
+    pub top_left: Option<MathExpression>,
     /// top right attachment
-    pub top_right: Option<Index>,
+    pub top_right: Option<MathExpression>,
     /// bottom left attachment
-    pub bottom_left: Option<Index>,
+    pub bottom_left: Option<MathExpression>,
     /// bottom right attachment
-    pub bottom_right: Option<Index>,
+    pub bottom_right: Option<MathExpression>,
 }
 
 
 /// An expression that consists of a base (called nucleus) and attachments that go above or below
 /// the nucleus like e.g. accents.
-#[derive(Debug, Default, PartialEq, Eq)]
+#[derive(Debug, Default)]
 pub struct OverUnder {
     /// the base
-    pub nucleus: Option<Index>,
+    pub nucleus: Option<MathExpression>,
     /// the `Element` to go above the base
-    pub over: Option<Index>,
+    pub over: Option<MathExpression>,
     /// the `Element` to go below the base
-    pub under: Option<Index>,
+    pub under: Option<MathExpression>,
     /// the `over` element should be rendered as an accent
     pub over_is_accent: bool,
     /// the `under` element should be rendered as an accent
@@ -227,25 +181,25 @@ pub struct OverUnder {
 /// This can either be rendered as a fraction (with a line separating the numerator and the
 /// denominator) or as a stack with no separating line (setting the `thickness`-parameter to a
 /// value of 0).
-#[derive(Debug, Default, PartialEq)]
+#[derive(Debug, Default)]
 pub struct GeneralizedFraction {
     /// The field above the fraction bar.
-    pub numerator: Option<Index>,
+    pub numerator: Option<MathExpression>,
     /// The field below the fraction bar.
-    pub denominator: Option<Index>,
+    pub denominator: Option<MathExpression>,
     /// Thickness of the fraction line. If this is zero the fraction is drawn as a stack. If
     /// thickness is None the default fraction thickness is used.
-    pub thickness: Option<Length>,
+    pub thickness: Option<MathExpression>,
 }
 
 /// An expression consisting of a radical symbol encapsulating the radicand and an optional degree
 /// expression that is displayed above the beginning of the surd.
-#[derive(Debug, Default, PartialEq, Eq)]
+#[derive(Debug, Default)]
 pub struct Root {
     /// The expression "inside" of the radical symbol.
-    pub radicand: Option<Index>,
+    pub radicand: Option<MathExpression>,
     /// The degree of the radical.
-    pub degree: Option<Index>,
+    pub degree: Option<MathExpression>,
 }
 
 #[derive(Debug, Default, Copy, Clone, PartialEq)]
@@ -442,6 +396,8 @@ pub struct LayoutStyle {
     pub flat_accent: bool,
     /// Determines if the expression should grow to meet the specified constraints.
     pub stretch_constraints: Option<Vector<i32>>,
+    /// Specifies whether a diacritic should be typeset as an accent.
+    pub as_accent: bool,
 }
 
 impl LayoutStyle {
@@ -520,6 +476,7 @@ impl Default for LayoutStyle {
             is_cramped: false,
             flat_accent: false,
             stretch_constraints: None,
+            as_accent: false,
         }
     }
 }
@@ -597,21 +554,5 @@ mod tests {
     fn percent_test() {
         let val = PercentValue::new(101);
         assert_eq!(val.as_percentage(), 101);
-    }
-
-    #[test]
-    fn test_math_expression() {
-        let mut graph = MathExpression::new();
-        let first_node = MathItem::default();
-        let second_node = MathItem::default();
-        let third_node = MathItem::default();
-
-        let first_index = graph.add_item(first_node);
-        let second_index = graph.add_item(second_node);
-        let third_index = graph.add_item(third_node);
-
-        assert_eq!(first_index, Index(0));
-        assert_eq!(second_index, Index(1));
-        assert_eq!(third_index, Index(2));
     }
 }

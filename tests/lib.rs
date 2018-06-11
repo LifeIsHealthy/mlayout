@@ -4,7 +4,7 @@ extern crate math_render;
 extern crate freetype;
 
 use math_render::mathmlparser;
-use math_render::math_box::{MathBoxContent, MathBoxMetrics};
+use math_render::math_box::{MathBox, MathBoxContent, MathBoxMetrics};
 
 mod util;
 use util::TEST_FONT;
@@ -24,7 +24,7 @@ fn shaping_test() {
                    })
 }
 
-fn assume_boxes<'a, 'b, T, G>(content: &MathBoxContent<T, G>) -> &T {
+fn assume_boxes(content: &MathBoxContent) -> &[MathBox] {
     match *content {
         MathBoxContent::Boxes(ref list) => list,
         _ => panic!(),
@@ -40,7 +40,7 @@ fn no_scale_division_test() {
         let result = math_render::layout(&list, font);
         println!("{:#?}", &result);
         let content = result.content();
-        let boxes = assume_boxes(content).as_slice();
+        let boxes = assume_boxes(content);
         // test that the second box has a greater x-value than the right edge of the first box
         // with a somewhat big error margin
         assert!(boxes[1].origin.x >
@@ -56,7 +56,7 @@ fn fraction_centering_test() {
         let result = math_render::layout(&list, font);
         println!("{:?}", result);
         let content = result.content();
-        let boxes = assume_boxes(content).as_slice();
+        let boxes = assume_boxes(content);
 
         // test that the second box has a greater x-value than the right edge of the first box
         // with a somewhat big error margin

@@ -9,7 +9,9 @@ mod types;
 mod typesetting;
 
 #[cfg(feature = "mathml_parser")]
+extern crate quick_xml;
+#[cfg(feature = "mathml_parser")]
 pub mod mathmlparser;
 
-pub use typesetting::*;
+pub use typesetting::{math_box, unicode_math, shaper, layout};
 pub use types::*;

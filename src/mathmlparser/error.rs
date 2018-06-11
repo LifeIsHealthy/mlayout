@@ -2,8 +2,8 @@ use std;
 use std::fmt;
 use std::io::prelude::*;
 
-use super::quick_xml;
-use super::quick_xml::XmlReader;
+use quick_xml;
+use quick_xml::XmlReader;
 
 #[derive(Debug)]
 pub struct ParsingError {

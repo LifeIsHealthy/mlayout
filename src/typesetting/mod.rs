@@ -1,20 +1,20 @@
+pub mod math_box;
 mod layout;
 pub mod shaper;
-pub mod math_box;
 mod multiscripts;
 pub mod unicode_math;
-pub mod lazy_vec;
 mod stretchy;
 
 use types::*;
-pub use self::layout::{MathLayout, LayoutOptions, layout_expression};
-use self::shaper::{MathShaper, MathGlyph};
+pub use self::layout::{layout_expression, LayoutOptions, MathLayout};
+use self::shaper::MathShaper;
 use self::math_box::MathBox;
 
 // Calculates the dimensions of the components and their relative positioning. However no space
 // is distributed.
-pub fn layout<'a, S>(expression: &'a MathExpression, shaper: &'a S) -> MathBox<'a, S::Glyph>
-    where S: MathShaper<'a>
+pub fn layout<'a, S>(expression: &'a MathExpression, shaper: &'a S) -> MathBox
+where
+    S: MathShaper,
 {
     let options = LayoutOptions {
         shaper: shaper,
@@ -24,9 +24,9 @@ pub fn layout<'a, S>(expression: &'a MathExpression, shaper: &'a S) -> MathBox<'
             is_cramped: false,
             flat_accent: false,
             stretch_constraints: None,
+            as_accent: false,
         },
         stretch_size: None,
-        as_accent: false,
     };
 
     layout::layout_expression(expression, options)

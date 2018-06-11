@@ -1,6 +1,3 @@
-extern crate quick_xml;
-extern crate vec_map;
-
 mod error;
 mod operator;
 mod operator_dict;
@@ -10,15 +7,13 @@ mod escape;
 use std;
 use std::io::BufRead;
 
-use types::{Atom, OverUnder, GeneralizedFraction, Root, Length, MathExpression, MathItem, Index};
+use types::{Atom, GeneralizedFraction, Length, MathExpression, MathItem, OverUnder, Root};
 
-pub use self::quick_xml::{XmlReader, Event, Element};
-pub use self::quick_xml::error::ResultPos;
-
-use self::vec_map::VecMap;
+pub use quick_xml::{Element, Event, XmlReader};
+pub use quick_xml::error::ResultPos;
+use stash::Stash;
 
 use self::operator::{guess_if_operator_with_form, Form};
-
 pub use self::error::*;
 
 type Result<T> = std::result::Result<T, ParsingError>;
@@ -39,7 +34,7 @@ enum ElementType {
 #[allow(dead_code)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum ArgumentRequirements {
-    ArgumentList, // single argument or inferred mrow
+    ArgumentList,          // single argument or inferred mrow
     RequiredArguments(u8), // the number of required arguments
     Special,
 }
@@ -60,67 +55,94 @@ impl AttributeParse for [u8] {
 }
 
 // a static list of all mathml elements
-static MATHML_ELEMENTS: [MathmlElement; 15] =
-    [MathmlElement {
-         identifier: "mi",
-         elem_type: ElementType::TokenElement,
-     },
-     MathmlElement {
-         identifier: "mo",
-         elem_type: ElementType::TokenElement,
-     },
-     MathmlElement {
-         identifier: "mn",
-         elem_type: ElementType::TokenElement,
-     },
-     MathmlElement {
-         identifier: "mtext",
-         elem_type: ElementType::TokenElement,
-     },
-     MathmlElement {
-         identifier: "mrow",
-         elem_type: ElementType::LayoutSchema { args: ArgumentRequirements::ArgumentList },
-     },
-     MathmlElement {
-         identifier: "math",
-         elem_type: ElementType::LayoutSchema { args: ArgumentRequirements::ArgumentList },
-     },
-     MathmlElement {
-         identifier: "msub",
-         elem_type: ElementType::LayoutSchema { args: ArgumentRequirements::RequiredArguments(2) },
-     },
-     MathmlElement {
-         identifier: "msup",
-         elem_type: ElementType::LayoutSchema { args: ArgumentRequirements::RequiredArguments(2) },
-     },
-     MathmlElement {
-         identifier: "msubsup",
-         elem_type: ElementType::LayoutSchema { args: ArgumentRequirements::RequiredArguments(3) },
-     },
-     MathmlElement {
-         identifier: "mover",
-         elem_type: ElementType::LayoutSchema { args: ArgumentRequirements::RequiredArguments(2) },
-     },
-     MathmlElement {
-         identifier: "munder",
-         elem_type: ElementType::LayoutSchema { args: ArgumentRequirements::RequiredArguments(2) },
-     },
-     MathmlElement {
-         identifier: "munderover",
-         elem_type: ElementType::LayoutSchema { args: ArgumentRequirements::RequiredArguments(3) },
-     },
-     MathmlElement {
-         identifier: "mfrac",
-         elem_type: ElementType::LayoutSchema { args: ArgumentRequirements::RequiredArguments(2) },
-     },
-     MathmlElement {
-         identifier: "msqrt",
-         elem_type: ElementType::LayoutSchema { args: ArgumentRequirements::ArgumentList },
-     },
-     MathmlElement {
-         identifier: "mroot",
-         elem_type: ElementType::LayoutSchema { args: ArgumentRequirements::RequiredArguments(2) },
-     }];
+static MATHML_ELEMENTS: [MathmlElement; 16] = [
+    MathmlElement {
+        identifier: "mi",
+        elem_type: ElementType::TokenElement,
+    },
+    MathmlElement {
+        identifier: "mo",
+        elem_type: ElementType::TokenElement,
+    },
+    MathmlElement {
+        identifier: "mn",
+        elem_type: ElementType::TokenElement,
+    },
+    MathmlElement {
+        identifier: "mtext",
+        elem_type: ElementType::TokenElement,
+    },
+    MathmlElement {
+        identifier: "mspace",
+        elem_type: ElementType::TokenElement,
+    },
+    MathmlElement {
+        identifier: "mrow",
+        elem_type: ElementType::LayoutSchema {
+            args: ArgumentRequirements::ArgumentList,
+        },
+    },
+    MathmlElement {
+        identifier: "math",
+        elem_type: ElementType::LayoutSchema {
+            args: ArgumentRequirements::ArgumentList,
+        },
+    },
+    MathmlElement {
+        identifier: "msub",
+        elem_type: ElementType::LayoutSchema {
+            args: ArgumentRequirements::RequiredArguments(2),
+        },
+    },
+    MathmlElement {
+        identifier: "msup",
+        elem_type: ElementType::LayoutSchema {
+            args: ArgumentRequirements::RequiredArguments(2),
+        },
+    },
+    MathmlElement {
+        identifier: "msubsup",
+        elem_type: ElementType::LayoutSchema {
+            args: ArgumentRequirements::RequiredArguments(3),
+        },
+    },
+    MathmlElement {
+        identifier: "mover",
+        elem_type: ElementType::LayoutSchema {
+            args: ArgumentRequirements::RequiredArguments(2),
+        },
+    },
+    MathmlElement {
+        identifier: "munder",
+        elem_type: ElementType::LayoutSchema {
+            args: ArgumentRequirements::RequiredArguments(2),
+        },
+    },
+    MathmlElement {
+        identifier: "munderover",
+        elem_type: ElementType::LayoutSchema {
+            args: ArgumentRequirements::RequiredArguments(3),
+        },
+    },
+    MathmlElement {
+        identifier: "mfrac",
+        elem_type: ElementType::LayoutSchema {
+            args: ArgumentRequirements::RequiredArguments(2),
+        },
+    },
+    MathmlElement {
+        identifier: "msqrt",
+        elem_type: ElementType::LayoutSchema {
+            args: ArgumentRequirements::ArgumentList,
+        },
+    },
+    MathmlElement {
+        identifier: "mroot",
+        elem_type: ElementType::LayoutSchema {
+            args: ArgumentRequirements::RequiredArguments(2),
+        },
+    },
+];
 
 fn match_math_element(identifier: &[u8]) -> Option<MathmlElement> {
     for elem in MATHML_ELEMENTS.iter() {
@@ -132,11 +154,28 @@ fn match_math_element(identifier: &[u8]) -> Option<MathmlElement> {
 }
 
 pub struct ParseContext {
-    pub expr: MathExpression,
-    pub mathml_info: VecMap<MathmlInfo>,
+    pub mathml_info: Stash<MathmlInfo>,
 }
 
-#[derive(Debug, Default, Copy, Clone)]
+impl ParseContext {
+    fn info_for_expr<'a, T: Into<Option<&'a MathExpression>>>(&self, expr: T) -> Option<&MathmlInfo> {
+        if let Some(&index) = expr.into().and_then(|x| x.downcast_user_data_ref()) {
+            self.mathml_info.get(index)
+        } else {
+            None
+        }
+    }
+
+    fn info_for_expr_mut<'a, T: Into<Option<&'a MathExpression>>>(&mut self, expr: T) -> Option<&mut MathmlInfo> {
+        if let Some(&index) = expr.into().and_then(|x| x.downcast_user_data_ref()) {
+            self.mathml_info.get_mut(index)
+        } else {
+            None
+        }
+    }
+}
+
+#[derive(Debug, Default, Clone)]
 pub struct MathmlInfo {
     operator_attrs: Option<operator::Attributes>,
     pub is_space: bool,
@@ -154,38 +193,34 @@ pub fn parse<R: BufRead>(file: R) -> Result<MathExpression> {
         identifier: "ROOT_ELEMENT", // this identifier is arbitrary and should not be used
         elem_type: ElementType::MathmlRoot,
     };
-    let expr = MathExpression::new();
-    let info = VecMap::new();
-    let mut context = ParseContext {
-        expr: expr,
-        mathml_info: info,
-    };
+    let info = Stash::new();
+    let mut context = ParseContext { mathml_info: info };
 
-    match parse_element(&mut parser, root_elem, std::iter::empty(), &mut context) {
-        Ok(index) => {
-            context.expr.root_index = Some(index);
-            Ok(context.expr)
-        }
-        Err(err) => Err(err),
-    }
+    parse_element(&mut parser, root_elem, std::iter::empty(), &mut context)
 }
 
-fn parse_element<'a, R: BufRead, A>(parser: &mut XmlReader<R>,
-                                    elem: MathmlElement,
-                                    attributes: A,
-                                    context: &mut ParseContext)
-                                    -> Result<Index>
-    where A: Iterator<Item = ResultPos<(&'a [u8], &'a [u8])>>
+fn parse_element<'a, R: BufRead, A>(
+    parser: &mut XmlReader<R>,
+    elem: MathmlElement,
+    attributes: A,
+    context: &mut ParseContext,
+) -> Result<MathExpression>
+where
+    A: Iterator<Item = ResultPos<(&'a [u8], &'a [u8])>>,
 {
     match elem.elem_type {
         ElementType::TokenElement => token::parse(parser, elem, attributes, context),
-        ElementType::LayoutSchema { args: ArgumentRequirements::ArgumentList } |
-        ElementType::MathmlRoot => {
+        ElementType::LayoutSchema {
+            args: ArgumentRequirements::ArgumentList,
+        }
+        | ElementType::MathmlRoot => {
             let mut list = parse_element_list(parser, elem, context)?;
             operator::process_operators(&mut list, context);
             parse_list_schema(list, elem, attributes, context)
         }
-        ElementType::LayoutSchema { args: ArgumentRequirements::RequiredArguments(_) } => {
+        ElementType::LayoutSchema {
+            args: ArgumentRequirements::RequiredArguments(_),
+        } => {
             let arguments = parse_fixed_arguments(parser, elem, context);
             parse_fixed_schema(arguments?, elem, attributes, context)
         }
@@ -193,25 +228,30 @@ fn parse_element<'a, R: BufRead, A>(parser: &mut XmlReader<R>,
     }
 }
 
-fn parse_sub_element<R: BufRead>(parser: &mut XmlReader<R>,
-                                 elem: &Element,
-                                 context: &mut ParseContext)
-                                 -> Result<Index> {
+fn parse_sub_element<R: BufRead>(
+    parser: &mut XmlReader<R>,
+    elem: &Element,
+    context: &mut ParseContext,
+) -> Result<MathExpression> {
     let sub_elem = match_math_element(elem.name());
     match sub_elem {
         Some(sub_elem) => parse_element(parser, sub_elem, elem.attributes(), context),
         None => {
             let name = String::from_utf8_lossy(elem.name()).into_owned();
             let result: Result<_> = parser.read_to_end(elem.name()).map_err(|err| err.into());
-            result.and(Err(ParsingError::of_type(parser, ErrorType::UnknownElement(name))))
+            result.and(Err(ParsingError::of_type(
+                parser,
+                ErrorType::UnknownElement(name),
+            )))
         }
     }
 }
 
-fn parse_element_list<R: BufRead>(parser: &mut XmlReader<R>,
-                                  elem: MathmlElement,
-                                  context: &mut ParseContext)
-                                  -> Result<Vec<Index>> {
+fn parse_element_list<R: BufRead>(
+    parser: &mut XmlReader<R>,
+    elem: MathmlElement,
+    context: &mut ParseContext,
+) -> Result<Vec<MathExpression>> {
     let mut list = Vec::new();
     loop {
         let next_event = parser.next();
@@ -222,13 +262,19 @@ fn parse_element_list<R: BufRead>(parser: &mut XmlReader<R>,
             Some(Ok(Event::End(ref end_elem))) => {
                 if elem.elem_type == ElementType::MathmlRoot {
                     let name = std::str::from_utf8(end_elem.name())?.to_string();
-                    return Err(ParsingError::of_type(parser, ErrorType::WrongEndElement(name)));
+                    return Err(ParsingError::of_type(
+                        parser,
+                        ErrorType::WrongEndElement(name),
+                    ));
                 }
                 if end_elem.name() == elem.identifier.as_bytes() {
                     break;
                 } else {
                     let name = std::str::from_utf8(end_elem.name())?.to_string();
-                    return Err(ParsingError::of_type(parser, ErrorType::WrongEndElement(name)));
+                    return Err(ParsingError::of_type(
+                        parser,
+                        ErrorType::WrongEndElement(name),
+                    ));
                 }
             }
             Some(Err(error)) => Err(error)?,
@@ -236,7 +282,10 @@ fn parse_element_list<R: BufRead>(parser: &mut XmlReader<R>,
                 if elem.elem_type == ElementType::MathmlRoot {
                     break;
                 } else {
-                    return Err(ParsingError::of_type(parser, ErrorType::UnexpectedEndOfInput));
+                    return Err(ParsingError::of_type(
+                        parser,
+                        ErrorType::UnexpectedEndOfInput,
+                    ));
                 }
             }
             _ => {}
@@ -245,19 +294,20 @@ fn parse_element_list<R: BufRead>(parser: &mut XmlReader<R>,
     Ok(list)
 }
 
-fn parse_list_schema<'a, A>(content: Vec<Index>,
-                            elem: MathmlElement,
-                            _: A,
-                            context: &mut ParseContext)
-                            -> Result<Index>
-    where A: Iterator<Item = ResultPos<(&'a [u8], &'a [u8])>>
+fn parse_list_schema<'a, A>(
+    mut content: Vec<MathExpression>,
+    elem: MathmlElement,
+    _attributes: A,
+    _context: &mut ParseContext,
+) -> Result<MathExpression>
+where
+    A: Iterator<Item = ResultPos<(&'a [u8], &'a [u8])>>,
 {
     // a mrow with a single element is strictly equivalent to the element
     let content = if content.len() == 1 {
-        content[0]
+        content.remove(0)
     } else {
-        let item = MathItem::List(content);
-        context.expr.add_item(item)
+        MathExpression::new(MathItem::List(content), ())
     };
     if elem.elem_type == ElementType::MathmlRoot {
         return Ok(content);
@@ -265,82 +315,91 @@ fn parse_list_schema<'a, A>(content: Vec<Index>,
     match elem.identifier {
         "mrow" | "math" => Ok(content),
         "msqrt" => {
-            let item = MathItem::Root(Root {
-                                          radicand: Some(content),
-                                          ..Default::default()
-                                      });
-            Ok(context.expr.add_item(item))
+            let item = Root {
+                radicand: Some(content),
+                ..Default::default()
+            };
+            Ok(MathExpression::new(MathItem::Root(item), ()))
         }
         _ => unimplemented!(),
     }
 }
 
-fn parse_fixed_arguments<'a, R: BufRead>(parser: &mut XmlReader<R>,
-                                         elem: MathmlElement,
-                                         context: &mut ParseContext)
-                                         -> Result<Vec<Index>> {
-    if let ElementType::LayoutSchema { args: ArgumentRequirements::RequiredArguments(num_args) } =
-        elem.elem_type {
+fn parse_fixed_arguments<'a, R: BufRead>(
+    parser: &mut XmlReader<R>,
+    elem: MathmlElement,
+    context: &mut ParseContext,
+) -> Result<Vec<MathExpression>> {
+    if let ElementType::LayoutSchema {
+        args: ArgumentRequirements::RequiredArguments(num_args),
+    } = elem.elem_type
+    {
         let args = parse_element_list(parser, elem, context)?;
         if args.len() == num_args as usize {
             Ok(args)
         } else {
-            Err(ParsingError::from_string(parser,
-                                          format!("\"{:?}\" element requires {:?} arguments. \
-                                                   Found {:?} arguments.",
-                                                  elem.identifier,
-                                                  num_args,
-                                                  args.len())))
+            Err(ParsingError::from_string(
+                parser,
+                format!(
+                    "\"{:?}\" element requires {:?} arguments. \
+                     Found {:?} arguments.",
+                    elem.identifier,
+                    num_args,
+                    args.len()
+                ),
+            ))
         }
     } else {
         unreachable!();
     }
 }
 
-fn parse_fixed_schema<'a, A>(content: Vec<Index>,
-                             elem: MathmlElement,
-                             attributes: A,
-                             context: &mut ParseContext)
-                             -> Result<Index>
-    where A: Iterator<Item = ResultPos<(&'a [u8], &'a [u8])>>
+fn parse_fixed_schema<'a, A>(
+    mut content: Vec<MathExpression>,
+    elem: MathmlElement,
+    attributes: A,
+    context: &mut ParseContext,
+) -> Result<MathExpression>
+where
+    A: Iterator<Item = ResultPos<(&'a [u8], &'a [u8])>>,
 {
     let result = match elem.identifier {
         "mfrac" => {
             let frac = GeneralizedFraction {
-                numerator: content[0],
-                denominator: content[1],
+                numerator: Some(content.remove(0)),
+                denominator: Some(content.remove(0)),
                 thickness: None,
             };
             MathItem::GeneralizedFraction(frac)
         }
         "mroot" => {
             let root = Root {
-                radicand: content[0],
-                degree: content[1],
+                radicand: Some(content.remove(0)),
+                degree: Some(content.remove(0)),
             };
             MathItem::Root(root)
         }
         "msub" => {
             let atom = Atom {
-                nucleus: content[0],
-                bottom_right: guess_if_operator_with_form(content[1], Form::Postfix, context),
+                nucleus: Some(content.remove(0)),
+                bottom_right: Some(guess_if_operator_with_form(content.remove(0), Form::Postfix, context)),
                 ..Default::default()
             };
             MathItem::Atom(atom)
         }
         "msup" => {
             let atom = Atom {
-                nucleus: content[0],
-                top_right: guess_if_operator_with_form(content[1], Form::Postfix, context),
+                nucleus: Some(content.remove(0)),
+                top_right: Some(guess_if_operator_with_form(content.remove(0), Form::Postfix, context)),
                 ..Default::default()
             };
             MathItem::Atom(atom)
         }
         "msubsup" => {
             let atom = Atom {
-                nucleus: content[0],
-                bottom_right: guess_if_operator_with_form(content[1], Form::Postfix, context),
-                top_right: guess_if_operator_with_form(content[2], Form::Postfix, context),
+                nucleus: Some(content.remove(0)),
+                bottom_right: Some(guess_if_operator_with_form(content.remove(0), Form::Postfix, context)),
+                top_right: Some(guess_if_operator_with_form(content.remove(0), Form::Postfix, context)),
                 ..Default::default()
             };
             MathItem::Atom(atom)
@@ -354,8 +413,8 @@ fn parse_fixed_schema<'a, A>(content: Vec<Index>,
                 }
             }
             let item = OverUnder {
-                nucleus: content[0],
-                over: guess_if_operator_with_form(content[1], Form::Postfix, context),
+                nucleus: Some(content.remove(0)),
+                over: Some(guess_if_operator_with_form(content.remove(0), Form::Postfix, context)),
                 over_is_accent: as_accent,
                 ..Default::default()
             };
@@ -363,17 +422,17 @@ fn parse_fixed_schema<'a, A>(content: Vec<Index>,
         }
         "munder" => {
             let item = OverUnder {
-                nucleus: content[0],
-                under: guess_if_operator_with_form(content[1], Form::Postfix, context),
+                nucleus: Some(content.remove(0)),
+                under: Some(guess_if_operator_with_form(content.remove(0), Form::Postfix, context)),
                 ..Default::default()
             };
             MathItem::OverUnder(item)
         }
         "munderover" => {
             let item = OverUnder {
-                nucleus: content[0],
-                under: guess_if_operator_with_form(content[1], Form::Postfix, context),
-                over: guess_if_operator_with_form(content[2], Form::Postfix, context),
+                nucleus: Some(content.remove(0)),
+                under: Some(guess_if_operator_with_form(content.remove(0), Form::Postfix, context)),
+                over: Some(guess_if_operator_with_form(content.remove(0), Form::Postfix, context)),
                 ..Default::default()
             };
             MathItem::OverUnder(item)
@@ -382,29 +441,29 @@ fn parse_fixed_schema<'a, A>(content: Vec<Index>,
     };
     let info = MathmlInfo {
         operator_attrs: match result {
-            MathItem::Atom(ref atom) => {
-                context.mathml_info.get(atom.nucleus.into()).and_then(|info| info.operator_attrs)
-            }
-            MathItem::OverUnder(ref ou) => {
-                context.mathml_info.get(ou.nucleus.into()).and_then(|info| info.operator_attrs)
-            }
-            MathItem::GeneralizedFraction(ref frac) => {
-                context.mathml_info.get(frac.numerator.into()).and_then(|info| info.operator_attrs)
-            }
+            MathItem::Atom(ref atom) => context
+                .info_for_expr(atom.nucleus.as_ref())
+                .and_then(|info| info.operator_attrs.clone()),
+            MathItem::OverUnder(ref ou) => context
+                .info_for_expr(ou.nucleus.as_ref())
+                .and_then(|info| info.operator_attrs.clone()),
+            MathItem::GeneralizedFraction(ref frac) => context
+                .info_for_expr(frac.numerator.as_ref())
+                .and_then(|info| info.operator_attrs.clone()),
             _ => None,
         },
         ..Default::default()
     };
-    let index = context.expr.add_item(result);
-    context.mathml_info.insert(index.into(), info);
-    Ok(index)
+    let index = context.mathml_info.put(info);
+    let expr = MathExpression::new(result, index);
+    Ok(expr)
 }
-
 
 impl FromXmlAttribute for Length {
     type Err = ParsingError;
     fn from_xml_attr(_: &[u8]) -> std::result::Result<Self, Self::Err> {
-        unimplemented!()
+        println!("Length Parsing not yet implemented...");
+        Ok(Length::default())
     }
 }
 
@@ -424,21 +483,19 @@ mod tests {
     use super::*;
     use types::*;
 
-    fn find_operator(expr: &MathExpression) -> Index {
-        let first_item = &expr[expr.root_index];
-        match *first_item {
-            MathItem::List(ref list) => {
-                list.iter()
-                    .cloned()
-                    .filter(|&index| if let MathItem::Operator(_) = expr[index] {
-                                true
-                            } else {
-                                false
-                            })
-                    .next()
-                    .expect("List contains no operator.")
-            }
-            MathItem::Operator(_) => 0.into(),
+    fn find_operator(expr: &MathExpression) -> &MathExpression {
+        match *expr.item {
+            MathItem::List(ref list) => list.iter()
+                .filter(|&expr| {
+                    if let MathItem::Operator(_) = *expr.item {
+                        true
+                    } else {
+                        false
+                    }
+                })
+                .next()
+                .expect("List contains no operator."),
+            MathItem::Operator(_) => expr,
             ref other_item => panic!("Expected list or Operator. Found {:?}", other_item),
         }
     }
@@ -448,10 +505,11 @@ mod tests {
         let xml = "<mo>+</mo>";
         let expr = parse(xml.as_bytes()).unwrap();
         let operator = find_operator(&expr);
-        match expr[operator] {
-            MathItem::Operator(Operator { field: Field::Unicode(ref text), .. }) => {
-                assert_eq!(text, "+")
-            }
+        match *operator.item {
+            MathItem::Operator(Operator {
+                field: Field::Unicode(ref text),
+                ..
+            }) => assert_eq!(text, "+"),
             ref other_item => panic!("Expected MathItem::Operator. Found {:?}.", other_item),
         }
     }
@@ -461,8 +519,11 @@ mod tests {
         let xml = "<mo>-</mo><mi>x</mi>";
         let expr = parse(xml.as_bytes()).unwrap();
         let operator = find_operator(&expr);
-        match expr[operator] {
-            MathItem::Operator(Operator { field: Field::Unicode(ref text), .. }) => {
+        match *operator.item {
+            MathItem::Operator(Operator {
+                field: Field::Unicode(ref text),
+                ..
+            }) => {
                 assert_eq!(text, "\u{2212}") // MINUS SIGN
             }
             ref other_item => panic!("Expected MathItem::Operator. Found {:?}.", other_item),
@@ -474,10 +535,11 @@ mod tests {
         let xml = "<mi>x</mi><mo>=</mo><mi>y</mi>";
         let expr = parse(xml.as_bytes()).unwrap();
         let operator = find_operator(&expr);
-        match expr[operator] {
-            MathItem::Operator(Operator { field: Field::Unicode(ref text), .. }) => {
-                assert_eq!(text, "=")
-            }
+        match *operator.item {
+            MathItem::Operator(Operator {
+                field: Field::Unicode(ref text),
+                ..
+            }) => assert_eq!(text, "="),
             ref other_item => panic!("Expected MathItem::Operator. Found {:?}.", other_item),
         }
     }
@@ -487,10 +549,11 @@ mod tests {
         let xml = "<mi>x</mi><mo>!</mo>";
         let expr = parse(xml.as_bytes()).unwrap();
         let operator = find_operator(&expr);
-        match expr[operator] {
-            MathItem::Operator(Operator { field: Field::Unicode(ref text), .. }) => {
-                assert_eq!(text, "!")
-            }
+        match *operator.item {
+            MathItem::Operator(Operator {
+                field: Field::Unicode(ref text),
+                ..
+            }) => assert_eq!(text, "!"),
             ref other_item => panic!("Expected MathItem::Operator. Found {:?}.", other_item),
         }
     }

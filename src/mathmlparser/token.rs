@@ -2,15 +2,15 @@ use std;
 use std::borrow::Cow;
 use std::io::BufRead;
 
-use super::operator;
 use super::error::ParsingError;
-use super::{Result, ResultPos, MathmlElement, XmlReader, Event, MathmlInfo, ParseContext,
-            FromXmlAttribute};
+use super::operator;
+use super::{Event, FromXmlAttribute, MathmlElement, MathmlInfo, ParseContext, Result, ResultPos,
+            XmlReader};
 use mathmlparser::AttributeParse;
 
-use types::{Field, MathItem, Index};
-use super::escape::unescape;
-use unicode_math::{Family, convert_character_to_family};
+use super::escape::StringExtUnescape;
+use types::{Field, MathExpression, MathItem};
+use unicode_math::{convert_character_to_family, Family};
 
 #[derive(Debug)]
 enum TextDirection {
@@ -69,10 +69,11 @@ struct TokenStyle {
 }
 
 #[allow(match_same_arms)]
-fn parse_token_attribute<'a>(style: &mut TokenStyle,
-                             element_identifier: &str,
-                             new_attribute: &(&'a [u8], &'a [u8]))
-                             -> bool {
+fn parse_token_attribute<'a>(
+    style: &mut TokenStyle,
+    element_identifier: &str,
+    new_attribute: &(&'a [u8], &'a [u8]),
+) -> bool {
     match *new_attribute {
         (b"mathvariant", variant) => style.math_variant = variant.parse_xml().ok(),
         (b"dir", dir) => style.direction = dir.parse_xml().unwrap(),
@@ -86,64 +87,72 @@ fn parse_token_attribute<'a>(style: &mut TokenStyle,
     true
 }
 
-fn adapt_to_family(text: &str, family: Option<Family>) -> Cow<str> {
-    if family.is_none() {
-        if text.chars().count() == 1 {
-            let conv = convert_character_to_family(text.chars().next().unwrap(), Family::Italics);
-            conv.to_string().into()
-        } else {
-            text.into()
-        }
-    } else {
-        let family = family.unwrap();
-        text.chars()
-            .map(|chr| convert_character_to_family(chr, family))
-            .collect::<String>()
-            .into()
-    }
+trait StringExtMathml {
+    fn adapt_to_family(&self, family: Option<Family>) -> Cow<str>;
+    fn replace_anomalous_characters(&self, elem: MathmlElement) -> String;
 }
 
-fn replace_anomalous_characters(text: &str, elem: MathmlElement) -> String {
-    text.chars()
-        .map(|chr| match chr {
-                 '-' if elem.identifier == "mo" => '\u{2212}', // Minus Sign
-                 '-' => '\u{2010}', // Hyphen
-                 '\u{0027}' => '\u{2023}', // Prime
-                 chr => chr,
+impl StringExtMathml for str {
+    fn adapt_to_family(&self, family: Option<Family>) -> Cow<str> {
+        if family.is_none() {
+            if self.chars().count() == 1 {
+                let conv =
+                    convert_character_to_family(self.chars().next().unwrap(), Family::Italics);
+                conv.to_string().into()
+            } else {
+                self.into()
+            }
+        } else {
+            let family = family.unwrap();
+            self.chars()
+                .map(|chr| convert_character_to_family(chr, family))
+                .collect::<String>()
+                .into()
+        }
+    }
 
-             })
-        .collect()
+    fn replace_anomalous_characters(&self, elem: MathmlElement) -> String {
+        self.chars()
+            .map(|chr| match chr {
+                '-' if elem.identifier == "mo" => '\u{2212}', // Minus Sign
+                '-' => '\u{2010}',                            // Hyphen
+                '\u{0027}' => '\u{2023}',                     // Prime
+                chr => chr,
+            })
+            .collect()
+    }
 }
 
 // invoked after a token expression
 // the cursor is moved behind the end element of the token expression
 // the result (if ok) is guaranteed to not be empty
-fn parse_token_contents<R: BufRead>(parser: &mut XmlReader<R>,
-                                    elem: MathmlElement,
-                                    style: TokenStyle)
-                                    -> Result<Vec<Field>> {
+fn parse_token_contents<R: BufRead>(
+    parser: &mut XmlReader<R>,
+    elem: MathmlElement,
+    style: TokenStyle,
+) -> Result<Vec<Field>> {
     let mut fields: Vec<Field> = Vec::new();
 
     while let Some(event) = parser.next() {
         match event? {
             Event::Text(text) => {
-                let text = std::str::from_utf8(text.content())?;
-                let text = unescape(text)?;
-                let string = adapt_to_family(&text, style.math_variant);
-                let string = replace_anomalous_characters(&string, elem);
-                fields.push(Field::Unicode(string));
+                let text = std::str::from_utf8(text.content())?
+                    .unescape()?
+                    .adapt_to_family(style.math_variant)
+                    .replace_anomalous_characters(elem);
+                fields.push(Field::Unicode(text));
             }
-            Event::Start(elem) => {
-                match elem.name() {
-                    b"mglyph" | b"malignmark" => {
-                        Err(ParsingError::from_string(parser,
-                                                      format!("{:?} element is currently not \
-                                                               implemented.",
-                                                              elem.name())))?
-                    }
-                    _ => Err(ParsingError::from_string(parser, "Unexpected new element."))?,
-                }
-            }
+            Event::Start(elem) => match elem.name() {
+                b"mglyph" | b"malignmark" => Err(ParsingError::from_string(
+                    parser,
+                    format!(
+                        "{:?} element is currently not \
+                         implemented.",
+                        elem.name()
+                    ),
+                ))?,
+                _ => Err(ParsingError::from_string(parser, "Unexpected new element."))?,
+            },
             Event::End(ref end_elem) => {
                 if elem.identifier.as_bytes() == end_elem.name() {
                     break;
@@ -172,10 +181,11 @@ fn try_extract_char(field: &Field) -> Option<char> {
     }
 }
 
-fn parse_operator_attribute(op_attrs: Option<&mut operator::Attributes>,
-                            new_attr: &(&[u8], &[u8]))
-                            -> bool {
-    let mut op_attrs = match op_attrs {
+fn parse_operator_attribute(
+    op_attrs: Option<&mut operator::Attributes>,
+    new_attr: &(&[u8], &[u8]),
+) -> bool {
+    let op_attrs = match op_attrs {
         Some(op_attrs) => op_attrs,
         None => return false,
     };
@@ -222,12 +232,14 @@ fn parse_operator_attribute(op_attrs: Option<&mut operator::Attributes>,
     true
 }
 
-pub fn parse<'a, R: BufRead, A>(parser: &mut XmlReader<R>,
-                                elem: MathmlElement,
-                                attributes: A,
-                                context: &mut ParseContext)
-                                -> Result<Index>
-    where A: Iterator<Item = ResultPos<(&'a [u8], &'a [u8])>>
+pub fn parse<'a, R: BufRead, A>(
+    parser: &mut XmlReader<R>,
+    elem: MathmlElement,
+    attributes: A,
+    context: &mut ParseContext,
+) -> Result<MathExpression>
+where
+    A: Iterator<Item = ResultPos<(&'a [u8], &'a [u8])>>,
 {
     let mut token_style = TokenStyle::default();
     let mut op_attrs = if elem.identifier == "mo" {
@@ -235,36 +247,41 @@ pub fn parse<'a, R: BufRead, A>(parser: &mut XmlReader<R>,
     } else {
         None
     };
-    attributes.filter_map(|attr| attr.ok())
+    attributes
+        .filter_map(|attr| attr.ok())
         .filter(|attr| !parse_token_attribute(&mut token_style, elem.identifier, &attr))
         .filter(|attr| !parse_operator_attribute(op_attrs.as_mut(), &attr))
         .fold((), |_, _| {});
     let mut fields = parse_token_contents(parser, elem, token_style)?;
-    let item = if fields.len() == 1 {
+    let mut item = if fields.len() == 1 {
         let field = fields.remove(0);
         if let Some(ref mut op_attrs) = op_attrs {
             op_attrs.character = try_extract_char(&field);
         }
-        MathItem::Field(field)
+        MathExpression::new(MathItem::Field(field), ())
     } else {
-        let list =
-            fields.into_iter().map(|field| context.expr.add_item(MathItem::Field(field))).collect();
-        MathItem::List(list)
+        let list = fields
+            .into_iter()
+            .map(|field| MathExpression::new(MathItem::Field(field), ()))
+            .collect();
+        MathExpression::new(MathItem::List(list), ())
     };
 
-    let index = context.expr.add_item(item);
-    context.mathml_info.insert(index.into(),
-                               MathmlInfo {
-                                   operator_attrs: op_attrs,
-                                   ..Default::default()
-                               });
-    Ok(index)
+    let index = context.mathml_info.put(MathmlInfo {
+        operator_attrs: op_attrs,
+        ..Default::default()
+    });
+
+    item.set_user_data(index);
+    Ok(item)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use super::super::{match_math_element, Event, VecMap, MathExpression};
+    use mathmlparser::{match_math_element, Event};
+
+    use stash::Stash;
 
     fn test_operator_flag_parse(attr_name: &str, flag: operator::Flags) {
         let xml = format!("<mo {}=\"true\">a</mo>", attr_name);
@@ -277,17 +294,14 @@ mod tests {
         let mathml_elem = match_math_element(elem.name()).unwrap();
         let attributes = elem.attributes();
 
-        let expr = MathExpression::new();
-        let info = VecMap::new();
-        let mut context = ParseContext {
-            expr: expr,
-            mathml_info: info,
-        };
-        let index = parse(&mut parser, mathml_elem, attributes, &mut context).unwrap();
+        let info = Stash::new();
+        let mut context = ParseContext { mathml_info: info };
+        let expr = parse(&mut parser, mathml_elem, attributes, &mut context).unwrap();
 
-        let operator_attrs = context.mathml_info
-            .get(index.into())
+        let operator_attrs = context
+            .info_for_expr(&expr)
             .unwrap()
+            .clone()
             .operator_attrs
             .unwrap();
         assert!(operator_attrs.flags.contains(flag));
