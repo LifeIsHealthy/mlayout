@@ -9,7 +9,7 @@ use super::{Event, FromXmlAttribute, MathmlElement, MathmlInfo, ParseContext, Re
 use mathmlparser::AttributeParse;
 
 use super::escape::StringExtUnescape;
-use types::{Field, MathExpression, MathItem};
+use types::{Field, Length, MathExpression, MathItem, MathSpace};
 use unicode_math::{convert_character_to_family, Family};
 
 #[derive(Debug)]
@@ -232,6 +232,25 @@ fn parse_operator_attribute(
     true
 }
 
+fn parse_mspace_attribute(
+    horiz_space: &mut Option<Length>,
+    identifier: &str,
+    new_attr: &(&[u8], &[u8]),
+) -> bool {
+    if identifier != "mspace" {
+        return false;
+    }
+    match *new_attr {
+        (b"width", width) => {
+            if let Ok(width) = width.parse_xml() {
+                *horiz_space = Some(width);
+            }
+            true
+        }
+        _ => false,
+    }
+}
+
 pub fn parse<'a, R: BufRead, A>(
     parser: &mut XmlReader<R>,
     elem: MathmlElement,
@@ -247,12 +266,21 @@ where
     } else {
         None
     };
+    let mut space = None;
     attributes
         .filter_map(|attr| attr.ok())
         .filter(|attr| !parse_token_attribute(&mut token_style, elem.identifier, &attr))
         .filter(|attr| !parse_operator_attribute(op_attrs.as_mut(), &attr))
+        .filter(|attr| !parse_mspace_attribute(&mut space, elem.identifier, &attr))
         .fold((), |_, _| {});
+
     let mut fields = parse_token_contents(parser, elem, token_style)?;
+
+    if let Some(width) = space {
+        let item = MathExpression::new(MathItem::Space(MathSpace::horizontal_space(width)), ());
+        return Ok(item)
+    }
+
     let mut item = if fields.len() == 1 {
         let field = fields.remove(0);
         if let Some(ref mut op_attrs) = op_attrs {

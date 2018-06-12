@@ -1,20 +1,21 @@
 mod error;
+mod escape;
 mod operator;
 mod operator_dict;
 mod token;
-mod escape;
 
 use std;
 use std::io::BufRead;
 
-use types::{Atom, GeneralizedFraction, Length, MathExpression, MathItem, OverUnder, Root};
+use types::{Atom, GeneralizedFraction, Length, LengthUnit, MathExpression, MathItem, OverUnder,
+            Root};
 
-pub use quick_xml::{Element, Event, XmlReader};
 pub use quick_xml::error::ResultPos;
+pub use quick_xml::{Element, Event, XmlReader};
 use stash::Stash;
 
-use self::operator::{guess_if_operator_with_form, Form};
 pub use self::error::*;
+use self::operator::{guess_if_operator_with_form, Form};
 
 type Result<T> = std::result::Result<T, ParsingError>;
 
@@ -158,7 +159,10 @@ pub struct ParseContext {
 }
 
 impl ParseContext {
-    fn info_for_expr<'a, T: Into<Option<&'a MathExpression>>>(&self, expr: T) -> Option<&MathmlInfo> {
+    fn info_for_expr<'a, T: Into<Option<&'a MathExpression>>>(
+        &self,
+        expr: T,
+    ) -> Option<&MathmlInfo> {
         if let Some(&index) = expr.into().and_then(|x| x.downcast_user_data_ref()) {
             self.mathml_info.get(index)
         } else {
@@ -166,7 +170,10 @@ impl ParseContext {
         }
     }
 
-    fn info_for_expr_mut<'a, T: Into<Option<&'a MathExpression>>>(&mut self, expr: T) -> Option<&mut MathmlInfo> {
+    fn info_for_expr_mut<'a, T: Into<Option<&'a MathExpression>>>(
+        &mut self,
+        expr: T,
+    ) -> Option<&mut MathmlInfo> {
         if let Some(&index) = expr.into().and_then(|x| x.downcast_user_data_ref()) {
             self.mathml_info.get_mut(index)
         } else {
@@ -382,7 +389,11 @@ where
         "msub" => {
             let atom = Atom {
                 nucleus: Some(content.remove(0)),
-                bottom_right: Some(guess_if_operator_with_form(content.remove(0), Form::Postfix, context)),
+                bottom_right: Some(guess_if_operator_with_form(
+                    content.remove(0),
+                    Form::Postfix,
+                    context,
+                )),
                 ..Default::default()
             };
             MathItem::Atom(atom)
@@ -390,7 +401,11 @@ where
         "msup" => {
             let atom = Atom {
                 nucleus: Some(content.remove(0)),
-                top_right: Some(guess_if_operator_with_form(content.remove(0), Form::Postfix, context)),
+                top_right: Some(guess_if_operator_with_form(
+                    content.remove(0),
+                    Form::Postfix,
+                    context,
+                )),
                 ..Default::default()
             };
             MathItem::Atom(atom)
@@ -398,8 +413,16 @@ where
         "msubsup" => {
             let atom = Atom {
                 nucleus: Some(content.remove(0)),
-                bottom_right: Some(guess_if_operator_with_form(content.remove(0), Form::Postfix, context)),
-                top_right: Some(guess_if_operator_with_form(content.remove(0), Form::Postfix, context)),
+                bottom_right: Some(guess_if_operator_with_form(
+                    content.remove(0),
+                    Form::Postfix,
+                    context,
+                )),
+                top_right: Some(guess_if_operator_with_form(
+                    content.remove(0),
+                    Form::Postfix,
+                    context,
+                )),
                 ..Default::default()
             };
             MathItem::Atom(atom)
@@ -414,7 +437,11 @@ where
             }
             let item = OverUnder {
                 nucleus: Some(content.remove(0)),
-                over: Some(guess_if_operator_with_form(content.remove(0), Form::Postfix, context)),
+                over: Some(guess_if_operator_with_form(
+                    content.remove(0),
+                    Form::Postfix,
+                    context,
+                )),
                 over_is_accent: as_accent,
                 ..Default::default()
             };
@@ -423,7 +450,11 @@ where
         "munder" => {
             let item = OverUnder {
                 nucleus: Some(content.remove(0)),
-                under: Some(guess_if_operator_with_form(content.remove(0), Form::Postfix, context)),
+                under: Some(guess_if_operator_with_form(
+                    content.remove(0),
+                    Form::Postfix,
+                    context,
+                )),
                 ..Default::default()
             };
             MathItem::OverUnder(item)
@@ -431,8 +462,16 @@ where
         "munderover" => {
             let item = OverUnder {
                 nucleus: Some(content.remove(0)),
-                under: Some(guess_if_operator_with_form(content.remove(0), Form::Postfix, context)),
-                over: Some(guess_if_operator_with_form(content.remove(0), Form::Postfix, context)),
+                under: Some(guess_if_operator_with_form(
+                    content.remove(0),
+                    Form::Postfix,
+                    context,
+                )),
+                over: Some(guess_if_operator_with_form(
+                    content.remove(0),
+                    Form::Postfix,
+                    context,
+                )),
                 ..Default::default()
             };
             MathItem::OverUnder(item)
@@ -461,9 +500,24 @@ where
 
 impl FromXmlAttribute for Length {
     type Err = ParsingError;
-    fn from_xml_attr(_: &[u8]) -> std::result::Result<Self, Self::Err> {
-        println!("Length Parsing not yet implemented...");
-        Ok(Length::default())
+    fn from_xml_attr(bytes: &[u8]) -> std::result::Result<Self, Self::Err> {
+        let string = std::str::from_utf8(bytes)?.trim().to_ascii_lowercase();
+        let first_non_digit = string
+            .find(|chr| match chr {
+                '0'..='9' | '.' | '+' | '-' => false,
+                _ => true,
+            });
+        let first_non_digit = match first_non_digit {
+            Some(x) => x,
+            None => return Ok(Length::default())
+        };
+        let num = string[0..first_non_digit].parse().unwrap();
+        let unit = match string[first_non_digit..].trim() {
+            "em" => LengthUnit::Em,
+            "pt" => LengthUnit::Point,
+            _ => unimplemented!(),
+        };
+        Ok(Length::new(num, unit))
     }
 }
 
