@@ -43,6 +43,7 @@ Options:
     -f FONT --font=FONT               Name of the font to use.
     --show-ink-bounds                 Render the ink boxes around every glyph.
     --show-logical-bounds             Render the logical boxes around every glyph.
+    --show-top-accent-attachment      Render a line displaying top accent attachment.
     --verbose                         Show additional information
     ";
 
@@ -56,6 +57,7 @@ struct Args {
     flag_verbose: bool,
     flag_show_ink_bounds: bool,
     flag_show_logical_bounds: bool,
+    flag_show_top_accent_attachment: bool,
 }
 
 #[derive(RustcDecodable, Debug, Copy, Clone)]
@@ -220,12 +222,12 @@ fn main() {
     let shaper = create_shaper(font_bytes);
 
     let typeset = math_render::layout(list.as_ref().unwrap(), &shaper.hb_shaper);
-
     match args.flag_output_format {
         Some(Format::Svg) => {
             let flags = svg_renderer::Flags {
                 show_ink_bounds: args.flag_show_ink_bounds,
                 show_logical_bounds: args.flag_show_logical_bounds,
+                show_top_accent_attachment: args.flag_show_top_accent_attachment,
             };
 
             svg_renderer::render(

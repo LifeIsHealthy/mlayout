@@ -20,6 +20,7 @@ use freetype::outline::Curve;
 pub struct Flags {
     pub show_ink_bounds: bool,
     pub show_logical_bounds: bool,
+    pub show_top_accent_attachment: bool,
 }
 
 pub fn render<'a, T: AsRef<path::Path>>(math_box: MathBox,
@@ -85,7 +86,10 @@ pub fn render<'a, T: AsRef<path::Path>>(math_box: MathBox,
 
     //    document.append(italic_cor_group);
     document.append(black_group);
-    // document.append(top_accent_attachment_group);
+
+    if flags.show_top_accent_attachment {
+        document.append(top_accent_attachment_group);
+    }
 
     svg::save(out_path, &document).unwrap();
 }
