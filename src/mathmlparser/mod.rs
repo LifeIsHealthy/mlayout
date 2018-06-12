@@ -334,7 +334,7 @@ where
             };
             Ok(MathExpression::new(MathItem::Root(item), ()))
         }
-        _ => unimplemented!(),
+        _ => Ok(content),
     }
 }
 
@@ -391,10 +391,10 @@ fn construct_under_over<'a>(
     for attrib in attributes {
         let (ident, value) = attrib?;
         if ident == b"accent" {
-            over_is_accent = value.parse_xml()?;
+            over_is_accent = value.parse_xml().unwrap_or(false);
         }
         if ident == b"accentunder" {
-            under_is_accent = value.parse_xml()?;
+            under_is_accent = value.parse_xml().unwrap_or(false);
         }
     }
 
@@ -524,15 +524,19 @@ impl FromXmlAttribute for Length {
         });
         let first_non_digit = match first_non_digit {
             Some(x) => x,
-            None => return Ok(Length::default()),
+            None => string.len(),
         };
-        let num = string[0..first_non_digit].parse().unwrap();
-        let unit = match string[first_non_digit..].trim() {
-            "em" => LengthUnit::Em,
-            "pt" => LengthUnit::Point,
-            _ => unimplemented!(),
-        };
-        Ok(Length::new(num, unit))
+        if let Ok(num) = string[0..first_non_digit].parse() {
+            let unit = match string[first_non_digit..].trim() {
+                "em" => LengthUnit::Em,
+                "pt" => LengthUnit::Point,
+                // fallback to points
+                _ => LengthUnit::Point,
+            };
+            Ok(Length::new(num, unit))
+        } else {
+            Err("invalid number")?
+        }
     }
 }
 
