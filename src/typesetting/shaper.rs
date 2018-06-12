@@ -729,7 +729,11 @@ fn try_assembly<'a>(
             let mut math_box = MathBox::with_glyph(glyph);
             math_box.origin = origin;
 
-            *current_offset += delta_offset;
+            if horizontal {
+                *current_offset += delta_offset;
+            } else {
+                *current_offset -= delta_offset;
+            }
             Some(math_box)
         });
 
