@@ -1,31 +1,31 @@
-extern crate math_render;
-extern crate freetype;
-extern crate fontconfig_sys as fc;
-extern crate fontconfig;
-extern crate harfbuzz_sys;
-extern crate harfbuzz_rs;
-extern crate memmap;
 extern crate docopt;
+extern crate fontconfig;
+extern crate fontconfig_sys as fc;
+extern crate freetype;
+extern crate harfbuzz_rs;
+extern crate harfbuzz_sys;
+extern crate math_render;
+extern crate memmap;
 extern crate rustc_serialize;
 
 mod svg_renderer;
 
-use std::path::{PathBuf, Path};
+use std::borrow::Cow;
+use std::fs::File;
 use std::io;
 use std::io::BufReader;
-use std::fs::File;
-use std::borrow::Cow;
+use std::path::{Path, PathBuf};
 
 use freetype::face;
 use freetype::Face as FT_Face;
 
-use harfbuzz_sys::*;
 use harfbuzz_rs::{Face, FontFuncsBuilder, GlyphExtents, HarfbuzzObject};
+use harfbuzz_sys::*;
 
 use math_render::mathmlparser;
 use math_render::shaper::HarfbuzzShaper;
 
-use fontconfig::{Pattern, list_fonts};
+use fontconfig::{list_fonts, Pattern};
 
 use memmap::{Mmap, Protection};
 
@@ -90,22 +90,17 @@ fn find_math_fonts() -> Vec<Font> {
     (&fontset)
         .iter()
         .filter_map(|pattern| {
-            pattern.get_string("capability").and_then(|cap| if cap.contains("otlayout:math") {
-                                                          Some(Font {
-                                                                   name: pattern.name()
-                                                                       .unwrap()
-                                                                       .into(),
-                                                                   path: pattern.filename()
-                                                                       .unwrap()
-                                                                       .into(),
-                                                                   face_index:
-                                                                       pattern.face_index()
-                                                                           .unwrap() as
-                                                                       u32,
-                                                               })
-                                                      } else {
-                                                          None
-                                                      })
+            pattern.get_string("capability").and_then(|cap| {
+                if cap.contains("otlayout:math") {
+                    Some(Font {
+                        name: pattern.name().unwrap().into(),
+                        path: pattern.filename().unwrap().into(),
+                        face_index: pattern.face_index().unwrap() as u32,
+                    })
+                } else {
+                    None
+                }
+            })
         })
         .filter(has_math_data)
         .collect()
@@ -129,11 +124,11 @@ fn create_shaper<'a>(font_bytes: &'a [u8]) -> Shaper<'a> {
         }
         let metrics = ft_face.glyph().metrics();
         Some(GlyphExtents {
-                 width: metrics.width as i32,
-                 height: -metrics.height as i32,
-                 x_bearing: metrics.horiBearingX as i32,
-                 y_bearing: metrics.horiBearingY as i32,
-             })
+            width: metrics.width as i32,
+            height: -metrics.height as i32,
+            x_bearing: metrics.horiBearingX as i32,
+            y_bearing: metrics.horiBearingY as i32,
+        })
     });
     let font_funcs = font_funcs.finish();
     let library = freetype::Library::init().unwrap();
@@ -148,7 +143,9 @@ fn create_shaper<'a>(font_bytes: &'a [u8]) -> Shaper<'a> {
 }
 
 fn main() {
-    let args: Args = Docopt::new(USAGE).and_then(|d| d.decode()).unwrap_or_else(|e| e.exit());
+    let args: Args = Docopt::new(USAGE)
+        .and_then(|d| d.decode())
+        .unwrap_or_else(|e| e.exit());
 
     let (list, output_name) = if args.arg_input == "-" {
         let stdin = io::stdin();
@@ -163,9 +160,13 @@ fn main() {
             }
         };
         let file = File::open(&path).unwrap();
-        let name = path.file_stem().or_else(|| path.file_name()).expect("input file has no name");
-        (Some(mathmlparser::parse(BufReader::new(file)).expect("could not parse file")),
-         Cow::from(name.to_string_lossy().into_owned()))
+        let name = path.file_stem()
+            .or_else(|| path.file_name())
+            .expect("input file has no name");
+        (
+            Some(mathmlparser::parse(BufReader::new(file)).expect("could not parse file")),
+            Cow::from(name.to_string_lossy().into_owned()),
+        )
     } else {
         (None, "".into())
     };
@@ -187,11 +188,13 @@ fn main() {
     }
 
     let font_path = if args.flag_font.is_empty() {
-        PathBuf::from(find_math_fonts()
-                          .get(0)
-                          .expect("Could not find suitable math font on system.")
-                          .path
-                          .clone())
+        PathBuf::from(
+            find_math_fonts()
+                .get(0)
+                .expect("Could not find suitable math font on system.")
+                .path
+                .clone(),
+        )
     } else {
         match PathBuf::from(args.flag_font.clone()).canonicalize() {
             Ok(path) => path,
@@ -204,7 +207,9 @@ fn main() {
 
     let mut out_path = Cow::from(Path::new(&args.arg_output));
     if out_path.is_dir() {
-        let extension = args.flag_output_format.map(|format| format.extension()).unwrap_or("");
+        let extension = args.flag_output_format
+            .map(|format| format.extension())
+            .unwrap_or("");
         out_path.to_mut().push(output_name.into_owned() + extension);
     }
 
@@ -223,11 +228,13 @@ fn main() {
                 show_logical_bounds: args.flag_show_logical_bounds,
             };
 
-            svg_renderer::render(typeset,
-                                 &shaper.hb_shaper,
-                                 &shaper.ft_face,
-                                 flags,
-                                 &out_path)
+            svg_renderer::render(
+                typeset,
+                &shaper.hb_shaper,
+                &shaper.ft_face,
+                flags,
+                &out_path,
+            )
         }
         _ => panic!(),
     }
