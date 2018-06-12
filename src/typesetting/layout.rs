@@ -77,7 +77,7 @@ pub trait MathLayout: ::std::fmt::Debug {
         self.operator_properties(options)
             .map(|operator_properties| operator_properties.is_large_op)
             .unwrap_or_default()
-}
+    }
 }
 
 impl MathLayout for Field {
@@ -131,7 +131,7 @@ impl MathLayout for Atom {
         self.nucleus
             .as_ref()
             .and_then(|nucleus| nucleus.operator_properties(options))
-}
+    }
 }
 
 fn layout_sub_superscript(
@@ -170,18 +170,18 @@ fn layout_sub_superscript(
                 get_subsup_shifts(&subscript, &superscript, &nucleus, options);
             position_attachment(
                 &mut subscript,
-                                &mut nucleus,
-                                nucleus_is_largeop,
-                                CornerPosition::BottomRight,
-                                sub_shift,
+                &mut nucleus,
+                nucleus_is_largeop,
+                CornerPosition::BottomRight,
+                sub_shift,
                 options,
             );
             position_attachment(
                 &mut superscript,
-                                &mut nucleus,
-                                nucleus_is_largeop,
-                                CornerPosition::TopRight,
-                                super_shift,
+                &mut nucleus,
+                nucleus_is_largeop,
+                CornerPosition::TopRight,
+                super_shift,
                 options,
             );
             result.push(nucleus);
@@ -192,10 +192,10 @@ fn layout_sub_superscript(
             let sub_shift = get_subscript_shift_dn(&subscript, &nucleus, options);
             position_attachment(
                 &mut subscript,
-                                &mut nucleus,
-                                nucleus_is_largeop,
-                                CornerPosition::BottomRight,
-                                sub_shift,
+                &mut nucleus,
+                nucleus_is_largeop,
+                CornerPosition::BottomRight,
+                sub_shift,
                 options,
             );
             result.push(nucleus);
@@ -205,10 +205,10 @@ fn layout_sub_superscript(
             let super_shift = get_superscript_shift_up(&superscript, &nucleus, options);
             position_attachment(
                 &mut superscript,
-                                &mut nucleus,
-                                nucleus_is_largeop,
-                                CornerPosition::TopRight,
-                                super_shift,
+                &mut nucleus,
+                nucleus_is_largeop,
+                CornerPosition::TopRight,
+                super_shift,
                 options,
             );
             result.push(nucleus);
@@ -333,11 +333,11 @@ impl MathLayout for OverUnder {
 
             layout_over_or_under(
                 over,
-                                 nucleus,
+                nucleus,
                 options,
-                                 true,
-                                 self.over_is_accent,
-                                 nucleus_is_largeop,
+                true,
+                self.over_is_accent,
+                nucleus_is_largeop,
                 nucleus_is_horizontally_stretchy,
             )
         } else {
@@ -348,11 +348,11 @@ impl MathLayout for OverUnder {
             let (_, LayoutOptions { style, shaper, .. }, ..) = arguments[2];
             layout_over_or_under(
                 under,
-                                 nucleus,
+                nucleus,
                 options,
-                                 false,
-                                 self.under_is_accent,
-                                 nucleus_is_largeop,
+                false,
+                self.under_is_accent,
+                nucleus_is_largeop,
                 nucleus_is_horizontally_stretchy,
             )
         } else {
@@ -371,9 +371,9 @@ fn layout_over_or_under(
     mut attachment: MathBox,
     mut nucleus: MathBox,
     options: LayoutOptions,
-                                           as_over: bool,
-                                           as_accent: bool,
-                                           nucleus_is_large_op: bool,
+    as_over: bool,
+    as_accent: bool,
+    nucleus_is_large_op: bool,
     nucleus_is_horizontally_stretchy: bool,
 ) -> MathBox {
     let (shaper, style) = (options.shaper, options.style);
@@ -438,7 +438,7 @@ fn layout_over_or_under(
         (nucleus.origin.x + nucleus.extents().center())
             - (attachment.origin.x + attachment.extents().center())
     };
-    if center_difference < 0 {
+    if center_difference < 0 && !as_accent {
         nucleus.origin.x -= center_difference;
     } else {
         attachment.origin.x += center_difference;
@@ -453,8 +453,32 @@ fn layout_over_or_under(
         }
     }
 
-    // first the attachment then the nucleus to preserve the italic collection of the latter
-    MathBox::with_vec(vec![attachment, nucleus])
+    let advance_width = if as_accent {
+        nucleus.advance_width()
+    } else {
+        max(
+            nucleus.origin.x + nucleus.advance_width(),
+            attachment.origin.x + attachment.advance_width(),
+        )
+    };
+    let italic_correction = if as_accent {
+        nucleus.italic_correction()
+    } else {
+        0
+    };
+    let top_accent_attachment = if as_over {
+        attachment.origin.x + attachment.top_accent_attachment()
+    } else {
+        nucleus.origin.x + nucleus.top_accent_attachment()
+    };
+
+    let mut math_box = MathBox::with_vec(vec![nucleus, attachment]);
+    // preserve the italic collection of the nucleus
+    math_box.metrics.advance_width = advance_width;
+    math_box.metrics.italic_correction = italic_correction;
+    math_box.metrics.top_accent_attachment = top_accent_attachment;
+
+    math_box
 }
 
 impl MathLayout for GeneralizedFraction {
@@ -487,12 +511,12 @@ impl MathLayout for GeneralizedFraction {
                     shaper.math_constant(MathConstant::FractionNumeratorShiftUp),
                     shaper.math_constant(MathConstant::FractionDenominatorShiftDown),
                 )
-        } else {
+            } else {
                 (
                     shaper.math_constant(MathConstant::FractionNumeratorDisplayStyleShiftUp),
                     shaper.math_constant(MathConstant::FractionDenominatorDisplayStyleShiftDown),
                 )
-        };
+            };
 
         let (numerator_gap_min, denominator_gap_min) =
             if options.style.math_style == MathStyle::Inline {
@@ -500,12 +524,12 @@ impl MathLayout for GeneralizedFraction {
                     shaper.math_constant(MathConstant::FractionNumeratorGapMin),
                     shaper.math_constant(MathConstant::FractionDenominatorGapMin),
                 )
-        } else {
+            } else {
                 (
                     shaper.math_constant(MathConstant::FractionNumDisplayStyleGapMin),
                     shaper.math_constant(MathConstant::FractionDenomDisplayStyleGapMin),
                 )
-        };
+            };
 
         let numerator_shift_up = max(
             numerator_shift_up - axis_height,
@@ -523,8 +547,8 @@ impl MathLayout for GeneralizedFraction {
         denominator.origin.y += denominator_shift_dn;
 
         // centering
-        let center_difference = (numerator.origin.x + numerator.extents().center()) -
-                                (denominator.origin.x + denominator.extents().center());
+        let center_difference = (numerator.origin.x + numerator.extents().center())
+            - (denominator.origin.x + denominator.extents().center());
         if center_difference < 0 {
             numerator.origin.x -= center_difference;
         } else {
@@ -533,13 +557,17 @@ impl MathLayout for GeneralizedFraction {
 
         // the fraction rule
         let origin = Vector {
-            x: min(numerator.origin.x + numerator.extents().left_side_bearing,
-                   denominator.origin.x + denominator.extents().left_side_bearing),
+            x: min(
+                numerator.origin.x + numerator.extents().left_side_bearing,
+                denominator.origin.x + denominator.extents().left_side_bearing,
+            ),
             y: -axis_height,
         };
         let target = Vector {
-            x: max(numerator.origin.x + numerator.extents().right_edge(),
-                   denominator.origin.x + denominator.extents().right_edge()),
+            x: max(
+                numerator.origin.x + numerator.extents().right_edge(),
+                denominator.origin.x + denominator.extents().right_edge(),
+            ),
             ..origin
         };
         let fraction_rule = MathBox::with_line(origin, target, default_thickness as u32);
@@ -660,8 +688,8 @@ impl MathLayout for Root {
 impl Operator {
     fn layout_stretchy(
         &self,
-                                          needed_height: u32,
-                                          needed_width: u32,
+        needed_height: u32,
+        needed_width: u32,
         options: LayoutOptions,
     ) -> MathBox {
         match self.field {
@@ -677,9 +705,9 @@ impl Operator {
                 if needed_width > 0 && options.shaper.is_stretchable(first_glyph.glyph_code, true) {
                     return options.shaper.stretch_glyph(
                         first_glyph.glyph_code,
-                                                                 true,
+                        true,
                         needed_width,
-                        options.style
+                        options.style,
                     );
                 }
 
@@ -687,15 +715,15 @@ impl Operator {
                 {
                     let mut math_box = options.shaper.stretch_glyph(
                         first_glyph.glyph_code,
-                                                                 false,
+                        false,
                         needed_height,
-                        options.style
+                        options.style,
                     );
                     let stretch_constraints =
                         self.stretch_constraints.unwrap_or(StretchConstraints {
-                                       symmetric: true,
-                                       ..Default::default()
-                                   });
+                            symmetric: true,
+                            ..Default::default()
+                        });
                     if stretch_constraints.symmetric {
                         let axis_height = options.shaper.math_constant(MathConstant::AxisHeight);
                         let shift_up = (math_box.extents().descent - math_box.extents().ascent) / 2
@@ -744,9 +772,10 @@ impl MathLayout for Operator {
             }
             _ => {
                 if self.is_large_op && options.style.math_style == MathStyle::Display {
-                    let display_min_height = options
+                    let display_min_height = (options
                         .shaper
-                        .math_constant(MathConstant::DisplayOperatorMinHeight);
+                        .math_constant(MathConstant::DisplayOperatorMinHeight)
+                        as f32 * 1.42) as i32;
                     self.layout_stretchy(display_min_height as u32, 0, options)
                 } else {
                     self.field.layout(options)
@@ -760,10 +789,10 @@ impl MathLayout for Operator {
             stretch_properties: self.stretch_constraints
                 .as_ref()
                 .map(|_| Default::default()),
-                 leading_space: self.leading_space.to_font_units(options.shaper),
-                 trailing_space: self.trailing_space.to_font_units(options.shaper),
+            leading_space: self.leading_space.to_font_units(options.shaper),
+            trailing_space: self.trailing_space.to_font_units(options.shaper),
             is_large_op: self.is_large_op,
-             })
+        })
     }
 }
 
@@ -821,18 +850,18 @@ impl MathLayout for MathItem {
             MathItem::Other(ref other) => other.operator_properties(options),
         }
     }
-        }
+}
 
 pub fn layout_expression(expr: &MathExpression, options: LayoutOptions) -> MathBox {
     expr.layout(options)
-    }
+}
 
 impl MathLayout for MathExpression {
     fn layout(&self, options: LayoutOptions) -> MathBox {
         let mut mathbox = self.item.layout(options);
         mathbox.user_data = self.user_data.as_ref().map(|x| Arc::clone(x));
         mathbox
-}
+    }
 
     fn operator_properties(&self, options: LayoutOptions) -> Option<OperatorProperties> {
         self.item.operator_properties(options)

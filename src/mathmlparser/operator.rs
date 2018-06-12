@@ -166,6 +166,7 @@ fn guess_operator_attributes(expr: &MathExpression, context: &mut ParseContext) 
         operator_attrs.rspace = Some(Length::em(entry.rspace as f32 / 18.0f32));
     }
 
+    // apply user overrides
     operator_attrs.flags = (operator_attrs.user_overrides & operator_attrs.flags)
         | (!operator_attrs.user_overrides & entry.flags);
 }

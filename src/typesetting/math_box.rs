@@ -91,7 +91,7 @@ impl Extents<i32> {
     }
 
     pub fn center(&self) -> i32 {
-        (self.left_side_bearing + self.width) / 2
+        self.left_side_bearing + self.width / 2
     }
 
     pub fn right_edge(&self) -> i32 {
@@ -229,6 +229,42 @@ pub trait MathBoxMetrics {
     fn top_accent_attachment(&self) -> i32;
 }
 
+#[derive(Debug, Default)]
+pub(crate) struct Metrics {
+    pub advance_width: i32,
+    pub extents: Extents<i32>,
+    pub italic_correction: i32,
+    pub top_accent_attachment: i32,
+}
+
+impl Metrics {
+    pub fn from_metrics<T: MathBoxMetrics>(obj: &T) -> Self {
+        Metrics {
+            advance_width: obj.advance_width(),
+            extents: obj.extents(),
+            italic_correction: obj.italic_correction(),
+            top_accent_attachment: obj.top_accent_attachment(),
+        }
+    }
+}
+
+impl MathBoxMetrics for Metrics {
+    fn advance_width(&self) -> i32 {
+        self.advance_width
+    }
+    fn extents(&self) -> Extents<i32> {
+        self.extents
+    }
+
+    fn italic_correction(&self) -> i32 {
+        self.italic_correction
+    }
+
+    fn top_accent_attachment(&self) -> i32 {
+        self.top_accent_attachment
+    }
+}
+
 #[derive(Debug)]
 pub enum Drawable {
     Glyph(MathGlyph),
@@ -285,9 +321,10 @@ pub enum MathBoxContent {
     Boxes(Vec<MathBox>),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct MathBox {
     pub origin: Vector<i32>,
+    pub(crate) metrics: Metrics,
     pub content: MathBoxContent,
     pub user_data: Option<Arc<Any>>,
 }
@@ -295,16 +332,6 @@ pub struct MathBox {
 impl Default for MathBoxContent {
     fn default() -> Self {
         MathBoxContent::Empty(Extents::default())
-    }
-}
-
-impl Default for MathBox {
-    fn default() -> Self {
-        MathBox {
-            origin: Vector::default(),
-            content: MathBoxContent::default(),
-            user_data: None,
-        }
     }
 }
 
@@ -388,8 +415,10 @@ impl MathBoxMetrics for MathBoxContent {
 
 impl MathBox {
     fn with_content(content: MathBoxContent) -> Self {
+        let metrics = Metrics::from_metrics(&content);
         MathBox {
             content: content,
+            metrics,
             origin: Vector::default(),
             user_data: None,
         }
@@ -447,18 +476,18 @@ impl MathBox {
 
 impl MathBoxMetrics for MathBox {
     fn advance_width(&self) -> i32 {
-        self.content.advance_width()
+        self.metrics.advance_width()
     }
 
     fn extents(&self) -> Extents<i32> {
-        self.content.extents()
+        self.metrics.extents()
     }
 
     fn italic_correction(&self) -> i32 {
-        self.content.italic_correction()
+        self.metrics.italic_correction()
     }
 
     fn top_accent_attachment(&self) -> i32 {
-        self.content.top_accent_attachment()
+        self.metrics.top_accent_attachment()
     }
 }

@@ -55,7 +55,7 @@ impl AttributeParse for [u8] {
     }
 }
 
-// a static list of all mathml elements
+// a static list of all mathml elements known to this parser
 static MATHML_ELEMENTS: [MathmlElement; 16] = [
     MathmlElement {
         identifier: "mi",
@@ -146,12 +146,10 @@ static MATHML_ELEMENTS: [MathmlElement; 16] = [
 ];
 
 fn match_math_element(identifier: &[u8]) -> Option<MathmlElement> {
-    for elem in MATHML_ELEMENTS.iter() {
-        if elem.identifier.as_bytes() == identifier {
-            return Some(*elem);
-        }
-    }
-    None
+    MATHML_ELEMENTS
+        .iter()
+        .find(|elem| elem.identifier.as_bytes() == identifier)
+        .cloned()
 }
 
 pub struct ParseContext {
@@ -180,6 +178,14 @@ impl ParseContext {
             None
         }
     }
+
+    fn operator_attrs<'a, 'b: 'a, T: Into<Option<&'a MathExpression>>>(
+        &'b self,
+        expr: T,
+    ) -> Option<&'b operator::Attributes> {
+        self.info_for_expr(expr)
+            .and_then(|info| info.operator_attrs.as_ref())
+    }
 }
 
 #[derive(Debug, Default, Clone)]
@@ -197,7 +203,7 @@ impl MathmlInfo {
 pub fn parse<R: BufRead>(file: R) -> Result<MathExpression> {
     let mut parser = XmlReader::from_reader(file).trim_text(true);
     let root_elem = MathmlElement {
-        identifier: "ROOT_ELEMENT", // this identifier is arbitrary and should not be used
+        identifier: "ROOT_ELEMENT", // this identifier is arbitrary and should not be used elsewhere
         elem_type: ElementType::MathmlRoot,
     };
     let info = Stash::new();
@@ -361,6 +367,49 @@ fn parse_fixed_arguments<'a, R: BufRead>(
     }
 }
 
+fn construct_under_over<'a>(
+    nucleus: Option<MathExpression>,
+    under: Option<MathExpression>,
+    over: Option<MathExpression>,
+    attributes: impl Iterator<Item = ResultPos<(&'a [u8], &'a [u8])>>,
+    context: &mut ParseContext,
+) -> Result<MathItem> {
+    let over = over.map(|x| guess_if_operator_with_form(x, Form::Postfix, context));
+    let under = under.map(|x| guess_if_operator_with_form(x, Form::Postfix, context));
+
+    let mut over_is_accent = context
+        .operator_attrs(over.as_ref())
+        .map(|op_attrs| op_attrs.flags.contains(operator::ACCENT))
+        .unwrap_or(false);
+
+    let mut under_is_accent = context
+        .operator_attrs(under.as_ref())
+        .map(|op_attrs| op_attrs.flags.contains(operator::ACCENT))
+        .unwrap_or(false);
+
+    // now check the accent attributes of the mover/munder element.
+    for attrib in attributes {
+        let (ident, value) = attrib?;
+        if ident == b"accent" {
+            over_is_accent = value.parse_xml()?;
+        }
+        if ident == b"accentunder" {
+            under_is_accent = value.parse_xml()?;
+        }
+    }
+
+    let item = OverUnder {
+        nucleus: nucleus,
+        under: under,
+        over: over,
+        over_is_accent,
+        under_is_accent,
+        ..Default::default()
+    };
+
+    Ok(MathItem::OverUnder(item))
+}
+
 fn parse_fixed_schema<'a, A>(
     mut content: Vec<MathExpression>,
     elem: MathmlElement,
@@ -428,53 +477,20 @@ where
             MathItem::Atom(atom)
         }
         "mover" => {
-            let mut as_accent = false;
-            for attrib in attributes {
-                let (ident, value) = attrib?;
-                if ident == b"accent" && &value as &[u8] == b"true" {
-                    as_accent = true;
-                }
-            }
-            let item = OverUnder {
-                nucleus: Some(content.remove(0)),
-                over: Some(guess_if_operator_with_form(
-                    content.remove(0),
-                    Form::Postfix,
-                    context,
-                )),
-                over_is_accent: as_accent,
-                ..Default::default()
-            };
-            MathItem::OverUnder(item)
+            let nuc = Some(content.remove(0));
+            let over = Some(content.remove(0));
+            construct_under_over(nuc, None, over, attributes, context)?
         }
         "munder" => {
-            let item = OverUnder {
-                nucleus: Some(content.remove(0)),
-                under: Some(guess_if_operator_with_form(
-                    content.remove(0),
-                    Form::Postfix,
-                    context,
-                )),
-                ..Default::default()
-            };
-            MathItem::OverUnder(item)
+            let nuc = Some(content.remove(0));
+            let under = Some(content.remove(0));
+            construct_under_over(nuc, under, None, attributes, context)?
         }
         "munderover" => {
-            let item = OverUnder {
-                nucleus: Some(content.remove(0)),
-                under: Some(guess_if_operator_with_form(
-                    content.remove(0),
-                    Form::Postfix,
-                    context,
-                )),
-                over: Some(guess_if_operator_with_form(
-                    content.remove(0),
-                    Form::Postfix,
-                    context,
-                )),
-                ..Default::default()
-            };
-            MathItem::OverUnder(item)
+            let nuc = Some(content.remove(0));
+            let under = Some(content.remove(0));
+            let over = Some(content.remove(0));
+            construct_under_over(nuc, under, over, attributes, context)?
         }
         _ => unreachable!(),
     };
@@ -502,14 +518,13 @@ impl FromXmlAttribute for Length {
     type Err = ParsingError;
     fn from_xml_attr(bytes: &[u8]) -> std::result::Result<Self, Self::Err> {
         let string = std::str::from_utf8(bytes)?.trim().to_ascii_lowercase();
-        let first_non_digit = string
-            .find(|chr| match chr {
-                '0'..='9' | '.' | '+' | '-' => false,
-                _ => true,
-            });
+        let first_non_digit = string.find(|chr| match chr {
+            '0'..='9' | '.' | '+' | '-' => false,
+            _ => true,
+        });
         let first_non_digit = match first_non_digit {
             Some(x) => x,
-            None => return Ok(Length::default())
+            None => return Ok(Length::default()),
         };
         let num = string[0..first_non_digit].parse().unwrap();
         let unit = match string[first_non_digit..].trim() {
