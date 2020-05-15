@@ -1,10 +1,9 @@
-extern crate math_render;
 extern crate freetype;
 extern crate harfbuzz_rs;
+extern crate math_render;
 
+use self::harfbuzz_rs::{Face, Font};
 use math_render::shaper::HarfbuzzShaper;
-use self::harfbuzz_rs::Face;
-
 
 pub fn get_bytes() -> &'static [u8] {
     include_bytes!("testfiles/latinmodern-math.otf")
@@ -12,7 +11,8 @@ pub fn get_bytes() -> &'static [u8] {
 
 thread_local! {
     pub static TEST_FONT: HarfbuzzShaper<'static> = {
-        let font = Face::new(get_bytes(), 0).create_font();
-        HarfbuzzShaper::new(font)
+        let face = Face::new(get_bytes(), 0);
+        let font = Font::new(face);
+        HarfbuzzShaper::new(font.into())
     };
 }
