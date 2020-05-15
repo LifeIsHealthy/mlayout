@@ -1,6 +1,6 @@
 use std::cmp::max;
 
-use types::CornerPosition;
+use crate::types::CornerPosition;
 use super::layout::LayoutOptions;
 use super::shaper::{MathConstant, Position};
 use super::math_box::{MathBox, MathBoxMetrics};
@@ -16,13 +16,13 @@ pub fn get_superscript_shift_up(
         MathConstant::SuperscriptShiftUpCramped
     } else {
         MathConstant::SuperscriptShiftUp
-    });
+    }, style);
 
     let min_shift_up =
-        superscript.extents().descent + shaper.math_constant(MathConstant::SuperscriptBottomMin);
+        superscript.extents().descent + shaper.math_constant(MathConstant::SuperscriptBottomMin, style);
 
     let min_shift_from_baseline_drop =
-        nucleus.extents().ascent - shaper.math_constant(MathConstant::SuperscriptBaselineDropMax);
+        nucleus.extents().ascent - shaper.math_constant(MathConstant::SuperscriptBaselineDropMax, style);
 
     max(
         min_shift_from_baseline_drop,
@@ -37,11 +37,11 @@ pub fn get_subscript_shift_dn(
 ) -> Position {
     let shaper = options.shaper;
     let min_shift_dn_from_baseline_drop =
-        nucleus.extents().descent + shaper.math_constant(MathConstant::SubscriptBaselineDropMin);
+        nucleus.extents().descent + shaper.math_constant(MathConstant::SubscriptBaselineDropMin, options.style);
 
-    let std_shift_dn = shaper.math_constant(MathConstant::SubscriptShiftDown);
+    let std_shift_dn = shaper.math_constant(MathConstant::SubscriptShiftDown, options.style);
     let min_shift_dn =
-        subscript.extents().ascent - shaper.math_constant(MathConstant::SubscriptTopMax);
+        subscript.extents().ascent - shaper.math_constant(MathConstant::SubscriptTopMax, options.style);
 
     max(
         min_shift_dn_from_baseline_drop,
@@ -59,8 +59,8 @@ pub fn get_subsup_shifts (
     let mut super_shift = get_superscript_shift_up(superscript, nucleus, options);
     let mut sub_shift = get_subscript_shift_dn(subscript, nucleus, options);
 
-    let subsup_gap_min = shaper.math_constant(MathConstant::SubSuperscriptGapMin);
-    let super_bottom_max = shaper.math_constant(MathConstant::SuperscriptBottomMaxWithSubscript);
+    let subsup_gap_min = shaper.math_constant(MathConstant::SubSuperscriptGapMin, options.style);
+    let super_bottom_max = shaper.math_constant(MathConstant::SuperscriptBottomMaxWithSubscript, options.style);
 
     let super_bottom = super_shift - superscript.extents().descent;
     let sub_top = -sub_shift + subscript.extents().ascent;

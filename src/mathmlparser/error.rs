@@ -1,9 +1,8 @@
-use std;
 use std::fmt;
 use std::io::prelude::*;
 
-use quick_xml;
-use quick_xml::XmlReader;
+use failure::Fail;
+use quick_xml::Reader;
 
 #[derive(Debug)]
 pub struct ParsingError {
@@ -11,14 +10,14 @@ pub struct ParsingError {
     pub error_type: ErrorType,
 }
 impl ParsingError {
-    pub fn from_string<B: BufRead, S: ToString>(parser: &XmlReader<B>, string: S) -> ParsingError {
+    pub fn from_string<B: BufRead, S: ToString>(parser: &Reader<B>, string: S) -> ParsingError {
         ParsingError {
             position: Some(parser.buffer_position()),
             error_type: ErrorType::OtherError(string.to_string()),
         }
     }
 
-    pub fn of_type<B: BufRead>(parser: &XmlReader<B>, err_type: ErrorType) -> ParsingError {
+    pub fn of_type<B: BufRead>(parser: &Reader<B>, err_type: ErrorType) -> ParsingError {
         ParsingError {
             position: Some(parser.buffer_position()),
             error_type: err_type,
@@ -31,7 +30,7 @@ pub enum ErrorType {
     UnknownElement(String),
     UnexpectedEndOfInput,
     WrongEndElement(String),
-    XmlError(quick_xml::error::Error),
+    XmlError(quick_xml::Error),
     OtherError(String),
 }
 
@@ -40,11 +39,11 @@ impl fmt::Display for ParsingError {
         match self.error_type {
             ErrorType::UnknownElement(ref name) => write!(f, "Unknown Element: \"{}\"", name),
             ErrorType::UnexpectedEndOfInput => write!(f, "Unexpected end of input."),
-            ErrorType::WrongEndElement(ref name) => {
-                write!(f,
-                       "Unexpected end element \"<{}>\" without corresponding start element.",
-                       name)
-            }
+            ErrorType::WrongEndElement(ref name) => write!(
+                f,
+                "Unexpected end element \"<{}>\" without corresponding start element.",
+                name
+            ),
             ErrorType::OtherError(ref string) => write!(f, "Error: {}", string),
             ErrorType::XmlError(ref error) => write!(f, "XML error: {}", error),
         }
@@ -63,7 +62,7 @@ impl std::error::Error for ParsingError {
 
     fn cause(&self) -> Option<&std::error::Error> {
         match self.error_type {
-            ErrorType::XmlError(ref error) => Some(error),
+            ErrorType::XmlError(ref error) => Some(&error.compat()),
             _ => None,
         }
     }
@@ -84,16 +83,16 @@ impl ::std::convert::From<String> for ParsingError {
         }
     }
 }
-impl ::std::convert::From<quick_xml::error::Error> for ParsingError {
-    fn from(error: quick_xml::error::Error) -> ParsingError {
+impl ::std::convert::From<quick_xml::Error> for ParsingError {
+    fn from(error: quick_xml::Error) -> ParsingError {
         ParsingError {
             position: None,
             error_type: ErrorType::XmlError(error),
         }
     }
 }
-impl ::std::convert::From<(quick_xml::error::Error, usize)> for ParsingError {
-    fn from((error, position): (quick_xml::error::Error, usize)) -> ParsingError {
+impl ::std::convert::From<(quick_xml::Error, usize)> for ParsingError {
+    fn from((error, position): (quick_xml::Error, usize)) -> ParsingError {
         ParsingError {
             position: Some(position),
             error_type: ErrorType::XmlError(error),
@@ -104,7 +103,7 @@ impl ::std::convert::From<std::str::Utf8Error> for ParsingError {
     fn from(error: std::str::Utf8Error) -> ParsingError {
         ParsingError {
             position: None,
-            error_type: ErrorType::XmlError(quick_xml::error::Error::Utf8(error)),
+            error_type: ErrorType::XmlError(quick_xml::Error::Utf8(error)),
         }
     }
 }

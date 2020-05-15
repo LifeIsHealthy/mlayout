@@ -1,6 +1,5 @@
+use super::operator::{Flags, Form};
 use std;
-use super::operator::{Form, Flags};
-
 
 pub type Entry = _Entry<Flags>;
 
@@ -28,7 +27,6 @@ impl<T: Default> std::default::Default for _Entry<T> {
 impl<T: std::cmp::Eq> Ord for _Entry<T> {
     fn cmp(&self, other: &_Entry<T>) -> std::cmp::Ordering {
         self.character.cmp(&other.character)
-
     }
 }
 
@@ -1112,8 +1110,9 @@ pub static DICTIONARY: [_Entry<u8>; 1043] = [
 ];
 
 fn try_entry_at_offset(index: usize, offset: isize, requested_form: Form) -> Option<Entry> {
-    if (offset >= 0 && index < (DICTIONARY.len() - offset as usize)) ||
-       (offset < 0 && index >= (-offset) as usize) {
+    if (offset >= 0 && index < (DICTIONARY.len() - offset as usize))
+        || (offset < 0 && index >= (-offset) as usize)
+    {
         let next_entry = DICTIONARY[(index as isize + offset) as usize];
         if next_entry == DICTIONARY[index] && next_entry.form == requested_form {
             Some(next_entry.into())
@@ -1142,49 +1141,41 @@ pub fn find_entry(character: char, preferred_form: Form) -> Option<Entry> {
         (Form::Infix, Form::Prefix) => {
             try_entry_at_offset(index, 1, preferred_form).or(Some(result))
         }
-        (Form::Infix, Form::Postfix) => {
-            try_entry_at_offset(index, 1, preferred_form)
-                .or(try_entry_at_offset(index, 2, preferred_form))
-                .or(Some(result))
-        }
+        (Form::Infix, Form::Postfix) => try_entry_at_offset(index, 1, preferred_form)
+            .or(try_entry_at_offset(index, 2, preferred_form))
+            .or(Some(result)),
         (Form::Prefix, Form::Infix) => {
             try_entry_at_offset(index, -1, preferred_form).or(Some(result))
         }
-        (Form::Prefix, Form::Postfix) => {
-            try_entry_at_offset(index, 1, preferred_form)
-                .or(try_entry_at_offset(index, -1, Form::Infix))
-                .or(Some(result))
-        }
-        (Form::Postfix, Form::Prefix) => {
-            try_entry_at_offset(index, -1, preferred_form)
-                .or(try_entry_at_offset(index, -2, Form::Infix))
-                .or(Some(result))
-        }
-        (Form::Postfix, Form::Infix) => {
-            try_entry_at_offset(index, -1, preferred_form)
-                .or(try_entry_at_offset(index, -2, preferred_form))
-                .or(try_entry_at_offset(index, -1, Form::Prefix))
-                .or(Some(result))
-        }
+        (Form::Prefix, Form::Postfix) => try_entry_at_offset(index, 1, preferred_form)
+            .or(try_entry_at_offset(index, -1, Form::Infix))
+            .or(Some(result)),
+        (Form::Postfix, Form::Prefix) => try_entry_at_offset(index, -1, preferred_form)
+            .or(try_entry_at_offset(index, -2, Form::Infix))
+            .or(Some(result)),
+        (Form::Postfix, Form::Infix) => try_entry_at_offset(index, -1, preferred_form)
+            .or(try_entry_at_offset(index, -2, preferred_form))
+            .or(try_entry_at_offset(index, -1, Form::Prefix))
+            .or(Some(result)),
         _ => unreachable!(),
     }
 }
 
-
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use mathmlparser::operator::Form;
+    use crate::mathmlparser::operator::Form;
 
     #[test]
     fn find_test() {
         assert_eq!(find_entry('+', Form::Infix).unwrap().form, Form::Infix);
         assert_eq!(find_entry('+', Form::Prefix).unwrap().form, Form::Prefix);
         assert_eq!(find_entry('+', Form::Postfix).unwrap().form, Form::Infix);
-        assert!(find_entry('\u{2211}', Form::Postfix)
-                    .unwrap()
-                    .flags
-                    .contains(Flags::from_bits(LARGEOP).unwrap()));
+        assert!(
+            find_entry('\u{2211}', Form::Postfix)
+                .unwrap()
+                .flags
+                .contains(Flags::from_bits(LARGEOP).unwrap())
+        );
     }
 }

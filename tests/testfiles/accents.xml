@@ -4,13 +4,13 @@
 </mover>
 
 <mover accent="true">
-<mi>&imath;</mi>
-<mo>&#x0302;</mo>
+    <mi>&imath;</mi>
+    <mo>&#x0302;</mo>
 </mover>
 
 <mover accent="true">
-<mi>l</mi>
-<mo>&#x0302;</mo>
+    <mi>l</mi>
+    <mo>&#x0302;</mo>
 </mover>
 
 <mover accent="true">
@@ -19,12 +19,19 @@
 </mover>
 
 <mover accent="true">
-<mi>w</mi>
-<mo>&#x0302;</mo>
+    <mi>w</mi>
+    <mo>&#x0302;</mo>
 </mover>
 
 <mover accent="true">
-<mi>W</mi>
-<mo stretchy="true">&#x0302;</mo>
+    <mi>W</mi>
+    <mo stretchy="true">&#x0302;</mo>
 </mover>
 
+<mover>
+    <mover>
+        <mi mathvariant="bold-italic">&#x3d5;</mi>
+        <mo accent="true">&#x307;</mo>
+    </mover>
+    <mo accent="true" stretchy="false">&#x302;</mo>
+</mover>

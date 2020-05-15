@@ -1,0 +1,7 @@
+[package]
+name = "table_gen"
+version = "0.1.0"
+authors = ["Manuel Reinhardt <manuel.jr16@gmail.com>"]
+
+[dependencies]
+nom = "^2.0"

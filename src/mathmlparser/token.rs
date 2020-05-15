@@ -4,13 +4,14 @@ use std::io::BufRead;
 
 use super::error::ParsingError;
 use super::operator;
+use super::operator::Flags;
 use super::{Event, FromXmlAttribute, MathmlElement, MathmlInfo, ParseContext, Result, ResultPos,
             XmlReader};
-use mathmlparser::AttributeParse;
+use crate::mathmlparser::AttributeParse;
 
 use super::escape::StringExtUnescape;
-use types::{Field, Length, MathExpression, MathItem, MathSpace};
-use unicode_math::{convert_character_to_family, Family};
+use crate::types::{Field, Length, MathExpression, MathItem, MathSpace};
+use crate::unicode_math::{convert_character_to_family, Family};
 
 #[derive(Debug)]
 enum TextDirection {
@@ -114,9 +115,10 @@ impl StringExtMathml for str {
     fn replace_anomalous_characters(&self, elem: MathmlElement) -> String {
         self.chars()
             .map(|chr| match chr {
-                '-' if elem.identifier == "mo" => '\u{2212}', // Minus Sign
-                '-' => '\u{2010}',                            // Hyphen
-                '\u{0027}' => '\u{2023}',                     // Prime
+                '-' if elem.identifier != "mtext" => '\u{2212}', // Minus Sign
+                '-' => '\u{2010}',                               // Hyphen
+                '\u{0027}' if elem.identifier != "mtext" => '\u{2023}', // Prime
+                '|' if elem.identifier == "mo" => '\u{2223}',    // Divides
                 chr => chr,
             })
             .collect()
@@ -199,32 +201,32 @@ fn parse_operator_attribute(
         }
         (b"fence", is_fence) => {
             if let Ok(is_fence) = is_fence.parse_xml() {
-                op_attrs.set_user_override(operator::FENCE, is_fence);
+                op_attrs.set_user_override(Flags::FENCE, is_fence);
             }
         }
         (b"symmetric", is_symmetric) => {
             if let Ok(is_symmetric) = is_symmetric.parse_xml() {
-                op_attrs.set_user_override(operator::SYMMETRIC, is_symmetric);
+                op_attrs.set_user_override(Flags::SYMMETRIC, is_symmetric);
             }
         }
         (b"stretchy", is_stretchy) => {
             if let Ok(is_stretchy) = is_stretchy.parse_xml() {
-                op_attrs.set_user_override(operator::STRETCHY, is_stretchy);
+                op_attrs.set_user_override(Flags::STRETCHY, is_stretchy);
             }
         }
         (b"largeop", is_largeop) => {
             if let Ok(is_largeop) = is_largeop.parse_xml() {
-                op_attrs.set_user_override(operator::LARGEOP, is_largeop);
+                op_attrs.set_user_override(Flags::LARGEOP, is_largeop);
             }
         }
         (b"movablelimits", has_movable_limits) => {
             if let Ok(has_movable_limits) = has_movable_limits.parse_xml() {
-                op_attrs.set_user_override(operator::MOVABLE_LIMITS, has_movable_limits);
+                op_attrs.set_user_override(Flags::MOVABLE_LIMITS, has_movable_limits);
             }
         }
         (b"accent", is_accent) => {
             if let Ok(is_accent) = is_accent.parse_xml() {
-                op_attrs.set_user_override(operator::ACCENT, is_accent);
+                op_attrs.set_user_override(Flags::ACCENT, is_accent);
             }
         }
         _ => return false,
@@ -278,7 +280,7 @@ where
 
     if let Some(width) = space {
         let item = MathExpression::new(MathItem::Space(MathSpace::horizontal_space(width)), ());
-        return Ok(item)
+        return Ok(item);
     }
 
     let mut item = if fields.len() == 1 {
@@ -337,9 +339,9 @@ mod tests {
 
     #[test]
     fn test_parse_operator_attributes() {
-        test_operator_flag_parse("symmetric", operator::SYMMETRIC);
-        test_operator_flag_parse("fence", operator::FENCE);
-        test_operator_flag_parse("largeop", operator::LARGEOP);
-        test_operator_flag_parse("stretchy", operator::STRETCHY);
+        test_operator_flag_parse("symmetric", Flags::SYMMETRIC);
+        test_operator_flag_parse("fence", Flags::FENCE);
+        test_operator_flag_parse("largeop", Flags::LARGEOP);
+        test_operator_flag_parse("stretchy", Flags::STRETCHY);
     }
 }

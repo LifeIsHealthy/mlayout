@@ -1,8 +1,8 @@
 use super::*;
 
 use super::layout::{MathLayout, OperatorProperties};
-use types::MathExpression;
-use math_box::{Extents, MathBoxMetrics};
+use crate::types::MathExpression;
+use crate::math_box::{Extents, MathBoxMetrics};
 
 fn indices_of_stretchy_elements(list: &[MathExpression], options: LayoutOptions) -> Vec<usize> {
     list.iter()
@@ -31,7 +31,7 @@ pub fn layout_list_element<T: MathLayout>(item: &T, options: LayoutOptions) -> M
     item.layout(options)
 }
 
-pub fn layout_strechy_list(list: &[MathExpression], options: LayoutOptions) -> Vec<MathBox> {
+pub(crate) fn layout_strechy_list(list: &[MathExpression], options: LayoutOptions) -> Vec<MathBox> {
     let stretchy_indices = indices_of_stretchy_elements(list, options);
 
     if stretchy_indices.is_empty() {

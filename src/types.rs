@@ -1,11 +1,11 @@
+use std::any::Any;
 use std::default::Default;
 use std::fmt;
-use std::ops::{Mul, Div};
-use std::any::Any;
+use std::ops::{Div, Mul};
 use std::sync::Arc;
 
-use typesetting::math_box::Vector;
-use typesetting::MathLayout;
+use crate::typesetting::math_box::Vector;
+use crate::typesetting::MathLayout;
 
 /// An identifier of a glyph inside a font.
 pub type GlyphCode = u32;
@@ -88,7 +88,7 @@ pub enum Field {
     /// OpenType.
     Unicode(String),
     /// Represents a specific glyph in the current font.
-    /// 
+    ///
     /// *Beware*: This is not yet implemented!
     // TODO
     Glyph(Glyph),
@@ -151,7 +151,6 @@ pub struct Atom {
     /// bottom right attachment
     pub bottom_right: Option<MathExpression>,
 }
-
 
 /// An expression that consists of a base (called nucleus) and attachments that go above or below
 /// the nucleus like e.g. accents.
@@ -317,7 +316,6 @@ impl fmt::Debug for PercentValue {
     }
 }
 
-
 impl Mul<i32> for PercentValue {
     type Output = i32;
 
@@ -455,11 +453,7 @@ impl LayoutStyle {
 
     /// Returns the style that the superscript of a base styled with `self` should have.
     pub fn superscript_style(self) -> LayoutStyle {
-        LayoutStyle {
-            math_style: MathStyle::Inline,
-            script_level: self.script_level + 1,
-            ..self
-        }
+        self.inline_style().with_increased_script_level()
     }
 
     /// Returns the style that the subscript of a base styled with `self` should have.
@@ -495,8 +489,7 @@ pub enum CornerPosition {
     BottomRight = 2,
 }
 
-
-pub use self::CornerPosition::{TopLeft, TopRight, BottomLeft, BottomRight};
+pub use self::CornerPosition::{BottomLeft, BottomRight, TopLeft, TopRight};
 impl CornerPosition {
     /// Returns true if the position is left of the base
     pub fn is_left(self) -> bool {

@@ -3,19 +3,22 @@ name = "math-render"
 version = "0.1.0"
 authors = ["Manuel Reinhardt <manuel.jr16@gmail.com>"]
 build = "build.rs"
+edition = "2018"
 
 [dependencies]
-quick-xml = "0.4"
+quick-xml = "^0.13"
 #harfbuzz-sys = "0.1.5"
-harfbuzz-sys = { git = "https://github.com/manuel-rhdt/rust-harfbuzz.git" }
+harfbuzz-sys = "*"
 harfbuzz_rs = { git = "https://github.com/manuel-rhdt/harfbuzz_rs.git" }
-bitflags = "0.7"
+bitflags = "^1"
 stash = "*"
+generational-arena = "^0.1"
+failure = ">=0.1"
 
 [dev-dependencies]
 image = "*"
-svg = "0.5.1"
-freetype-rs = "0.11.0"
+svg = "*"
+freetype-rs = "*"
 
 [build-dependencies]
 rustc-serialize = "0.3"

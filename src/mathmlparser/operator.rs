@@ -1,18 +1,20 @@
-use types::{Atom, GeneralizedFraction, Length, MathExpression, MathItem, Operator, OverUnder,
-            StretchConstraints};
+use crate::types::{
+    Atom, GeneralizedFraction, Length, MathExpression, MathItem, Operator, OverUnder,
+    StretchConstraints,
+};
 
-use super::{FromXmlAttribute, ParseContext};
 use super::operator_dict;
+use super::{FromXmlAttribute, ParseContext};
 
 bitflags! {
-    pub flags Flags: u8 {
-        const SYMMETRIC         = 0b00000001,
-        const FENCE             = 0b00000010,
-        const STRETCHY          = 0b00000100,
-        const SEPARATOR         = 0b00001000,
-        const ACCENT            = 0b00010000,
-        const LARGEOP           = 0b00100000,
-        const MOVABLE_LIMITS    = 0b01000000,
+    pub struct Flags: u8 {
+        const SYMMETRIC         = 0b00000001;
+        const FENCE             = 0b00000010;
+        const STRETCHY          = 0b00000100;
+        const SEPARATOR         = 0b00001000;
+        const ACCENT            = 0b00010000;
+        const LARGEOP           = 0b00100000;
+        const MOVABLE_LIMITS    = 0b01000000;
     }
 }
 
@@ -82,7 +84,8 @@ impl Attributes {
 // beginning/end or in the middle of a `mrow` (ignoring any whitespace elements).
 pub fn process_operators(list: &mut Vec<MathExpression>, context: &mut ParseContext) {
     // filter out all whitespace elements
-    let non_whitespace_list = list.iter_mut()
+    let non_whitespace_list = list
+        .iter_mut()
         .filter(|expr| {
             context
                 .info_for_expr(&**expr)
@@ -176,9 +179,8 @@ fn find_core_operator<'a>(
     embellished_op: &'a mut MathExpression,
     context: &mut ParseContext,
 ) -> Option<&'a mut MathExpression> {
-
     if let &mut MathItem::Field(_) = embellished_op.item.as_mut() {
-        return Some(embellished_op)
+        return Some(embellished_op);
     }
 
     let core = match embellished_op.item.as_mut() {
@@ -233,14 +235,14 @@ fn make_operator(expr: &mut MathExpression, context: &mut ParseContext) {
 
     let flags = operator_attrs.flags;
 
-    if flags.contains(MOVABLE_LIMITS) {
+    if flags.contains(Flags::MOVABLE_LIMITS) {
         set_movable_limits(expr, context);
     }
 
     if let Some(ref mut core_expr) = find_core_operator(expr, context) {
-        let stretch_constraints = if flags.contains(STRETCHY) {
+        let stretch_constraints = if flags.contains(Flags::STRETCHY) {
             Some(StretchConstraints {
-                symmetric: flags.contains(SYMMETRIC),
+                symmetric: flags.contains(Flags::SYMMETRIC),
                 ..Default::default()
             })
         } else {
@@ -253,7 +255,7 @@ fn make_operator(expr: &mut MathExpression, context: &mut ParseContext) {
         let new_elem = Operator {
             stretch_constraints: stretch_constraints,
             field: field,
-            is_large_op: flags.contains(LARGEOP),
+            is_large_op: flags.contains(Flags::LARGEOP),
             leading_space: operator_attrs.lspace.expect("operator has no lspace"),
             trailing_space: operator_attrs.rspace.expect("operator has no rspace"),
             ..Default::default()
@@ -264,16 +266,13 @@ fn make_operator(expr: &mut MathExpression, context: &mut ParseContext) {
 
 #[cfg(test)]
 mod tests {
-    use mathmlparser::ParseContext;
-    use types::MathExpression;
+    use crate::mathmlparser::ParseContext;
     use stash::Stash;
 
     #[test]
     fn test_set_default_form() {
         let info = Stash::new();
-        let mut context = ParseContext {
-            mathml_info: info,
-        };
+        let mut context = ParseContext { mathml_info: info };
         let context = ParseContext {
             mathml_info: Stash::new(),
         };

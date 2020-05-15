@@ -7,11 +7,12 @@ mod token;
 use std;
 use std::io::BufRead;
 
-use types::{Atom, GeneralizedFraction, Length, LengthUnit, MathExpression, MathItem, OverUnder,
-            Root};
+use crate::types::{
+    Atom, GeneralizedFraction, Length, LengthUnit, MathExpression, MathItem, OverUnder, Root,
+};
 
-pub use quick_xml::error::ResultPos;
-pub use quick_xml::{Element, Event, XmlReader};
+pub use quick_xml::events::Event;
+pub use quick_xml::{Reader, Result as XmlResult};
 use stash::Stash;
 
 pub use self::error::*;
@@ -201,7 +202,7 @@ impl MathmlInfo {
 }
 
 pub fn parse<R: BufRead>(file: R) -> Result<MathExpression> {
-    let mut parser = XmlReader::from_reader(file).trim_text(true);
+    let mut parser = Reader::from_reader(file).trim_text(true);
     let root_elem = MathmlElement {
         identifier: "ROOT_ELEMENT", // this identifier is arbitrary and should not be used elsewhere
         elem_type: ElementType::MathmlRoot,
@@ -213,7 +214,7 @@ pub fn parse<R: BufRead>(file: R) -> Result<MathExpression> {
 }
 
 fn parse_element<'a, R: BufRead, A>(
-    parser: &mut XmlReader<R>,
+    parser: &mut Reader<R>,
     elem: MathmlElement,
     attributes: A,
     context: &mut ParseContext,
@@ -518,6 +519,28 @@ impl FromXmlAttribute for Length {
     type Err = ParsingError;
     fn from_xml_attr(bytes: &[u8]) -> std::result::Result<Self, Self::Err> {
         let string = std::str::from_utf8(bytes)?.trim().to_ascii_lowercase();
+        let textual_space = match &string[..] {
+            "veryverythinmathspace" => Some(Length::em(1.0 / 18.0)),
+            "verythinmathspace" => Some(Length::em(2.0 / 18.0)),
+            "thinmathspace" => Some(Length::em(3.0 / 18.0)),
+            "mediummathspace" => Some(Length::em(4.0 / 18.0)),
+            "thickmathspace" => Some(Length::em(5.0 / 18.0)),
+            "verythickmathspace" => Some(Length::em(6.0 / 18.0)),
+            "veryverythickmathspace" => Some(Length::em(7.0 / 18.0)),
+            "negativeveryverythinmathspace" => Some(Length::em(-1.0 / 18.0)),
+            "negativeverythinmathspace" => Some(Length::em(-2.0 / 18.0)),
+            "negativethinmathspace" => Some(Length::em(-3.0 / 18.0)),
+            "negativemediummathspace" => Some(Length::em(-4.0 / 18.0)),
+            "negativethickmathspace" => Some(Length::em(-5.0 / 18.0)),
+            "negativeverythickmathspace" => Some(Length::em(-6.0 / 18.0)),
+            "negativeveryverythickmathspace" => Some(Length::em(-7.0 / 18.0)),
+            _ => None,
+        };
+
+        if let Some(x) = textual_space {
+            return Ok(x);
+        }
+
         let first_non_digit = string.find(|chr| match chr {
             '0'..='9' | '.' | '+' | '-' => false,
             _ => true,
@@ -558,7 +581,8 @@ mod tests {
 
     fn find_operator(expr: &MathExpression) -> &MathExpression {
         match *expr.item {
-            MathItem::List(ref list) => list.iter()
+            MathItem::List(ref list) => list
+                .iter()
                 .filter(|&expr| {
                     if let MathItem::Operator(_) = *expr.item {
                         true

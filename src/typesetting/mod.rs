@@ -5,7 +5,7 @@ mod multiscripts;
 pub mod unicode_math;
 mod stretchy;
 
-use types::*;
+use crate::types::*;
 pub use self::layout::{layout_expression, LayoutOptions, MathLayout};
 use self::shaper::MathShaper;
 use self::math_box::MathBox;

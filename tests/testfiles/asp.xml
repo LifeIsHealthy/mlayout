@@ -1,54 +1,60 @@
 <mrow>
     <mi>Z</mi>
-    <mo>=</mo>
-    <mo stretchy="false">&#x222b;</mo>
+    <mo lspace="0.278em" rspace="0.278em">=</mo>
+    <mo lspace="0" rspace="0.167em" stretchy="false">&#x222b;</mo>
     <mi mathvariant="script">D</mi>
+    <!-- <mspace width="0.167em"/> -->
     <mrow>
         <mo stretchy="true">[</mo>
         <mrow>
             <mi>m</mi>
-            <mo stretchy="false">(</mo>
-            <mi mathvariant="bold">x</mi>
-            <mo stretchy="false">)</mo>
+            <mo lspace="0" rspace="0" stretchy="false">(</mo>
+            <mi mathvariant="bold-italic">x</mi>
+            <mo lspace="0" rspace="0" stretchy="false">)</mo>
         </mrow>
         <mo stretchy="true">]</mo>
     </mrow>
-    <mi>exp</mi>
+    <!-- <mspace width="0.167em"/> -->
+    <mo>exp</mo>
+    <!-- <mspace width="0.167em"/> -->
     <mrow>
         <mo stretchy="true">{</mo>
         <mrow>
-            <mo>-</mo>
+            <mo lspace="0" rspace="0">-</mo>
             <mi>&#x3b2;</mi>
+            <!-- <mspace width="0.167em"/> -->
             <mrow>
                 <mo stretchy="true">(</mo>
                 <mrow>
                     <mi mathvariant="script">F</mi>
+                    <mspace width="0.167em"/>
                     <mrow>
                         <mo stretchy="true">[</mo>
                         <mrow>
                             <mi>m</mi>
-                            <mo stretchy="false">(</mo>
-                            <mi mathvariant="bold">x</mi>
-                            <mo stretchy="false">)</mo>
+                            <mo lspace="0" rspace="0" stretchy="false">(</mo>
+                            <mi mathvariant="bold-italic">x</mi>
+                            <mo lspace="0" rspace="0" stretchy="false">)</mo>
                         </mrow>
                         <mo stretchy="true">]</mo>
                     </mrow>
-                    <mo>-</mo>
-                    <mo stretchy="false">&#x222b;</mo>
+                    <mo lspace="0.222em" rspace="0.222em">-</mo>
+                    <mo lspace="0" rspace="0.167em" stretchy="false">&#x222b;</mo>
                     <msup>
                         <mi mathvariant="normal">d</mi>
                         <mi>d</mi>
                     </msup>
+                    <mspace width="0"/>
                     <mi>x</mi>
                     <mspace width="0.278em"/>
                     <mi>h</mi>
-                    <mo stretchy="false">(</mo>
-                    <mi mathvariant="bold">x</mi>
-                    <mo rspace="0.167em" stretchy="false">)</mo>
+                    <mo lspace="0" rspace="0" stretchy="false">(</mo>
+                    <mi mathvariant="bold-italic">x</mi>
+                    <mo lspace="0" rspace="0.167em" stretchy="false">)</mo>
                     <mi>m</mi>
-                    <mo stretchy="false">(</mo>
-                    <mi mathvariant="bold">x</mi>
-                    <mo stretchy="false">)</mo>
+                    <mo lspace="0" rspace="0" stretchy="false">(</mo>
+                    <mi mathvariant="bold-italic">x</mi>
+                    <mo lspace="0" rspace="0" stretchy="false">)</mo>
                 </mrow>
                 <mo stretchy="true">)</mo>
             </mrow>

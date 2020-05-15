@@ -1,7 +1,7 @@
 #![allow(unused_variables, dead_code)]
 use std::cmp::{max, min};
 use std::sync::Arc;
-use types::*;
+use crate::types::*;
 
 use super::math_box::{Extents, MathBox, MathBoxMetrics, Vector};
 use super::multiscripts::*;
@@ -40,7 +40,7 @@ impl Length {
                 Length::em(self.value / shaper.ppem().0 as f32).to_font_units(shaper)
             }
             LengthUnit::DisplayOperatorMinHeight => {
-                (shaper.math_constant(MathConstant::DisplayOperatorMinHeight) as f32 * self.value)
+                (shaper.math_constant(MathConstant::DisplayOperatorMinHeight, Default::default()) as f32 * self.value)
                     as i32
             }
         }
@@ -157,7 +157,7 @@ fn layout_sub_superscript(
     let nucleus_is_largeop = nucleus.is_large_op(options);
     let mut nucleus = nucleus.layout(options);
 
-    let space_after_script = options.shaper.math_constant(MathConstant::SpaceAfterScript);
+    let space_after_script = options.shaper.math_constant(MathConstant::SpaceAfterScript, options.style);
 
     if subscript.is_none() && superscript.is_none() {
         return nucleus;
@@ -324,7 +324,7 @@ impl MathLayout for OverUnder {
             // enable flat accents if needed
             let height = options
                 .shaper
-                .math_constant(MathConstant::FlattenedAccentBaseHeight);
+                .math_constant(MathConstant::FlattenedAccentBaseHeight, style);
             if self.over_is_accent && nucleus.extents().ascent >= height {
                 let (_, ref mut over_options, _) = arguments[1];
                 over_options.style.flat_accent = true;
@@ -381,34 +381,34 @@ fn layout_over_or_under(
     let mut shift = 0;
     if nucleus_is_large_op {
         if as_over {
-            gap = shaper.math_constant(MathConstant::UpperLimitGapMin);
-            shift = shaper.math_constant(MathConstant::UpperLimitBaselineRiseMin)
+            gap = shaper.math_constant(MathConstant::UpperLimitGapMin, style);
+            shift = shaper.math_constant(MathConstant::UpperLimitBaselineRiseMin, style)
                 + nucleus.extents().ascent;
         } else {
-            gap = shaper.math_constant(MathConstant::LowerLimitGapMin);
-            shift = shaper.math_constant(MathConstant::LowerLimitBaselineDropMin)
+            gap = shaper.math_constant(MathConstant::LowerLimitGapMin, style);
+            shift = shaper.math_constant(MathConstant::LowerLimitBaselineDropMin, style)
                 + nucleus.extents().descent;
         }
     } else if nucleus_is_horizontally_stretchy {
         if as_over {
-            gap = shaper.math_constant(MathConstant::StretchStackGapBelowMin);
-            shift = shaper.math_constant(MathConstant::StretchStackTopShiftUp);
+            gap = shaper.math_constant(MathConstant::StretchStackGapBelowMin, style);
+            shift = shaper.math_constant(MathConstant::StretchStackTopShiftUp, style);
         } else {
-            gap = shaper.math_constant(MathConstant::StretchStackGapAboveMin);
-            shift = shaper.math_constant(MathConstant::StretchStackBottomShiftDown);
+            gap = shaper.math_constant(MathConstant::StretchStackGapAboveMin, style);
+            shift = shaper.math_constant(MathConstant::StretchStackBottomShiftDown, style);
         }
     } else if !as_accent {
         gap = if as_over {
-            shaper.math_constant(MathConstant::OverbarVerticalGap)
+            shaper.math_constant(MathConstant::OverbarVerticalGap, style)
         } else {
-            shaper.math_constant(MathConstant::UnderbarVerticalGap)
+            shaper.math_constant(MathConstant::UnderbarVerticalGap, style)
         };
         shift = gap;
     }
 
     let baseline_offset = if as_accent {
         if as_over {
-            let accent_base_height = shaper.math_constant(MathConstant::AccentBaseHeight);
+            let accent_base_height = shaper.math_constant(MathConstant::AccentBaseHeight, style);
             -max(nucleus.extents().ascent - accent_base_height, 0)
         } else {
             nucleus.extents().descent
@@ -490,9 +490,9 @@ impl MathLayout for GeneralizedFraction {
 
         let mut numerator_options = options;
         if options.style.math_style == MathStyle::Display {
-            numerator_options.style.math_style = MathStyle::Inline;
+            numerator_options.style = numerator_options.style.inline_style();
         } else {
-            numerator_options.style.script_level += 1;
+            numerator_options.style = numerator_options.style.with_increased_script_level();
         }
         let denominator_options = LayoutOptions {
             style: numerator_options.style.cramped_style(),
@@ -502,32 +502,32 @@ impl MathLayout for GeneralizedFraction {
         let mut denominator = denominator.layout(denominator_options);
 
         let shaper = &options.shaper;
-        let axis_height = shaper.math_constant(MathConstant::AxisHeight);
-        let default_thickness = shaper.math_constant(MathConstant::FractionRuleThickness);
+        let axis_height = shaper.math_constant(MathConstant::AxisHeight, options.style);
+        let default_thickness = shaper.math_constant(MathConstant::FractionRuleThickness, options.style);
 
         let (numerator_shift_up, denominator_shift_dn) =
             if options.style.math_style == MathStyle::Inline {
                 (
-                    shaper.math_constant(MathConstant::FractionNumeratorShiftUp),
-                    shaper.math_constant(MathConstant::FractionDenominatorShiftDown),
+                    shaper.math_constant(MathConstant::FractionNumeratorShiftUp, options.style),
+                    shaper.math_constant(MathConstant::FractionDenominatorShiftDown, options.style),
                 )
             } else {
                 (
-                    shaper.math_constant(MathConstant::FractionNumeratorDisplayStyleShiftUp),
-                    shaper.math_constant(MathConstant::FractionDenominatorDisplayStyleShiftDown),
+                    shaper.math_constant(MathConstant::FractionNumeratorDisplayStyleShiftUp, options.style),
+                    shaper.math_constant(MathConstant::FractionDenominatorDisplayStyleShiftDown, options.style),
                 )
             };
 
         let (numerator_gap_min, denominator_gap_min) =
             if options.style.math_style == MathStyle::Inline {
                 (
-                    shaper.math_constant(MathConstant::FractionNumeratorGapMin),
-                    shaper.math_constant(MathConstant::FractionDenominatorGapMin),
+                    shaper.math_constant(MathConstant::FractionNumeratorGapMin, options.style),
+                    shaper.math_constant(MathConstant::FractionDenominatorGapMin, options.style),
                 )
             } else {
                 (
-                    shaper.math_constant(MathConstant::FractionNumDisplayStyleGapMin),
-                    shaper.math_constant(MathConstant::FractionDenomDisplayStyleGapMin),
+                    shaper.math_constant(MathConstant::FractionNumDisplayStyleGapMin, options.style),
+                    shaper.math_constant(MathConstant::FractionDenomDisplayStyleGapMin, options.style),
                 )
             };
 
@@ -590,13 +590,13 @@ impl MathLayout for Root {
         };
 
         let shaper = options.shaper;
-        let line_thickness = shaper.math_constant(MathConstant::RadicalRuleThickness);
+        let line_thickness = shaper.math_constant(MathConstant::RadicalRuleThickness, options.style);
         let vertical_gap = if options.style.math_style == MathStyle::Inline {
-            shaper.math_constant(MathConstant::RadicalVerticalGap)
+            shaper.math_constant(MathConstant::RadicalVerticalGap, options.style)
         } else {
-            shaper.math_constant(MathConstant::RadicalDisplayStyleVerticalGap)
+            shaper.math_constant(MathConstant::RadicalDisplayStyleVerticalGap, options.style)
         };
-        let extra_ascender = shaper.math_constant(MathConstant::RadicalExtraAscender);
+        let extra_ascender = shaper.math_constant(MathConstant::RadicalExtraAscender, options.style);
 
         // calculate the needed surd height based on the height of the radicand
         let mut radicand = radicand.layout(options);
@@ -653,10 +653,10 @@ impl MathLayout for Root {
         // typeset the self degree
         if let &Some(ref degree) = &self.degree {
             let degree_bottom_raise_percent = PercentValue::new(shaper
-                .math_constant(MathConstant::RadicalDegreeBottomRaisePercent)
+                .math_constant(MathConstant::RadicalDegreeBottomRaisePercent, options.style)
                 as u8);
-            let kern_before = shaper.math_constant(MathConstant::RadicalKernBeforeDegree);
-            let kern_after = shaper.math_constant(MathConstant::RadicalKernAfterDegree);
+            let kern_before = shaper.math_constant(MathConstant::RadicalKernBeforeDegree, options.style);
+            let kern_after = shaper.math_constant(MathConstant::RadicalKernAfterDegree, options.style);
             let surd_height = surd.extents().ascent + surd.extents().descent;
             let degree_bottom =
                 surd.origin.y + surd.extents().descent - surd_height * degree_bottom_raise_percent;
@@ -725,7 +725,7 @@ impl Operator {
                             ..Default::default()
                         });
                     if stretch_constraints.symmetric {
-                        let axis_height = options.shaper.math_constant(MathConstant::AxisHeight);
+                        let axis_height = options.shaper.math_constant(MathConstant::AxisHeight, options.style);
                         let shift_up = (math_box.extents().descent - math_box.extents().ascent) / 2
                             + axis_height;
                         math_box.origin.y -= shift_up;
@@ -758,7 +758,7 @@ impl MathLayout for Operator {
                     .max_size
                     .map(|size| size.to_font_units(options.shaper));
                 let mut needed_height = if stretch_constraints.symmetric {
-                    let axis_height = options.shaper.math_constant(MathConstant::AxisHeight);
+                    let axis_height = options.shaper.math_constant(MathConstant::AxisHeight, options.style);
                     max(
                         stretch_size.ascent - axis_height,
                         axis_height + stretch_size.descent,
@@ -774,7 +774,7 @@ impl MathLayout for Operator {
                 if self.is_large_op && options.style.math_style == MathStyle::Display {
                     let display_min_height = (options
                         .shaper
-                        .math_constant(MathConstant::DisplayOperatorMinHeight)
+                        .math_constant(MathConstant::DisplayOperatorMinHeight, options.style)
                         as f32 * 1.42) as i32;
                     self.layout_stretchy(display_min_height as u32, 0, options)
                 } else {

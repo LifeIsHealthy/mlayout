@@ -1,0 +1,11 @@
+- we probably want simpler tree structures:
+
+    enum MathBoxContent {
+        Children(Vec<MathBox>),
+        Leaf(MathBoxAtom),
+    }
+
+    struct MathBox {
+        position: Point,
+        content: MathBoxContent;
+    }
