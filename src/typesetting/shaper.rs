@@ -99,7 +99,7 @@ pub trait MathShaper {
 
     fn math_constant(&self, c: MathConstant) -> i32;
 
-    fn shape_string(&self, string: &str, style: LayoutStyle) -> Box<Iterator<Item = ShapedGlyph>>;
+    fn shape_string(&self, string: &str, style: LayoutStyle) -> Box<dyn Iterator<Item = ShapedGlyph>>;
 
     fn can_stretch_glyph(&self, glyph: u32, horizontal: bool) -> bool;
 
@@ -109,7 +109,7 @@ pub trait MathShaper {
         horizontal: bool,
         as_accent: bool,
         target_size: u32,
-    ) -> Option<Box<Iterator<Item = ShapedGlyph> + 'a>>;
+    ) -> Option<Box<dyn Iterator<Item = ShapedGlyph> + 'a>>;
 
     fn get_math_table(&self) -> &[u8];
 
@@ -170,7 +170,7 @@ impl<'a> HarfbuzzShaper<'a> {
         shape(&self.font, buffer, &features)
     }
 
-    fn layout_boxes(&self, glyph_buffer: GlyphBuffer) -> Box<Iterator<Item = ShapedGlyph>> {
+    fn layout_boxes(&self, glyph_buffer: GlyphBuffer) -> Box<dyn Iterator<Item = ShapedGlyph>> {
         let boxes: Vec<ShapedGlyph> = {
             let positions = glyph_buffer.get_glyph_positions();
             let infos = glyph_buffer.get_glyph_infos();
@@ -213,7 +213,7 @@ fn try_base_glyph<'a>(
     glyph: u32,
     horizontal: bool,
     target_size: u32,
-) -> Option<Box<Iterator<Item = ShapedGlyph>>> {
+) -> Option<Box<dyn Iterator<Item = ShapedGlyph>>> {
     let advance = if horizontal {
         shaper.font.get_glyph_h_advance(glyph)
     } else {
@@ -288,7 +288,7 @@ fn try_variant<'a>(
     horizontal: bool,
     as_accent: bool,
     target_size: u32,
-) -> Option<Box<Iterator<Item = ShapedGlyph>>> {
+) -> Option<Box<dyn Iterator<Item = ShapedGlyph>>> {
     let direction = if horizontal {
         hb::HB_DIRECTION_LTR
     } else {
@@ -382,7 +382,7 @@ fn try_assembly<'a>(
     glyph: u32,
     horizontal: bool,
     target_size: u32,
-) -> Option<Box<Iterator<Item = ShapedGlyph> + 'a>> {
+) -> Option<Box<dyn Iterator<Item = ShapedGlyph> + 'a>> {
     let direction = if horizontal {
         hb::HB_DIRECTION_LTR
     } else {
@@ -541,7 +541,7 @@ impl<'a> MathShaper for HarfbuzzShaper<'a> {
         self.math_table.as_deref().unwrap()
     }
 
-    fn shape_string(&self, string: &str, style: LayoutStyle) -> Box<Iterator<Item = ShapedGlyph>> {
+    fn shape_string(&self, string: &str, style: LayoutStyle) -> Box<dyn Iterator<Item = ShapedGlyph>> {
         let glyph_buffer = self.shape_with_style(string, style);
         self.layout_boxes(glyph_buffer)
     }
@@ -584,7 +584,7 @@ impl<'a> MathShaper for HarfbuzzShaper<'a> {
         horizontal: bool,
         as_accent: bool,
         target_size: u32,
-    ) -> Option<Box<Iterator<Item = ShapedGlyph> + 'b>> {
+    ) -> Option<Box<dyn Iterator<Item = ShapedGlyph> + 'b>> {
         try_base_glyph(self, glyph, horizontal, target_size)
             .or_else(|| try_variant(self, glyph, horizontal, as_accent, target_size))
             .or_else(|| try_assembly(self, glyph, horizontal, target_size))

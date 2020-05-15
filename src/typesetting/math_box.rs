@@ -243,7 +243,7 @@ pub enum Drawable<G> {
     Line { vector: Vector<i32>, thickness: u32 },
 }
 
-impl<'a> MathBoxMetrics for Drawable<(Glyph, &'a MathShaper)> {
+impl<'a> MathBoxMetrics for Drawable<(Glyph, &'a dyn MathShaper)> {
     fn advance_width(&self) -> i32 {
         match *self {
             Drawable::Glyph((ref glyph, ref shaper)) => {
@@ -305,9 +305,9 @@ impl<I, G> Default for MathBoxContent<I, G> {
     }
 }
 
-type BoxList<'a> = LazyVec<Box<Iterator<Item = MathBox<'a>> + 'a>>;
+type BoxList<'a> = LazyVec<Box<dyn Iterator<Item = MathBox<'a>> + 'a>>;
 
-impl<'a> MathBoxMetrics for MathBoxContent<BoxList<'a>, (Glyph, &'a MathShaper)> {
+impl<'a> MathBoxMetrics for MathBoxContent<BoxList<'a>, (Glyph, &'a dyn MathShaper)> {
     fn advance_width(&self) -> i32 {
         match *self {
             MathBoxContent::Empty => 0,
@@ -437,7 +437,7 @@ impl<T: MathBoxMetrics> MathBoxMetrics for CachedMetrics<T> {
     }
 }
 
-pub type Content<'a> = MathBoxContent<BoxList<'a>, (Glyph, &'a MathShaper)>;
+pub type Content<'a> = MathBoxContent<BoxList<'a>, (Glyph, &'a dyn MathShaper)>;
 
 #[derive(Default)]
 pub struct MathBox<'a> {
@@ -496,7 +496,7 @@ impl<'a> MathBox<'a> {
         math_box
     }
 
-    pub fn with_glyph(glyph: Glyph, shaper: &'a MathShaper) -> Self {
+    pub fn with_glyph(glyph: Glyph, shaper: &'a dyn MathShaper) -> Self {
         MathBox::with_content(MathBoxContent::Drawable(Drawable::Glyph((glyph, shaper))))
     }
 
@@ -504,7 +504,7 @@ impl<'a> MathBox<'a> {
         MathBox::with_content(MathBoxContent::Boxes(LazyVec::with_vec(vec)))
     }
 
-    pub fn with_iter(iter: Box<Iterator<Item = MathBox<'a>> + 'a>) -> Self {
+    pub fn with_iter(iter: Box<dyn Iterator<Item = MathBox<'a>> + 'a>) -> Self {
         MathBox::with_content(MathBoxContent::Boxes(LazyVec::with_iter(iter)))
     }
 

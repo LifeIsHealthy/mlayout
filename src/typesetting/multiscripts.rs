@@ -6,7 +6,7 @@ use super::math_box::{MathBox, MathBoxMetrics};
 
 pub fn get_superscript_shift_up<'a>(superscript: &MathBox<'a>,
                                     nucleus: &MathBox<'a>,
-                                    shaper: &MathShaper,
+                                    shaper: &dyn MathShaper,
                                     style: LayoutStyle)
                                     -> Position {
     let std_shift_up = shaper.math_constant(if style.is_cramped {
@@ -29,7 +29,7 @@ pub fn get_superscript_shift_up<'a>(superscript: &MathBox<'a>,
 
 pub fn get_subscript_shift_dn<'a>(subscript: &MathBox<'a>,
                                   nucleus: &MathBox<'a>,
-                                  shaper: &MathShaper)
+                                  shaper: &dyn MathShaper)
                                   -> Position {
     let min_shift_dn_from_baseline_drop =
         nucleus.extents().descent + shaper.math_constant(MathConstant::SubscriptBaselineDropMin);
@@ -45,7 +45,7 @@ pub fn get_subscript_shift_dn<'a>(subscript: &MathBox<'a>,
 pub fn get_subsup_shifts<'a>(subscript: &MathBox<'a>,
                              superscript: &MathBox<'a>,
                              nucleus: &MathBox<'a>,
-                             shaper: &MathShaper,
+                             shaper: &dyn MathShaper,
                              style: LayoutStyle)
                              -> (Position, Position) {
     let mut super_shift = get_superscript_shift_up(superscript, nucleus, shaper, style);
@@ -77,7 +77,7 @@ pub fn get_attachment_kern<'a>(nucleus: &MathBox<'a>,
                                attachment: &MathBox<'a>,
                                attachment_position: CornerPosition,
                                attachment_shift: Position,
-                               shaper: &MathShaper)
+                               shaper: &dyn MathShaper)
                                -> Position {
     let mut kerning = 0;
 
@@ -119,7 +119,7 @@ pub fn position_attachment<'a>(attachment: &mut MathBox<'a>,
                                nucleus_is_largeop: bool,
                                attachment_position: CornerPosition,
                                attachment_vert_shift: i32,
-                               shaper: &MathShaper) {
+                               shaper: &dyn MathShaper) {
     let shift = attachment_vert_shift;
 
     let kern = get_attachment_kern(nucleus, attachment, attachment_position, shift, shaper);

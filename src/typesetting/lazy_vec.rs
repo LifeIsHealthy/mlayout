@@ -29,7 +29,7 @@ impl<I: Iterator> LazyVec<I> {
     }
 
     pub fn as_slice(&self) -> &[I::Item] {
-        let mut inner = unsafe { &mut *self.0.get() };
+        let inner = unsafe { &mut *self.0.get() };
         inner.replace_with_vec();
         match *inner {
             LazyVecInner::Iter(_) => panic!("LazyVec is in inconsistent state."),
@@ -38,7 +38,7 @@ impl<I: Iterator> LazyVec<I> {
     }
 
     pub fn as_mut_vec(&mut self) -> &mut Vec<I::Item> {
-        let mut inner = unsafe { &mut *self.0.get() };
+        let inner = unsafe { &mut *self.0.get() };
         inner.replace_with_vec();
         match *inner {
             LazyVecInner::Iter(_) => panic!("LazyVec is in inconsistent state."),

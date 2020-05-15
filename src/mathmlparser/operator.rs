@@ -221,11 +221,11 @@ mod tests {
     fn test_set_default_form() {
         let expr = MathExpression::new();
         let info = VecMap::new();
-        let mut context = ParseContext {
+        let _context = ParseContext {
             expr: expr,
             mathml_info: info,
         };
-        let context = ParseContext {
+        let _context = ParseContext {
             expr: MathExpression::new(),
             mathml_info: VecMap::new(),
         };

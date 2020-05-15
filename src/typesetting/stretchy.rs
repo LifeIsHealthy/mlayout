@@ -46,7 +46,7 @@ pub fn layout_list_element<'a, T>(item: T,
 pub fn layout_strechy_list<'a>(list: &'a [Index],
                                expr: &'a MathExpression,
                                options: LayoutOptions<'a>)
-                               -> Box<Iterator<Item = MathBox<'a>> + 'a> {
+                               -> Box<dyn Iterator<Item = MathBox<'a>> + 'a> {
     let stretchy_indices = indices_of_stretchy_elements(list, expr, options);
 
     if stretchy_indices.is_empty() {

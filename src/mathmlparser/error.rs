@@ -61,7 +61,7 @@ impl std::error::Error for ParsingError {
         }
     }
 
-    fn cause(&self) -> Option<&std::error::Error> {
+    fn cause(&self) -> Option<&dyn std::error::Error> {
         match self.error_type {
             ErrorType::XmlError(ref error) => Some(error),
             _ => None,

@@ -11,7 +11,7 @@ use super::stretchy::*;
 
 #[derive(Copy, Clone)]
 pub struct LayoutOptions<'a> {
-    pub shaper: &'a MathShaper,
+    pub shaper: &'a dyn MathShaper,
     pub style: LayoutStyle,
     pub stretch_size: Option<Extents<i32>>,
     pub as_accent: bool,
@@ -31,7 +31,7 @@ pub struct OperatorProperties {
 }
 
 impl Length {
-    fn to_font_units(self, shaper: &MathShaper) -> i32 {
+    fn to_font_units(self, shaper: &dyn MathShaper) -> i32 {
         if self.is_null() {
             return 0;
         }
@@ -365,7 +365,7 @@ impl<'a> MathLayout<'a, MathBox<'a>> for &'a OverUnder {
 
 fn layout_over_or_under<'a>(mut attachment: MathBox<'a>,
                             mut nucleus: MathBox<'a>,
-                            shaper: &MathShaper,
+                            shaper: &dyn MathShaper,
                             style: LayoutStyle,
                             as_over: bool,
                             as_accent: bool,
@@ -707,7 +707,7 @@ impl<'a> MathLayout<'a, MathBox<'a>> for &'a Operator {
                     max(stretch_size.ascent - axis_height,
                         axis_height + stretch_size.descent) * 2
                 } else {
-                    (stretch_size.ascent + stretch_size.descent)
+                    stretch_size.ascent + stretch_size.descent
                 };
                 needed_height = clamp(needed_height, min_size, max_size);
                 let needed_height = max(0, needed_height) as u32;
