@@ -3,12 +3,13 @@ name = "math-render"
 version = "0.1.0"
 authors = ["Manuel Reinhardt <manuel.jr16@gmail.com>"]
 build = "build.rs"
+edition = "2018"
 
 [dependencies]
 quick-xml = "0.4"
 harfbuzz_rs = { git = "https://github.com/manuel-rhdt/harfbuzz_rs.git" }
 bitflags = "0.7"
-vec_map = "0.7.*"
+vec_map = "*"
 
 [dev-dependencies]
 image = "*"
