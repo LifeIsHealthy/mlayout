@@ -6,11 +6,11 @@ use super::operator;
 use super::error::ParsingError;
 use super::{Result, ResultPos, MathmlElement, XmlReader, Event, MathmlInfo, ParseContext,
             FromXmlAttribute};
-use mathmlparser::AttributeParse;
+use crate::mathmlparser::AttributeParse;
 
-use types::{Field, MathItem, Index};
+use crate::types::{Field, MathItem, Index};
 use super::escape::unescape;
-use unicode_math::{Family, convert_character_to_family};
+use crate::unicode_math::{Family, convert_character_to_family};
 
 #[derive(Debug)]
 enum TextDirection {

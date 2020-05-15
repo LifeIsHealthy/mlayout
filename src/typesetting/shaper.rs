@@ -11,7 +11,7 @@ use self::harfbuzz_rs::{
     shape, Blob, Feature, Font, GlyphBuffer, HarfbuzzObject, Shared, Tag, UnicodeBuffer,
 };
 use super::math_box::{Extents, Vector};
-use types::{CornerPosition, LayoutStyle, PercentValue};
+use crate::types::{CornerPosition, LayoutStyle, PercentValue};
 
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
 #[repr(C)]

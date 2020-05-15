@@ -1,4 +1,4 @@
-use types::{Length, MathItem, StretchConstraints, Operator, Index, Atom, OverUnder,
+use crate::types::{Length, MathItem, StretchConstraints, Operator, Index, Atom, OverUnder,
             GeneralizedFraction};
 
 use super::{FromXmlAttribute, ParseContext};
@@ -213,9 +213,9 @@ fn make_operator(index: Index, context: &mut ParseContext) {
 
 #[cfg(test)]
 mod tests {
-    use mathmlparser::ParseContext;
-    use types::MathExpression;
-    use mathmlparser::VecMap;
+    use crate::mathmlparser::ParseContext;
+    use crate::types::MathExpression;
+    use crate::mathmlparser::VecMap;
 
     #[test]
     fn test_set_default_form() {

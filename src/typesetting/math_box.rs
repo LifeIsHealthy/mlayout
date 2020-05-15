@@ -1,10 +1,10 @@
 use std::cmp::{max, min};
 use std::ops::{Mul, Div, Add, Sub};
-use types::{Glyph, PercentValue, WithUserData};
+use crate::types::{Glyph, PercentValue, WithUserData};
 use std::default::Default;
 
 use std::cell::Cell;
-use typesetting::shaper::MathShaper;
+use crate::typesetting::shaper::MathShaper;
 
 use super::lazy_vec::LazyVec;
 

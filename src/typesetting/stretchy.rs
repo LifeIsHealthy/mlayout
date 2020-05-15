@@ -1,8 +1,8 @@
 use super::*;
 
 use super::layout::{OperatorProperties, MathLayout};
-use types::{MathExpression, Index};
-use math_box::{Extents, MathBoxMetrics};
+use crate::types::{MathExpression, Index};
+use crate::math_box::{Extents, MathBoxMetrics};
 
 fn indices_of_stretchy_elements<'a>(list: &[Index],
                                     expr: &'a MathExpression,

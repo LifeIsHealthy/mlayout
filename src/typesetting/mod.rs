@@ -6,7 +6,7 @@ pub mod unicode_math;
 pub mod lazy_vec;
 mod stretchy;
 
-use types::*;
+use crate::types::*;
 pub use self::layout::{MathLayout, LayoutOptions, layout_expression};
 use self::shaper::MathShaper;
 use self::math_box::MathBox;

@@ -10,7 +10,7 @@ mod escape;
 use std;
 use std::io::BufRead;
 
-use types::{Atom, OverUnder, GeneralizedFraction, Root, Length, MathExpression, MathItem, Index};
+use crate::types::{Atom, OverUnder, GeneralizedFraction, Root, Length, MathExpression, MathItem, Index};
 
 pub use self::quick_xml::{XmlReader, Event, Element};
 pub use self::quick_xml::error::ResultPos;
@@ -422,7 +422,7 @@ impl FromXmlAttribute for bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use types::*;
+    use crate::types::*;
 
     fn find_operator(expr: &MathExpression) -> Index {
         let first_item = &expr[expr.root_index];

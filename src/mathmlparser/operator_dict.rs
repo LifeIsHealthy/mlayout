@@ -1175,7 +1175,7 @@ pub fn find_entry(character: char, preferred_form: Form) -> Option<Entry> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use mathmlparser::operator::Form;
+    use crate::mathmlparser::operator::Form;
 
     #[test]
     fn find_test() {
