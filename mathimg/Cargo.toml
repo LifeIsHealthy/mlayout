@@ -5,7 +5,7 @@ authors = ["Manuel Reinhardt <manuel.jr16@gmail.com>"]
 edition = "2018"
 
 [dependencies]
-math-render = { path = "..", version = "0.1.0" }
+math-render = { path = "..", version = "0.1.0", features = ["mathml_parser"] }
 freetype-rs = "0.11"
 docopt = "0.6.86"
 memmap = "0.5"

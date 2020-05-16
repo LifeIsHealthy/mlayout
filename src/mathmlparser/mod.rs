@@ -5,7 +5,9 @@ mod token;
 
 mod error;
 #[cfg(feature = "mathml_parser")]
-pub mod xml_reader;
+mod xml_reader;
+#[cfg(feature = "mathml_parser")]
+pub use xml_reader::parse;
 
 use std;
 
