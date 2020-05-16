@@ -1,11 +1,6 @@
-extern crate docopt;
-extern crate fontconfig;
-extern crate fontconfig_sys as fc;
-extern crate freetype;
-extern crate harfbuzz_rs;
-extern crate math_render;
-extern crate memmap;
-extern crate rustc_serialize;
+use freetype;
+
+use math_render;
 
 mod svg_renderer;
 
@@ -14,7 +9,6 @@ use std::fs::File;
 use std::io;
 use std::io::BufReader;
 use std::path::{Path, PathBuf};
-
 
 use freetype::Face as FT_Face;
 

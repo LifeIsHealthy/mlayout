@@ -1,7 +1,7 @@
-extern crate freetype;
-extern crate harfbuzz_rs;
-extern crate math_render;
-extern crate svg;
+use freetype;
+
+use math_render;
+use svg;
 
 use std::path;
 
@@ -25,8 +25,8 @@ pub struct Flags {
 
 pub fn render<'a, T: AsRef<path::Path>>(
     math_box: MathBox,
-    _: &HarfbuzzShaper,
-    font: &'a FT_Face,
+    _: &HarfbuzzShaper<'_>,
+    font: &'a FT_Face<'_>,
     flags: Flags,
     out_path: T,
 ) {
@@ -162,7 +162,10 @@ fn draw_filled<'a, T: Node>(doc: &mut T, math_box: &MathBox) {
 fn draw_ink_rect<'a, T: Node>(group: &mut T, math_box: &MathBox) {
     if let MathBoxContent::Drawable(Drawable::Glyph(_)) = *math_box.content() {
         let ink_rect = Rectangle::new()
-            .set("x", math_box.origin.x + math_box.extents().left_side_bearing)
+            .set(
+                "x",
+                math_box.origin.x + math_box.extents().left_side_bearing,
+            )
             .set("y", math_box.origin.y - math_box.extents().ascent)
             .set("width", math_box.extents().width)
             .set("height", math_box.extents().height());
@@ -241,7 +244,7 @@ fn draw_top_accent_attachment<'a, T: Node>(doc: &mut T, math_box: &MathBox) {
     doc.append(line);
 }
 
-fn draw_glyph<'a, T: Node>(doc: &mut T, math_box: &MathBox, face: &FT_Face) {
+fn draw_glyph<'a, T: Node>(doc: &mut T, math_box: &MathBox, face: &FT_Face<'_>) {
     let (glyph, scale_x, scale_y) =
         if let MathBoxContent::Drawable(Drawable::Glyph(MathGlyph {
             glyph_code, scale, ..
