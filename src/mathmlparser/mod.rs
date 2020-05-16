@@ -148,7 +148,7 @@ static MATHML_ELEMENTS: [MathmlElement; 16] = [
     },
 ];
 
-fn match_math_element(identifier: &[u8]) -> Option<MathmlElement> {
+pub fn match_math_element(identifier: &[u8]) -> Option<MathmlElement> {
     MATHML_ELEMENTS
         .iter()
         .find(|elem| elem.identifier.as_bytes() == identifier)

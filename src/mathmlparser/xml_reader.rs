@@ -6,7 +6,6 @@ use super::{
 use crate::{Field, MathExpression};
 pub use quick_xml::error::ResultPos;
 pub use quick_xml::{Element, Event, XmlReader};
-use stash::Stash;
 use std::io::BufRead;
 
 pub fn parse<R: BufRead>(file: R) -> Result<MathExpression> {
@@ -15,8 +14,7 @@ pub fn parse<R: BufRead>(file: R) -> Result<MathExpression> {
         identifier: "ROOT_ELEMENT", // this identifier is arbitrary and should not be used elsewhere
         elem_type: ElementType::MathmlRoot,
     };
-    let info = Stash::new();
-    let mut context = ParseContext { mathml_info: info };
+    let mut context = ParseContext::default();
 
     parse_element(&mut parser, root_elem, std::iter::empty(), &mut context)
 }
