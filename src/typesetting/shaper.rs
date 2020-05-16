@@ -1,14 +1,17 @@
 extern crate harfbuzz_rs;
-extern crate harfbuzz_sys as hb;
 
+use self::harfbuzz_rs::hb;
 use std;
 use std::cell::RefCell;
 use std::cmp::min;
 use std::str::FromStr;
 
 pub use self::harfbuzz_rs::Position;
-use self::harfbuzz_rs::{Blob, Font, FontFuncsBuilder, GlyphBuffer, HarfbuzzObject, Tag,
-                        UnicodeBuffer};
+use self::harfbuzz_rs::{
+    shape, Blob, Feature, Font, GlyphBuffer, GlyphInfo, GlyphPosition, HarfbuzzObject, Shared, Tag,
+    UnicodeBuffer,
+};
+use self::harfbuzz_rs::{FontFuncs, Glyph};
 use super::math_box::{Drawable, Extents, MathBox, MathBoxContent, MathBoxMetrics, Vector};
 use types::{CornerPosition, LayoutStyle, PercentValue};
 
@@ -89,7 +92,7 @@ pub struct MathGlyph {
     /// The x-coordinate where a top accent should be attached.
     pub top_accent_attachment: i32,
     /// The size at which this glyph should be rendered relative to the other glyphs.
-    /// 
+    ///
     /// This is used to render subscripts and superscripts in a smaller size.
     pub scale: PercentValue,
 }
@@ -143,7 +146,8 @@ impl<'a> MathBoxMetrics for HarfbuzzGlyph<'a> {
     }
 
     fn extents(&self) -> Extents<i32> {
-        let glyph_extents = self.shaper
+        let glyph_extents = self
+            .shaper
             .font
             .get_glyph_extents(self.glyph)
             .unwrap_or(unsafe { std::mem::zeroed() });
@@ -179,8 +183,8 @@ impl<'a> HarfbuzzGlyph<'a> {
 
     fn new(
         shaper: &'a HarfbuzzShaper<'a>,
-        pos: hb::hb_glyph_position_t,
-        info: hb::hb_glyph_info_t,
+        pos: GlyphPosition,
+        info: GlyphInfo,
         style: LayoutStyle,
     ) -> Self {
         let origin = Vector {
@@ -217,25 +221,36 @@ impl<'a> From<HarfbuzzGlyph<'a>> for MathGlyph {
 }
 
 /// The basic font structure used
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct HarfbuzzShaper<'a> {
-    pub font: Font<'a>,
-    pub no_cmap_font: Font<'a>,
+    pub font: Shared<Font<'a>>,
+    pub no_cmap_font: Shared<Font<'a>>,
     buffer: RefCell<Option<UnicodeBuffer>>,
+    math_table: Shared<Blob<'a>>,
+}
+
+pub struct IdentityFuncs;
+
+impl FontFuncs for IdentityFuncs {
+    fn get_nominal_glyph(&self, _font: &Font<'_>, unicode: char) -> Option<Glyph> {
+        Some(unicode as Glyph)
+    }
 }
 
 impl<'a> HarfbuzzShaper<'a> {
-    pub fn new(font: Font) -> HarfbuzzShaper {
+    pub fn new(font: Shared<Font>) -> HarfbuzzShaper {
         let buffer = Some(UnicodeBuffer::new()).into();
-        let mut no_cmap_font = font.create_sub_font();
-        let mut ff_builder = FontFuncsBuilder::new();
-        ff_builder.set_nominal_glyph_func(|_, _, chr| Some(chr as u32));
-        let font_funcs = ff_builder.finish();
-        no_cmap_font.set_font_funcs(&font_funcs, ());
+        let mut no_cmap_font = Font::create_sub_font(font.clone());
+        no_cmap_font.set_font_funcs(IdentityFuncs);
+        let math_table = font
+            .face()
+            .table_with_tag(b"MATH")
+            .expect("MATH table must be present");
         HarfbuzzShaper {
-            font: font,
-            no_cmap_font: no_cmap_font,
-            buffer: buffer,
+            font,
+            no_cmap_font: no_cmap_font.into(),
+            buffer,
+            math_table,
         }
     }
 
@@ -263,13 +278,7 @@ impl<'a> HarfbuzzShaper<'a> {
 
     fn glyph_from_index(&self, glyph_index: u32, style: LayoutStyle) -> MathGlyph {
         let buffer = self.buffer.borrow_mut().take().unwrap();
-        unsafe {
-            hb::hb_buffer_add(buffer.as_raw(), glyph_index, 0);
-        }
-        unsafe {
-            hb::hb_buffer_set_content_type(buffer.as_raw(), hb::HB_BUFFER_CONTENT_TYPE_UNICODE);
-        }
-
+        let buffer = buffer.add(glyph_index, 0);
         *self.buffer.borrow_mut() = Some(buffer);
         let math_box = self.do_shape(&self.no_cmap_font, style);
         match math_box.content {
@@ -280,34 +289,23 @@ impl<'a> HarfbuzzShaper<'a> {
     }
 
     fn do_shape(&self, font: &Font, style: LayoutStyle) -> MathBox {
-        let mut features: Vec<hb::hb_feature_t> = Vec::with_capacity(2);
+        let mut features = Vec::with_capacity(2);
         if style.script_level >= 1 {
             let math_variants_tag = Tag::new('s', 's', 't', 'y');
             let variant_num = style.script_level as u32;
 
-            features.push(hb::hb_feature_t {
-                tag: math_variants_tag.0,
-                value: variant_num,
-                start: 0,
-                end: std::u32::MAX,
-            })
+            features.push(Feature::new(math_variants_tag, variant_num, ..));
         }
         if style.flat_accent {
-            features.push(hb::hb_feature_t {
-                tag: Tag::new('f', 'l', 'a', 'c').0,
-                value: 1,
-                start: 0,
-                end: std::u32::MAX,
-            });
+            features.push(Feature::new(Tag::from(b"flac"), 1, ..));
         }
 
-        let buffer = self.buffer
+        let buffer = self
+            .buffer
             .borrow_mut()
             .take()
             .expect("Buffer not available");
-        let glyph_buffer = buffer
-            .set_script(Tag::from_str("Math").unwrap())
-            .shape(font, &features);
+        let glyph_buffer = shape(font, buffer.set_script(Tag::from(b"Math")), &features);
         let math_box = {
             let shaped_glyphs = self.layout_boxes(&glyph_buffer, style);
             self.math_box_from_glyphs(shaped_glyphs, style)
@@ -324,13 +322,10 @@ impl<'a> HarfbuzzShaper<'a> {
     ) -> impl 'b + Iterator<Item = MathGlyph> {
         let positions = glyph_buffer.get_glyph_positions();
         let infos = glyph_buffer.get_glyph_infos();
-        positions
-            .iter()
-            .zip(infos.iter())
-            .map(move |(pos, info)| {
-                let hb_glyph = HarfbuzzGlyph::new(self, *pos, *info, style);
-                hb_glyph.into()
-            })
+        positions.iter().zip(infos.iter()).map(move |(pos, info)| {
+            let hb_glyph = HarfbuzzGlyph::new(self, *pos, *info, style);
+            hb_glyph.into()
+        })
     }
 
     fn math_box_from_glyphs(
@@ -369,11 +364,7 @@ impl<'a> MathShaper for HarfbuzzShaper<'a> {
     }
 
     fn get_math_table(&self) -> &[u8] {
-        let blob = unsafe {
-            hb::hb_face_reference_table(self.font.face().as_raw(), Tag::from_str("MATH").unwrap().0)
-        };
-        let blob = unsafe { Blob::from_raw(blob) };
-        blob.get_data()
+        &self.math_table
     }
 
     fn shape(&self, string: &str, style: LayoutStyle) -> MathBox {
@@ -650,7 +641,7 @@ fn try_assembly<'a>(
     let mut part_count_ext: u32 = 0;
 
     for part in &mut assembly_iter {
-        if part.flags == hb::HB_MATH_GLYPH_PART_FLAG_EXTENDER {
+        if part.flags == hb::HB_OT_MATH_GLYPH_PART_FLAG_EXTENDER {
             full_advance_sum_ext += part.full_advance;
             part_count_ext += 1;
         } else {
@@ -692,7 +683,7 @@ fn try_assembly<'a>(
         assembly_iter.index = 0;
         for (index, part) in assembly_iter.by_ref().enumerate() {
             let will_be_repeated =
-                repeat_count_ext >= 2 && part.flags == hb::HB_MATH_GLYPH_PART_FLAG_EXTENDER;
+                repeat_count_ext >= 2 && part.flags == hb::HB_OT_MATH_GLYPH_PART_FLAG_EXTENDER;
             if index < (part_count_ext + part_count_non_ext - 1) as usize || will_be_repeated {
                 connector_overlap = min(connector_overlap, part.end_connector_length);
             }
@@ -712,7 +703,7 @@ fn try_assembly<'a>(
     let result = assembly_iter
         // Repeat the extenders `repeat_count_ext` times .
         .flat_map(move |part| {
-            let repeat_count = if part.flags == hb::HB_MATH_GLYPH_PART_FLAG_EXTENDER {
+            let repeat_count = if part.flags == hb::HB_OT_MATH_GLYPH_PART_FLAG_EXTENDER {
                 repeat_count_ext
             } else {
                 1
@@ -746,5 +737,4 @@ mod test {
 
     #[test]
     fn test_assembly() {}
-
 }

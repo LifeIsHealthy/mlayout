@@ -3,7 +3,6 @@ extern crate fontconfig;
 extern crate fontconfig_sys as fc;
 extern crate freetype;
 extern crate harfbuzz_rs;
-extern crate harfbuzz_sys;
 extern crate math_render;
 extern crate memmap;
 extern crate rustc_serialize;
@@ -19,8 +18,7 @@ use std::path::{Path, PathBuf};
 use freetype::face;
 use freetype::Face as FT_Face;
 
-use harfbuzz_rs::{Face, FontFuncsBuilder, GlyphExtents, HarfbuzzObject};
-use harfbuzz_sys::*;
+use harfbuzz_rs::{hb, Face, Font as HbFont, GlyphExtents, HarfbuzzObject};
 
 use math_render::mathmlparser;
 use math_render::shaper::HarfbuzzShaper;
@@ -113,31 +111,32 @@ fn has_math_data(font: &Font) -> bool {
     let mapped_file = Mmap::open_path(&font.path, Protection::Read).unwrap();
     let buffer = unsafe { mapped_file.as_slice() };
     let face = Face::new(buffer, font.face_index);
-    let result = unsafe { hb_ot_math_has_data(face.as_raw()) };
+    let result = unsafe { hb::hb_ot_math_has_data(face.as_raw()) };
     result != 0
 }
 
 fn create_shaper<'a>(font_bytes: &'a [u8]) -> Shaper<'a> {
-    let mut font_funcs = FontFuncsBuilder::new();
-    font_funcs.set_glyph_extents_func(|_, ft_face, glyph| {
-        let result = FT_Face::load_glyph(ft_face, glyph, face::NO_SCALE);
-        if result.is_err() {
-            return None;
-        }
-        let metrics = ft_face.glyph().metrics();
-        Some(GlyphExtents {
-            width: metrics.width as i32,
-            height: -metrics.height as i32,
-            x_bearing: metrics.horiBearingX as i32,
-            y_bearing: metrics.horiBearingY as i32,
-        })
-    });
-    let font_funcs = font_funcs.finish();
+    // let mut font_funcs = FontFuncsBuilder::new();
+    // font_funcs.set_glyph_extents_func(|_, ft_face, glyph| {
+    //     let result = FT_Face::load_glyph(ft_face, glyph, face::NO_SCALE);
+    //     if result.is_err() {
+    //         return None;
+    //     }
+    //     let metrics = ft_face.glyph().metrics();
+    //     Some(GlyphExtents {
+    //         width: metrics.width as i32,
+    //         height: -metrics.height as i32,
+    //         x_bearing: metrics.horiBearingX as i32,
+    //         y_bearing: metrics.horiBearingY as i32,
+    //     })
+    // });
+    // let font_funcs = font_funcs.finish();
     let library = freetype::Library::init().unwrap();
     let face = library.new_memory_face(font_bytes, 0).unwrap();
-    let mut font = Face::new(font_bytes, 0).create_font().create_sub_font();
-    font.set_font_funcs(&font_funcs, face.clone());
-    let hb_shaper = HarfbuzzShaper::new(font);
+    let hb_face = Face::new(font_bytes, 0);
+    let font = HbFont::new(hb_face);
+    // font.set_font_funcs(&font_funcs, face.clone());
+    let hb_shaper = HarfbuzzShaper::new(font.into());
     Shaper {
         hb_shaper: hb_shaper,
         ft_face: face,
@@ -162,7 +161,8 @@ fn main() {
             }
         };
         let file = File::open(&path).unwrap();
-        let name = path.file_stem()
+        let name = path
+            .file_stem()
             .or_else(|| path.file_name())
             .expect("input file has no name");
         (
@@ -209,7 +209,8 @@ fn main() {
 
     let mut out_path = Cow::from(Path::new(&args.arg_output));
     if out_path.is_dir() {
-        let extension = args.flag_output_format
+        let extension = args
+            .flag_output_format
             .map(|format| format.extension())
             .unwrap_or("");
         out_path.to_mut().push(output_name.into_owned() + extension);

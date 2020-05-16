@@ -231,6 +231,6 @@ fn main() {
                        &buffer,
                        (width / 3i32) as u32,
                        height as u32,
-                       image::RGBA(8))
+                       image::ColorType::Rgba8)
             .unwrap();
 }
