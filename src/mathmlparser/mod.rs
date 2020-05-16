@@ -153,6 +153,7 @@ fn match_math_element(identifier: &[u8]) -> Option<MathmlElement> {
         .cloned()
 }
 
+#[derive(Clone, Debug, Default)]
 pub struct ParseContext {
     pub mathml_info: Stash<MathmlInfo>,
 }
