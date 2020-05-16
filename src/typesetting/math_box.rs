@@ -326,7 +326,7 @@ pub struct MathBox {
     pub origin: Vector<i32>,
     pub(crate) metrics: Metrics,
     pub content: MathBoxContent,
-    pub user_data: Option<Arc<dyn Any>>,
+    pub user_data: Option<Arc<dyn Any + Send + Sync>>,
 }
 
 impl Default for MathBoxContent {

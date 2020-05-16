@@ -13,18 +13,18 @@ pub type GlyphCode = u32;
 #[derive(Debug, Default)]
 pub struct MathExpression {
     pub(crate) item: Box<MathItem>,
-    pub user_data: Option<Arc<dyn Any>>,
+    pub user_data: Option<Arc<dyn Any + Send + Sync>>,
 }
 
 impl MathExpression {
-    pub fn new<U: Any>(expr: MathItem, user_data: U) -> MathExpression {
+    pub fn new<U: Any + Send + Sync>(expr: MathItem, user_data: U) -> MathExpression {
         MathExpression {
             item: Box::new(expr),
             user_data: Some(Arc::new(user_data)),
         }
     }
 
-    pub fn set_user_data<U: Any>(&mut self, user_data: U) {
+    pub fn set_user_data<U: Any + Send + Sync>(&mut self, user_data: U) {
         self.user_data = Some(Arc::new(user_data));
     }
 
