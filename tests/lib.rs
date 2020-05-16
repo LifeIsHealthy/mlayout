@@ -7,7 +7,7 @@ use math_render::mathmlparser;
 use math_render::math_box::{MathBox, MathBoxContent, MathBoxMetrics};
 
 mod util;
-use util::TEST_FONT;
+use crate::util::TEST_FONT;
 
 #[test]
 fn mathml_test() {

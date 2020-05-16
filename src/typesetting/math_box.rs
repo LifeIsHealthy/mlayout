@@ -1,11 +1,11 @@
 use std::cmp::{max, min};
 use std::ops::{Add, Div, Mul, Sub};
-use types::PercentValue;
+use crate::types::PercentValue;
 use std::default::Default;
 use std::any::Any;
 use std::sync::Arc;
 
-use typesetting::shaper::MathGlyph;
+use crate::typesetting::shaper::MathGlyph;
 
 /// A point in 2D space.
 ///

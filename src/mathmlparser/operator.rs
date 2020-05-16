@@ -1,4 +1,4 @@
-use types::{Atom, GeneralizedFraction, Length, MathExpression, MathItem, Operator, OverUnder,
+use crate::types::{Atom, GeneralizedFraction, Length, MathExpression, MathItem, Operator, OverUnder,
             StretchConstraints};
 
 use super::{FromXmlAttribute, ParseContext};
@@ -264,7 +264,7 @@ fn make_operator(expr: &mut MathExpression, context: &mut ParseContext) {
 
 #[cfg(test)]
 mod tests {
-    use mathmlparser::ParseContext;
+    use crate::mathmlparser::ParseContext;
     
     use stash::Stash;
 

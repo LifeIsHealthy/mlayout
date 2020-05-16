@@ -7,7 +7,7 @@ mod token;
 use std;
 use std::io::BufRead;
 
-use types::{Atom, GeneralizedFraction, Length, LengthUnit, MathExpression, MathItem, OverUnder,
+use crate::types::{Atom, GeneralizedFraction, Length, LengthUnit, MathExpression, MathItem, OverUnder,
             Root};
 
 pub use quick_xml::error::ResultPos;
@@ -554,7 +554,7 @@ impl FromXmlAttribute for bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use types::*;
+    use crate::types::*;
 
     fn find_operator(expr: &MathExpression) -> &MathExpression {
         match *expr.item {

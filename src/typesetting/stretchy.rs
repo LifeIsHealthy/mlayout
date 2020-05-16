@@ -1,8 +1,8 @@
 use super::*;
 
 use super::layout::{MathLayout, OperatorProperties};
-use types::MathExpression;
-use math_box::{Extents, MathBoxMetrics};
+use crate::types::MathExpression;
+use crate::math_box::{Extents, MathBoxMetrics};
 
 fn indices_of_stretchy_elements(list: &[MathExpression], options: LayoutOptions) -> Vec<usize> {
     list.iter()

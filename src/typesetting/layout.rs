@@ -1,7 +1,7 @@
 #![allow(unused_variables, dead_code)]
 use std::cmp::{max, min};
 use std::sync::Arc;
-use types::*;
+use crate::types::*;
 
 use super::math_box::{Extents, MathBox, MathBoxMetrics, Vector};
 use super::multiscripts::*;

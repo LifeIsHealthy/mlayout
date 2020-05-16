@@ -13,7 +13,7 @@ use self::harfbuzz_rs::{
 };
 use self::harfbuzz_rs::{FontFuncs, Glyph};
 use super::math_box::{Drawable, Extents, MathBox, MathBoxContent, MathBoxMetrics, Vector};
-use types::{CornerPosition, LayoutStyle, PercentValue};
+use crate::types::{CornerPosition, LayoutStyle, PercentValue};
 
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
 #[repr(C)]

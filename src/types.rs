@@ -4,8 +4,8 @@ use std::ops::{Mul, Div};
 use std::any::Any;
 use std::sync::Arc;
 
-use typesetting::math_box::Vector;
-use typesetting::MathLayout;
+use crate::typesetting::math_box::Vector;
+use crate::typesetting::MathLayout;
 
 /// An identifier of a glyph inside a font.
 pub type GlyphCode = u32;

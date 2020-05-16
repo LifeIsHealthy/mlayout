@@ -1,6 +1,6 @@
 use std::cmp::max;
 
-use types::CornerPosition;
+use crate::types::CornerPosition;
 use super::layout::LayoutOptions;
 use super::shaper::{MathConstant, Position};
 use super::math_box::{MathBox, MathBoxMetrics};
