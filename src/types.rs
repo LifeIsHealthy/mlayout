@@ -59,7 +59,7 @@ pub enum MathItem {
     /// A list of math expressions to be laid out sequentially.
     List(Vec<MathExpression>),
     /// Any math expression of another type.
-    Other(Box<dyn MathLayout>),
+    Other(Box<dyn MathLayout + Send + Sync>),
 }
 
 impl Default for MathItem {
