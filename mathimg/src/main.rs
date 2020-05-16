@@ -15,10 +15,10 @@ use std::io;
 use std::io::BufReader;
 use std::path::{Path, PathBuf};
 
-use freetype::face;
+
 use freetype::Face as FT_Face;
 
-use harfbuzz_rs::{hb, Face, Font as HbFont, GlyphExtents, HarfbuzzObject};
+use harfbuzz_rs::{hb, Face, Font as HbFont, HarfbuzzObject};
 
 use math_render::mathmlparser;
 use math_render::shaper::HarfbuzzShaper;
