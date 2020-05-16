@@ -10,7 +10,7 @@ use super::stretchy::*;
 
 #[derive(Copy, Clone)]
 pub struct LayoutOptions<'a> {
-    pub shaper: &'a MathShaper,
+    pub shaper: &'a dyn MathShaper,
     pub style: LayoutStyle,
     pub stretch_size: Option<Extents<i32>>,
 }
@@ -30,7 +30,7 @@ pub struct OperatorProperties {
 }
 
 impl Length {
-    fn to_font_units(self, shaper: &MathShaper) -> i32 {
+    fn to_font_units(self, shaper: &dyn MathShaper) -> i32 {
         if self.is_null() {
             return 0;
         }
@@ -694,7 +694,7 @@ impl Operator {
     ) -> MathBox {
         match self.field {
             Field::Unicode(ref string) => {
-                let mut shape_result = options
+                let shape_result = options
                     .shaper
                     .shape(string, options.style.no_flat_accent_style());
                 let first_glyph = match shape_result.first_glyph() {
@@ -764,7 +764,7 @@ impl MathLayout for Operator {
                         axis_height + stretch_size.descent,
                     ) * 2
                 } else {
-                    (stretch_size.ascent + stretch_size.descent)
+                    stretch_size.ascent + stretch_size.descent
                 };
                 needed_height = clamp(needed_height, min_size, max_size);
                 let needed_height = max(0, needed_height) as u32;

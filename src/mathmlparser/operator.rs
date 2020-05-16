@@ -265,16 +265,16 @@ fn make_operator(expr: &mut MathExpression, context: &mut ParseContext) {
 #[cfg(test)]
 mod tests {
     use mathmlparser::ParseContext;
-    use types::MathExpression;
+    
     use stash::Stash;
 
     #[test]
     fn test_set_default_form() {
         let info = Stash::new();
-        let mut context = ParseContext {
+        let _context = ParseContext {
             mathml_info: info,
         };
-        let context = ParseContext {
+        let _context = ParseContext {
             mathml_info: Stash::new(),
         };
     }

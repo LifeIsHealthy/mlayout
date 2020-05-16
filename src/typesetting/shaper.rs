@@ -4,7 +4,7 @@ use self::harfbuzz_rs::hb;
 use std;
 use std::cell::RefCell;
 use std::cmp::min;
-use std::str::FromStr;
+
 
 pub use self::harfbuzz_rs::Position;
 use self::harfbuzz_rs::{
@@ -733,7 +733,7 @@ fn try_assembly<'a>(
 
 #[cfg(test)]
 mod test {
-    use super::*;
+    
 
     #[test]
     fn test_assembly() {}

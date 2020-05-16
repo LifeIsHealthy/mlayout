@@ -13,7 +13,7 @@ pub type GlyphCode = u32;
 #[derive(Debug, Default)]
 pub struct MathExpression {
     pub(crate) item: Box<MathItem>,
-    pub user_data: Option<Arc<Any>>,
+    pub user_data: Option<Arc<dyn Any>>,
 }
 
 impl MathExpression {
@@ -59,7 +59,7 @@ pub enum MathItem {
     /// A list of math expressions to be laid out sequentially.
     List(Vec<MathExpression>),
     /// Any math expression of another type.
-    Other(Box<MathLayout>),
+    Other(Box<dyn MathLayout>),
 }
 
 impl Default for MathItem {
