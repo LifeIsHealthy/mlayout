@@ -229,7 +229,7 @@ pub fn build_token<'a>(
         .fold((), |_, _| {});
 
     if let Some(width) = space {
-        let item = MathExpression::new(MathItem::Space(MathSpace::horizontal_space(width)), ());
+        let item = MathExpression::new(MathItem::Space(MathSpace::horizontal_space(width)), 0);
         return Ok(item);
     }
 
@@ -251,14 +251,14 @@ pub fn build_token<'a>(
         if let Some(ref mut op_attrs) = op_attrs {
             op_attrs.character = try_extract_char(&field);
         }
-        MathExpression::new(MathItem::Field(field), ())
+        MathExpression::new(MathItem::Field(field), 0)
     } else {
         let list = fields
             .map(|field: Result<_, ParsingError>| {
-                Ok(MathExpression::new(MathItem::Field(field?), ()))
+                Ok(MathExpression::new(MathItem::Field(field?), 0))
             })
             .collect::<Result<Vec<_>, ParsingError>>()?;
-        MathExpression::new(MathItem::List(list), ())
+        MathExpression::new(MathItem::List(list), 0)
     };
 
     let index = context.mathml_info.put(MathmlInfo {
@@ -266,7 +266,7 @@ pub fn build_token<'a>(
         ..Default::default()
     });
 
-    item.set_user_data(index);
+    item.set_user_data(index as u64);
     Ok(item)
 }
 

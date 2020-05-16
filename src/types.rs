@@ -1,7 +1,6 @@
 use std::default::Default;
 use std::fmt;
 use std::ops::{Mul, Div};
-use std::any::Any;
 use std::sync::Arc;
 
 use crate::typesetting::math_box::Vector;
@@ -13,23 +12,23 @@ pub type GlyphCode = u32;
 #[derive(Debug, Default, Clone)]
 pub struct MathExpression {
     pub(crate) item: Box<MathItem>,
-    pub user_data: Option<Arc<dyn Any + Send + Sync>>,
+    pub user_data: u64,
 }
 
 impl MathExpression {
-    pub fn new<U: Any + Send + Sync>(expr: MathItem, user_data: U) -> MathExpression {
+    pub fn new(expr: MathItem, user_data: u64) -> MathExpression {
         MathExpression {
             item: Box::new(expr),
-            user_data: Some(Arc::new(user_data)),
+            user_data,
         }
     }
 
-    pub fn set_user_data<U: Any + Send + Sync>(&mut self, user_data: U) {
-        self.user_data = Some(Arc::new(user_data));
+    pub fn set_user_data(&mut self, user_data: u64) {
+        self.user_data = user_data;
     }
 
-    pub fn downcast_user_data_ref<U: Any>(&self) -> Option<&U> {
-        self.user_data.as_ref().and_then(|x| x.downcast_ref())
+    pub fn downcast_user_data_ref(&self) -> u64 {
+        self.user_data
     }
 }
 

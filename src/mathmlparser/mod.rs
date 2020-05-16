@@ -165,8 +165,8 @@ impl ParseContext {
         &self,
         expr: T,
     ) -> Option<&MathmlInfo> {
-        if let Some(&index) = expr.into().and_then(|x| x.downcast_user_data_ref()) {
-            self.mathml_info.get(index)
+        if let Some(index) = expr.into().map(|x| x.downcast_user_data_ref()) {
+            self.mathml_info.get(index as usize)
         } else {
             None
         }
@@ -176,8 +176,8 @@ impl ParseContext {
         &mut self,
         expr: T,
     ) -> Option<&mut MathmlInfo> {
-        if let Some(&index) = expr.into().and_then(|x| x.downcast_user_data_ref()) {
-            self.mathml_info.get_mut(index)
+        if let Some(index) = expr.into().map(|x| x.downcast_user_data_ref()) {
+            self.mathml_info.get_mut(index as usize)
         } else {
             None
         }
@@ -253,7 +253,7 @@ fn parse_list_schema<'a>(mut content: Vec<MathExpression>, elem: MathmlElement) 
     let content = if content.len() == 1 {
         content.remove(0)
     } else {
-        MathExpression::new(MathItem::List(content), ())
+        MathExpression::new(MathItem::List(content), 0)
     };
     if elem.elem_type == ElementType::MathmlRoot {
         return content;
@@ -265,7 +265,7 @@ fn parse_list_schema<'a>(mut content: Vec<MathExpression>, elem: MathmlElement) 
                 radicand: Some(content),
                 ..Default::default()
             };
-            MathExpression::new(MathItem::Root(item), ())
+            MathExpression::new(MathItem::Root(item), 0)
         }
         _ => content,
     }
@@ -415,7 +415,7 @@ where
         ..Default::default()
     };
     let index = context.mathml_info.put(info);
-    let expr = MathExpression::new(result, index);
+    let expr = MathExpression::new(result, index as u64);
     expr
 }
 

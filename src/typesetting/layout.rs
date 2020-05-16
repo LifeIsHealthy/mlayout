@@ -1,6 +1,5 @@
 #![allow(unused_variables, dead_code)]
 use std::cmp::{max, min};
-use std::sync::Arc;
 use crate::types::*;
 
 use super::math_box::{Extents, MathBox, MathBoxMetrics, Vector};
@@ -859,7 +858,7 @@ pub fn layout_expression(expr: &MathExpression, options: LayoutOptions) -> MathB
 impl MathLayout for MathExpression {
     fn layout(&self, options: LayoutOptions) -> MathBox {
         let mut mathbox = self.item.layout(options);
-        mathbox.user_data = self.user_data.as_ref().map(|x| Arc::clone(x));
+        mathbox.user_data = self.user_data;
         mathbox
     }
 

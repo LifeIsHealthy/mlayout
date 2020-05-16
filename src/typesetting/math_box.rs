@@ -2,8 +2,6 @@ use std::cmp::{max, min};
 use std::ops::{Add, Div, Mul, Sub};
 use crate::types::PercentValue;
 use std::default::Default;
-use std::any::Any;
-use std::sync::Arc;
 
 use crate::typesetting::shaper::MathGlyph;
 
@@ -326,7 +324,7 @@ pub struct MathBox {
     pub origin: Vector<i32>,
     pub(crate) metrics: Metrics,
     pub content: MathBoxContent,
-    pub user_data: Option<Arc<dyn Any + Send + Sync>>,
+    pub user_data: u64,
 }
 
 impl Default for MathBoxContent {
@@ -420,7 +418,7 @@ impl MathBox {
             content: content,
             metrics,
             origin: Vector::default(),
-            user_data: None,
+            user_data: 0,
         }
     }
 
