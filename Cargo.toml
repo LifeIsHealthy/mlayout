@@ -7,7 +7,7 @@ build = "build.rs"
 [dependencies]
 quick-xml = "0.4"
 harfbuzz_rs = { git = "https://github.com/manuel-rhdt/harfbuzz_rs.git" }
-bitflags = "0.7"
+bitflags = "^1"
 stash = "*"
 
 [dev-dependencies]

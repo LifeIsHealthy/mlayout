@@ -379,12 +379,12 @@ fn construct_under_over<'a>(
 
     let mut over_is_accent = context
         .operator_attrs(over.as_ref())
-        .map(|op_attrs| op_attrs.flags.contains(operator::ACCENT))
+        .map(|op_attrs| op_attrs.flags.contains(operator::Flags::ACCENT))
         .unwrap_or(false);
 
     let mut under_is_accent = context
         .operator_attrs(under.as_ref())
-        .map(|op_attrs| op_attrs.flags.contains(operator::ACCENT))
+        .map(|op_attrs| op_attrs.flags.contains(operator::Flags::ACCENT))
         .unwrap_or(false);
 
     // now check the accent attributes of the mover/munder element.

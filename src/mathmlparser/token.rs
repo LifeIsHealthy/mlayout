@@ -199,32 +199,32 @@ fn parse_operator_attribute(
         }
         (b"fence", is_fence) => {
             if let Ok(is_fence) = is_fence.parse_xml() {
-                op_attrs.set_user_override(operator::FENCE, is_fence);
+                op_attrs.set_user_override(operator::Flags::FENCE, is_fence);
             }
         }
         (b"symmetric", is_symmetric) => {
             if let Ok(is_symmetric) = is_symmetric.parse_xml() {
-                op_attrs.set_user_override(operator::SYMMETRIC, is_symmetric);
+                op_attrs.set_user_override(operator::Flags::SYMMETRIC, is_symmetric);
             }
         }
         (b"stretchy", is_stretchy) => {
             if let Ok(is_stretchy) = is_stretchy.parse_xml() {
-                op_attrs.set_user_override(operator::STRETCHY, is_stretchy);
+                op_attrs.set_user_override(operator::Flags::STRETCHY, is_stretchy);
             }
         }
         (b"largeop", is_largeop) => {
             if let Ok(is_largeop) = is_largeop.parse_xml() {
-                op_attrs.set_user_override(operator::LARGEOP, is_largeop);
+                op_attrs.set_user_override(operator::Flags::LARGEOP, is_largeop);
             }
         }
         (b"movablelimits", has_movable_limits) => {
             if let Ok(has_movable_limits) = has_movable_limits.parse_xml() {
-                op_attrs.set_user_override(operator::MOVABLE_LIMITS, has_movable_limits);
+                op_attrs.set_user_override(operator::Flags::MOVABLE_LIMITS, has_movable_limits);
             }
         }
         (b"accent", is_accent) => {
             if let Ok(is_accent) = is_accent.parse_xml() {
-                op_attrs.set_user_override(operator::ACCENT, is_accent);
+                op_attrs.set_user_override(operator::Flags::ACCENT, is_accent);
             }
         }
         _ => return false,
@@ -337,9 +337,9 @@ mod tests {
 
     #[test]
     fn test_parse_operator_attributes() {
-        test_operator_flag_parse("symmetric", operator::SYMMETRIC);
-        test_operator_flag_parse("fence", operator::FENCE);
-        test_operator_flag_parse("largeop", operator::LARGEOP);
-        test_operator_flag_parse("stretchy", operator::STRETCHY);
+        test_operator_flag_parse("symmetric", operator::Flags::SYMMETRIC);
+        test_operator_flag_parse("fence", operator::Flags::FENCE);
+        test_operator_flag_parse("largeop", operator::Flags::LARGEOP);
+        test_operator_flag_parse("stretchy", operator::Flags::STRETCHY);
     }
 }
