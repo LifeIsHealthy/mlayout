@@ -1,12 +1,12 @@
 use std;
 use std::borrow::Cow;
 
-
-
 use super::operator;
-use super::{FromXmlAttribute, MathmlElement, MathmlInfo, ParseContext};
+use super::{
+    error::ParsingError, escape::StringExtUnescape, FromXmlAttribute, MathmlElement, MathmlInfo,
+    ParseContext,
+};
 use crate::mathmlparser::AttributeParse;
-
 
 use crate::types::{Field, Length, MathExpression, MathItem, MathSpace};
 use crate::unicode_math::{convert_character_to_family, Family};
@@ -210,11 +210,11 @@ fn parse_mspace_attribute(
 }
 
 pub fn build_token<'a>(
-    mut fields: impl Iterator<Item = Field>,
+    fields: impl Iterator<Item = Field>,
     elem: MathmlElement,
     attributes: impl Iterator<Item = (&'a str, &'a str)>,
     context: &mut ParseContext,
-) -> MathExpression {
+) -> Result<MathExpression, ParsingError> {
     let mut token_style = TokenStyle::default();
     let mut op_attrs = if elem.identifier == "mo" {
         Some(operator::Attributes::default())
@@ -230,19 +230,34 @@ pub fn build_token<'a>(
 
     if let Some(width) = space {
         let item = MathExpression::new(MathItem::Space(MathSpace::horizontal_space(width)), ());
-        return item;
+        return Ok(item);
     }
 
+    let mut fields = fields.map(|field| match field {
+        Field::Unicode(string) => {
+            let string = string.unescape().map(|string| {
+                string
+                    .adapt_to_family(token_style.math_variant)
+                    .replace_anomalous_characters(elem)
+            })?;
+            Ok(Field::Unicode(string))
+        }
+        Field::Glyph(glyph) => Ok(Field::Glyph(glyph)),
+        Field::Empty => Ok(Field::Empty),
+    });
+
     let mut item = if fields.size_hint().1 == Some(1) {
-        let field = fields.next().unwrap();
+        let field = fields.next().unwrap()?;
         if let Some(ref mut op_attrs) = op_attrs {
             op_attrs.character = try_extract_char(&field);
         }
         MathExpression::new(MathItem::Field(field), ())
     } else {
         let list = fields
-            .map(|field| MathExpression::new(MathItem::Field(field), ()))
-            .collect();
+            .map(|field: Result<_, ParsingError>| {
+                Ok(MathExpression::new(MathItem::Field(field?), ()))
+            })
+            .collect::<Result<Vec<_>, ParsingError>>()?;
         MathExpression::new(MathItem::List(list), ())
     };
 
@@ -252,7 +267,7 @@ pub fn build_token<'a>(
     });
 
     item.set_user_data(index);
-    item
+    Ok(item)
 }
 
 #[cfg(test)]
@@ -282,8 +297,8 @@ mod tests {
 
         let info = Stash::new();
         let mut context = ParseContext { mathml_info: info };
-        let mut fields = parse_token_contents(&mut parser, mathml_elem).unwrap();
-        let expr = build_token(fields, mathml_elem, attrs, &mut context);
+        let fields = parse_token_contents(&mut parser, mathml_elem).unwrap();
+        let expr = build_token(fields, mathml_elem, attrs, &mut context).unwrap();
 
         let operator_attrs = context
             .info_for_expr(&expr)

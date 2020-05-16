@@ -38,7 +38,7 @@ where
         ElementType::TokenElement => {
             let fields = parse_token_contents(parser, elem)?;
 
-            Ok(token::build_token(fields, elem, attrs, context))
+            Ok(token::build_token(fields, elem, attrs, context)?)
         }
         ElementType::LayoutSchema {
             args: ArgumentRequirements::ArgumentList,
@@ -172,9 +172,6 @@ pub fn parse_token_contents<R: BufRead>(
         match event? {
             Event::Text(text) => {
                 let text = std::str::from_utf8(text.content())?;
-                // .unescape()?
-                // .adapt_to_family(style.math_variant)
-                // .replace_anomalous_characters(elem);
                 fields.push(Field::Unicode(text.to_owned()));
             }
             Event::Start(elem) => match elem.name() {

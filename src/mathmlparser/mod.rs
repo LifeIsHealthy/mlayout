@@ -5,12 +5,15 @@ mod token;
 
 mod error;
 #[cfg(feature = "mathml_parser")]
-mod xml_reader;
+pub mod xml_reader;
 
 use std;
 
-use crate::types::{
-    Atom, GeneralizedFraction, Length, LengthUnit, MathExpression, MathItem, OverUnder, Root,
+use crate::{
+    types::{
+        Atom, GeneralizedFraction, Length, LengthUnit, MathExpression, MathItem, OverUnder, Root,
+    },
+    Field,
 };
 
 use stash::Stash;
@@ -198,23 +201,45 @@ impl MathmlInfo {
     }
 }
 
+pub enum Child {
+    Field(Field),
+    Expression(MathExpression),
+}
+
 pub fn build_element<'a, A>(
     elem: MathmlElement,
     attributes: impl Iterator<Item = (&'a str, &'a str)>,
-    children: impl Iterator<Item = MathExpression>,
+    children: impl Iterator<Item = Child>,
     context: &mut ParseContext,
 ) -> MathExpression {
     match elem.elem_type {
         ElementType::LayoutSchema {
             args: ArgumentRequirements::RequiredArguments(_),
-        } => parse_fixed_schema(children, elem, attributes, context),
+        } => {
+            let expressions = children.filter_map(|child| match child {
+                Child::Expression(expr) => Some(expr),
+                _ => None,
+            });
+            parse_fixed_schema(expressions, elem, attributes, context)
+        }
         ElementType::LayoutSchema {
             args: ArgumentRequirements::ArgumentList,
         }
         | ElementType::MathmlRoot => {
-            let mut list = children.collect();
+            let expressions = children.filter_map(|child| match child {
+                Child::Expression(expr) => Some(expr),
+                _ => None,
+            });
+            let mut list = expressions.collect();
             operator::process_operators(&mut list, context);
             parse_list_schema(list, elem)
+        }
+        ElementType::TokenElement => {
+            let fields = children.filter_map(|child| match child {
+                Child::Field(field) => Some(field),
+                _ => None,
+            });
+            token::build_token(fields, elem, attributes, context).unwrap()
         }
         _ => todo!(),
     }
@@ -433,7 +458,6 @@ impl FromXmlAttribute for bool {
 mod tests {
     use super::*;
     use crate::types::*;
-    use token::build_token;
     use xml_reader::parse;
 
     fn find_operator(expr: &MathExpression) -> &MathExpression {
