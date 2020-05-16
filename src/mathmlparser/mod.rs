@@ -1,24 +1,21 @@
-mod error;
 mod escape;
 mod operator;
 mod operator_dict;
 mod token;
 
+mod error;
+#[cfg(feature = "mathml_parser")]
+mod xml_reader;
+
 use std;
-use std::io::BufRead;
 
 use crate::types::{
     Atom, GeneralizedFraction, Length, LengthUnit, MathExpression, MathItem, OverUnder, Root,
 };
 
-pub use quick_xml::error::ResultPos;
-pub use quick_xml::{Element, Event, XmlReader};
 use stash::Stash;
 
-pub use self::error::*;
 use self::operator::{guess_if_operator_with_form, Form};
-
-type Result<T> = std::result::Result<T, ParsingError>;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct MathmlElement {
@@ -43,14 +40,14 @@ enum ArgumentRequirements {
 
 pub trait FromXmlAttribute: Sized {
     type Err;
-    fn from_xml_attr(bytes: &[u8]) -> std::result::Result<Self, Self::Err>;
+    fn from_xml_attr(attr: &str) -> std::result::Result<Self, Self::Err>;
 }
 
 pub trait AttributeParse {
     fn parse_xml<T: FromXmlAttribute>(&self) -> std::result::Result<T, T::Err>;
 }
 
-impl AttributeParse for [u8] {
+impl AttributeParse for str {
     fn parse_xml<T: FromXmlAttribute>(&self) -> std::result::Result<T, T::Err> {
         <T as FromXmlAttribute>::from_xml_attr(self)
     }
@@ -201,27 +198,12 @@ impl MathmlInfo {
     }
 }
 
-pub fn parse<R: BufRead>(file: R) -> Result<MathExpression> {
-    let mut parser = XmlReader::from_reader(file).trim_text(true);
-    let root_elem = MathmlElement {
-        identifier: "ROOT_ELEMENT", // this identifier is arbitrary and should not be used elsewhere
-        elem_type: ElementType::MathmlRoot,
-    };
-    let info = Stash::new();
-    let mut context = ParseContext { mathml_info: info };
-
-    parse_element(&mut parser, root_elem, std::iter::empty(), &mut context)
-}
-
 pub fn build_element<'a, A>(
     elem: MathmlElement,
-    attributes: A,
+    attributes: impl Iterator<Item = (&'a str, &'a str)>,
     children: impl Iterator<Item = MathExpression>,
     context: &mut ParseContext,
-) -> MathExpression
-where
-    A: Iterator<Item = ResultPos<(&'a [u8], &'a [u8])>>,
-{
+) -> MathExpression {
     match elem.elem_type {
         ElementType::LayoutSchema {
             args: ArgumentRequirements::RequiredArguments(_),
@@ -236,106 +218,6 @@ where
         }
         _ => todo!(),
     }
-}
-
-fn parse_element<'a, R: BufRead, A>(
-    parser: &mut XmlReader<R>,
-    elem: MathmlElement,
-    attributes: A,
-    context: &mut ParseContext,
-) -> Result<MathExpression>
-where
-    A: Iterator<Item = ResultPos<(&'a [u8], &'a [u8])>>,
-{
-    match elem.elem_type {
-        ElementType::TokenElement => token::parse(parser, elem, attributes, context),
-        ElementType::LayoutSchema {
-            args: ArgumentRequirements::ArgumentList,
-        }
-        | ElementType::MathmlRoot => {
-            let mut list = parse_element_list(parser, elem, context)?;
-            operator::process_operators(&mut list, context);
-            Ok(parse_list_schema(list, elem))
-        }
-        ElementType::LayoutSchema {
-            args: ArgumentRequirements::RequiredArguments(_),
-        } => {
-            let arguments = parse_fixed_arguments(parser, elem, context)?;
-            Ok(parse_fixed_schema(
-                arguments.into_iter(),
-                elem,
-                attributes,
-                context,
-            ))
-        }
-        _ => unimplemented!(),
-    }
-}
-
-fn parse_sub_element<R: BufRead>(
-    parser: &mut XmlReader<R>,
-    elem: &Element,
-    context: &mut ParseContext,
-) -> Result<MathExpression> {
-    let sub_elem = match_math_element(elem.name());
-    match sub_elem {
-        Some(sub_elem) => parse_element(parser, sub_elem, elem.attributes(), context),
-        None => {
-            let name = String::from_utf8_lossy(elem.name()).into_owned();
-            let result: Result<_> = parser.read_to_end(elem.name()).map_err(|err| err.into());
-            result.and(Err(ParsingError::of_type(
-                parser,
-                ErrorType::UnknownElement(name),
-            )))
-        }
-    }
-}
-
-fn parse_element_list<R: BufRead>(
-    parser: &mut XmlReader<R>,
-    elem: MathmlElement,
-    context: &mut ParseContext,
-) -> Result<Vec<MathExpression>> {
-    let mut list = Vec::new();
-    loop {
-        let next_event = parser.next();
-        match next_event {
-            Some(Ok(Event::Start(ref start_elem))) => {
-                list.push(parse_sub_element(parser, start_elem, context)?)
-            }
-            Some(Ok(Event::End(ref end_elem))) => {
-                if elem.elem_type == ElementType::MathmlRoot {
-                    let name = std::str::from_utf8(end_elem.name())?.to_string();
-                    return Err(ParsingError::of_type(
-                        parser,
-                        ErrorType::WrongEndElement(name),
-                    ));
-                }
-                if end_elem.name() == elem.identifier.as_bytes() {
-                    break;
-                } else {
-                    let name = std::str::from_utf8(end_elem.name())?.to_string();
-                    return Err(ParsingError::of_type(
-                        parser,
-                        ErrorType::WrongEndElement(name),
-                    ));
-                }
-            }
-            Some(Err(error)) => Err(error)?,
-            None => {
-                if elem.elem_type == ElementType::MathmlRoot {
-                    break;
-                } else {
-                    return Err(ParsingError::of_type(
-                        parser,
-                        ErrorType::UnexpectedEndOfInput,
-                    ));
-                }
-            }
-            _ => {}
-        }
-    }
-    Ok(list)
 }
 
 fn parse_list_schema<'a>(mut content: Vec<MathExpression>, elem: MathmlElement) -> MathExpression {
@@ -361,40 +243,11 @@ fn parse_list_schema<'a>(mut content: Vec<MathExpression>, elem: MathmlElement) 
     }
 }
 
-fn parse_fixed_arguments<'a, R: BufRead>(
-    parser: &mut XmlReader<R>,
-    elem: MathmlElement,
-    context: &mut ParseContext,
-) -> Result<Vec<MathExpression>> {
-    if let ElementType::LayoutSchema {
-        args: ArgumentRequirements::RequiredArguments(num_args),
-    } = elem.elem_type
-    {
-        let args = parse_element_list(parser, elem, context)?;
-        if args.len() == num_args as usize {
-            Ok(args)
-        } else {
-            Err(ParsingError::from_string(
-                parser,
-                format!(
-                    "\"{:?}\" element requires {:?} arguments. \
-                     Found {:?} arguments.",
-                    elem.identifier,
-                    num_args,
-                    args.len()
-                ),
-            ))
-        }
-    } else {
-        unreachable!();
-    }
-}
-
 fn construct_under_over<'a>(
     nucleus: Option<MathExpression>,
     under: Option<MathExpression>,
     over: Option<MathExpression>,
-    attributes: impl Iterator<Item = ResultPos<(&'a [u8], &'a [u8])>>,
+    attributes: impl Iterator<Item = (&'a str, &'a str)>,
     context: &mut ParseContext,
 ) -> MathItem {
     let over = over.map(|x| guess_if_operator_with_form(x, Form::Postfix, context));
@@ -412,11 +265,11 @@ fn construct_under_over<'a>(
 
     // now check the accent attributes of the mover/munder element.
     for attrib in attributes {
-        let (ident, value) = attrib.unwrap();
-        if ident == b"accent" {
+        let (ident, value) = attrib;
+        if ident == "accent" {
             over_is_accent = value.parse_xml().unwrap_or(false);
         }
-        if ident == b"accentunder" {
+        if ident == "accentunder" {
             under_is_accent = value.parse_xml().unwrap_or(false);
         }
     }
@@ -440,7 +293,7 @@ fn parse_fixed_schema<'a, A>(
     context: &mut ParseContext,
 ) -> MathExpression
 where
-    A: Iterator<Item = ResultPos<(&'a [u8], &'a [u8])>>,
+    A: Iterator<Item = (&'a str, &'a str)>,
 {
     let mut next = || Some(content.next().unwrap());
     let result = match elem.identifier {
@@ -539,9 +392,9 @@ where
 }
 
 impl FromXmlAttribute for Length {
-    type Err = ParsingError;
-    fn from_xml_attr(bytes: &[u8]) -> std::result::Result<Self, Self::Err> {
-        let string = std::str::from_utf8(bytes)?.trim().to_ascii_lowercase();
+    type Err = &'static str;
+    fn from_xml_attr(attr: &str) -> std::result::Result<Self, Self::Err> {
+        let string = attr.trim().to_ascii_lowercase();
         let first_non_digit = string.find(|chr| match chr {
             '0'..='9' | '.' | '+' | '-' => false,
             _ => true,
@@ -565,20 +418,23 @@ impl FromXmlAttribute for Length {
 }
 
 impl FromXmlAttribute for bool {
-    type Err = ParsingError;
-    fn from_xml_attr(bytes: &[u8]) -> std::result::Result<Self, Self::Err> {
+    type Err = &'static str;
+    fn from_xml_attr(bytes: &str) -> std::result::Result<Self, Self::Err> {
         match bytes {
-            b"true" => Ok(true),
-            b"false" => Ok(false),
-            _ => Err(ParsingError::from("unrecognized boolean value")),
+            "true" => Ok(true),
+            "false" => Ok(false),
+            _ => Err("unrecognized boolean value"),
         }
     }
 }
 
 #[cfg(test)]
+#[cfg(feature = "mathml_parser")]
 mod tests {
     use super::*;
     use crate::types::*;
+    use token::build_token;
+    use xml_reader::parse;
 
     fn find_operator(expr: &MathExpression) -> &MathExpression {
         match *expr.item {

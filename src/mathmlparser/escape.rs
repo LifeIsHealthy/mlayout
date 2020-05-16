@@ -2,8 +2,8 @@
 include!(concat!(env!("OUT_DIR"), "/entities.rs"));
 
 use std;
-use super::{ParsingError, Result};
 use std::borrow::Cow;
+use super::error::ParsingError;
 
 enum StrOrChr {
     Str(&'static str),
@@ -20,11 +20,11 @@ impl StrOrChr {
 }
 
 pub trait StringExtUnescape {
-    fn unescape(&self) -> Result<Cow<str>>;
+    fn unescape(&self) -> Result<Cow<str>, ParsingError>;
 }
 
 impl StringExtUnescape for str {
-    fn unescape(&self) -> Result<Cow<str>> {
+    fn unescape(&self) -> Result<Cow<str>, ParsingError> {
         let mut escapes = Vec::new();
         'outer: for ent_ref in self.split('&').skip(1) {
             if let Some(i) = ent_ref.find(';') {
@@ -70,7 +70,7 @@ impl StringExtUnescape for str {
     }
 }
 
-fn parse_numeric_entity(ent: &str) -> Result<char> {
+fn parse_numeric_entity(ent: &str) -> Result<char, ParsingError> {
     match ent {
         "" => Err(ParsingError::from("empty entity")),
         "x0" | "0" => Err(ParsingError::from("malformed entity")),

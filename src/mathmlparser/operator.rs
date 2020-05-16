@@ -1,8 +1,10 @@
-use crate::types::{Atom, GeneralizedFraction, Length, MathExpression, MathItem, Operator, OverUnder,
-            StretchConstraints};
+use crate::types::{
+    Atom, GeneralizedFraction, Length, MathExpression, MathItem, Operator, OverUnder,
+    StretchConstraints,
+};
 
-use super::{FromXmlAttribute, ParseContext};
 use super::operator_dict;
+use super::{FromXmlAttribute, ParseContext};
 
 bitflags! {
     pub struct Flags: u8 {
@@ -41,13 +43,13 @@ impl Default for Form {
 
 impl FromXmlAttribute for Form {
     type Err = FormParsingError;
-    fn from_xml_attr(s: &[u8]) -> Result<Form, FormParsingError> {
+    fn from_xml_attr(s: &str) -> Result<Form, FormParsingError> {
         match s {
-            b"prefix" => Ok(Form::Prefix),
-            b"infix" => Ok(Form::Infix),
-            b"postfix" => Ok(Form::Postfix),
+            "prefix" => Ok(Form::Prefix),
+            "infix" => Ok(Form::Infix),
+            "postfix" => Ok(Form::Postfix),
             _ => Err(FormParsingError {
-                unknown_str: String::from_utf8_lossy(s).into_owned(),
+                unknown_str: s.to_owned(),
             }),
         }
     }
@@ -82,7 +84,8 @@ impl Attributes {
 // beginning/end or in the middle of a `mrow` (ignoring any whitespace elements).
 pub fn process_operators(list: &mut Vec<MathExpression>, context: &mut ParseContext) {
     // filter out all whitespace elements
-    let non_whitespace_list = list.iter_mut()
+    let non_whitespace_list = list
+        .iter_mut()
         .filter(|expr| {
             context
                 .info_for_expr(&**expr)
@@ -176,9 +179,8 @@ fn find_core_operator<'a>(
     embellished_op: &'a mut MathExpression,
     context: &mut ParseContext,
 ) -> Option<&'a mut MathExpression> {
-
     if let &mut MathItem::Field(_) = embellished_op.item.as_mut() {
-        return Some(embellished_op)
+        return Some(embellished_op);
     }
 
     let core = match embellished_op.item.as_mut() {
@@ -265,15 +267,13 @@ fn make_operator(expr: &mut MathExpression, context: &mut ParseContext) {
 #[cfg(test)]
 mod tests {
     use crate::mathmlparser::ParseContext;
-    
+
     use stash::Stash;
 
     #[test]
     fn test_set_default_form() {
         let info = Stash::new();
-        let _context = ParseContext {
-            mathml_info: info,
-        };
+        let _context = ParseContext { mathml_info: info };
         let _context = ParseContext {
             mathml_info: Stash::new(),
         };

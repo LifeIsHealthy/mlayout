@@ -4,8 +4,7 @@ use std::io::BufRead;
 
 use super::error::ParsingError;
 use super::operator;
-use super::{Event, FromXmlAttribute, MathmlElement, MathmlInfo, ParseContext, Result, ResultPos,
-            XmlReader};
+use super::{FromXmlAttribute, MathmlElement, MathmlInfo, ParseContext};
 use crate::mathmlparser::AttributeParse;
 
 use super::escape::StringExtUnescape;
@@ -20,8 +19,8 @@ enum TextDirection {
 
 impl FromXmlAttribute for TextDirection {
     type Err = ();
-    fn from_xml_attr(bytes: &[u8]) -> std::result::Result<Self, Self::Err> {
-        if bytes == b"rtl" {
+    fn from_xml_attr(bytes: &str) -> std::result::Result<Self, Self::Err> {
+        if bytes == "rtl" {
             Ok(TextDirection::Rtl)
         } else {
             Ok(TextDirection::Ltr)
@@ -37,22 +36,22 @@ impl std::default::Default for TextDirection {
 
 impl FromXmlAttribute for Family {
     type Err = ();
-    fn from_xml_attr(bytes: &[u8]) -> std::result::Result<Self, Self::Err> {
+    fn from_xml_attr(bytes: &str) -> std::result::Result<Self, Self::Err> {
         match bytes {
-            b"normal" => Ok(Family::Normal),
-            b"bold" => Ok(Family::Bold),
-            b"italic" => Ok(Family::Italics),
-            b"bold-italic" => Ok(Family::BoldItalics),
-            b"double-struck" => Ok(Family::DoubleStruck),
-            b"bold-fraktur" => Ok(Family::BoldFraktur),
-            b"script" => Ok(Family::Script),
-            b"bold-script" => Ok(Family::BoldScript),
-            b"fraktur" => Ok(Family::Fraktur),
-            b"sans-serif" => Ok(Family::SansSerif),
-            b"bold-sans-serif" => Ok(Family::SansSerifBold),
-            b"sans-serif-italic" => Ok(Family::SansSerifItalics),
-            b"sans-serif-bold-italic" => Ok(Family::SansSerifBoldItalics),
-            b"monospace" => Ok(Family::Monospace),
+            "normal" => Ok(Family::Normal),
+            "bold" => Ok(Family::Bold),
+            "italic" => Ok(Family::Italics),
+            "bold-italic" => Ok(Family::BoldItalics),
+            "double-struck" => Ok(Family::DoubleStruck),
+            "bold-fraktur" => Ok(Family::BoldFraktur),
+            "script" => Ok(Family::Script),
+            "bold-script" => Ok(Family::BoldScript),
+            "fraktur" => Ok(Family::Fraktur),
+            "sans-serif" => Ok(Family::SansSerif),
+            "bold-sans-serif" => Ok(Family::SansSerifBold),
+            "sans-serif-italic" => Ok(Family::SansSerifItalics),
+            "sans-serif-bold-italic" => Ok(Family::SansSerifBoldItalics),
+            "monospace" => Ok(Family::Monospace),
             _ => Err(()),
         }
     }
@@ -72,11 +71,11 @@ struct TokenStyle {
 fn parse_token_attribute<'a>(
     style: &mut TokenStyle,
     element_identifier: &str,
-    new_attribute: &(&'a [u8], &'a [u8]),
+    new_attribute: &(&'a str, &'a str),
 ) -> bool {
     match *new_attribute {
-        (b"mathvariant", variant) => style.math_variant = variant.parse_xml().ok(),
-        (b"dir", dir) => style.direction = dir.parse_xml().unwrap(),
+        ("mathvariant", variant) => style.math_variant = variant.parse_xml().ok(),
+        ("dir", dir) => style.direction = dir.parse_xml().unwrap(),
         _ => return false,
     }
     match (element_identifier, style.math_variant) {
@@ -123,47 +122,6 @@ impl StringExtMathml for str {
     }
 }
 
-// invoked after a token expression
-// the cursor is moved behind the end element of the token expression
-// the result (if ok) is guaranteed to not be empty
-fn parse_token_contents<R: BufRead>(
-    parser: &mut XmlReader<R>,
-    elem: MathmlElement,
-    style: TokenStyle,
-) -> Result<Vec<Field>> {
-    let mut fields: Vec<Field> = Vec::new();
-
-    while let Some(event) = parser.next() {
-        match event? {
-            Event::Text(text) => {
-                let text = std::str::from_utf8(text.content())?
-                    .unescape()?
-                    .adapt_to_family(style.math_variant)
-                    .replace_anomalous_characters(elem);
-                fields.push(Field::Unicode(text));
-            }
-            Event::Start(elem) => match elem.name() {
-                b"mglyph" | b"malignmark" => Err(ParsingError::from_string(
-                    parser,
-                    format!(
-                        "{:?} element is currently not \
-                         implemented.",
-                        elem.name()
-                    ),
-                ))?,
-                _ => Err(ParsingError::from_string(parser, "Unexpected new element."))?,
-            },
-            Event::End(ref end_elem) => {
-                if elem.identifier.as_bytes() == end_elem.name() {
-                    break;
-                }
-            }
-            _ => {}
-        }
-    }
-    Ok(fields)
-}
-
 fn try_extract_char(field: &Field) -> Option<char> {
     if let Field::Unicode(ref string) = *field {
         let mut iterator = string.chars();
@@ -183,46 +141,46 @@ fn try_extract_char(field: &Field) -> Option<char> {
 
 fn parse_operator_attribute(
     op_attrs: Option<&mut operator::Attributes>,
-    new_attr: &(&[u8], &[u8]),
+    new_attr: &(&str, &str),
 ) -> bool {
     let op_attrs = match op_attrs {
         Some(op_attrs) => op_attrs,
         None => return false,
     };
     match *new_attr {
-        (b"form", form_str) => op_attrs.form = form_str.parse_xml().ok(),
-        (b"lspace", lspace) => {
+        ("form", form_str) => op_attrs.form = form_str.parse_xml().ok(),
+        ("lspace", lspace) => {
             op_attrs.lspace = lspace.parse_xml().ok();
         }
-        (b"rspace", rspace) => {
+        ("rspace", rspace) => {
             op_attrs.rspace = rspace.parse_xml().ok();
         }
-        (b"fence", is_fence) => {
+        ("fence", is_fence) => {
             if let Ok(is_fence) = is_fence.parse_xml() {
                 op_attrs.set_user_override(operator::Flags::FENCE, is_fence);
             }
         }
-        (b"symmetric", is_symmetric) => {
+        ("symmetric", is_symmetric) => {
             if let Ok(is_symmetric) = is_symmetric.parse_xml() {
                 op_attrs.set_user_override(operator::Flags::SYMMETRIC, is_symmetric);
             }
         }
-        (b"stretchy", is_stretchy) => {
+        ("stretchy", is_stretchy) => {
             if let Ok(is_stretchy) = is_stretchy.parse_xml() {
                 op_attrs.set_user_override(operator::Flags::STRETCHY, is_stretchy);
             }
         }
-        (b"largeop", is_largeop) => {
+        ("largeop", is_largeop) => {
             if let Ok(is_largeop) = is_largeop.parse_xml() {
                 op_attrs.set_user_override(operator::Flags::LARGEOP, is_largeop);
             }
         }
-        (b"movablelimits", has_movable_limits) => {
+        ("movablelimits", has_movable_limits) => {
             if let Ok(has_movable_limits) = has_movable_limits.parse_xml() {
                 op_attrs.set_user_override(operator::Flags::MOVABLE_LIMITS, has_movable_limits);
             }
         }
-        (b"accent", is_accent) => {
+        ("accent", is_accent) => {
             if let Ok(is_accent) = is_accent.parse_xml() {
                 op_attrs.set_user_override(operator::Flags::ACCENT, is_accent);
             }
@@ -235,13 +193,13 @@ fn parse_operator_attribute(
 fn parse_mspace_attribute(
     horiz_space: &mut Option<Length>,
     identifier: &str,
-    new_attr: &(&[u8], &[u8]),
+    new_attr: &(&str, &str),
 ) -> bool {
     if identifier != "mspace" {
         return false;
     }
     match *new_attr {
-        (b"width", width) => {
+        ("width", width) => {
             if let Ok(width) = width.parse_xml() {
                 *horiz_space = Some(width);
             }
@@ -251,15 +209,12 @@ fn parse_mspace_attribute(
     }
 }
 
-pub fn parse<'a, R: BufRead, A>(
-    parser: &mut XmlReader<R>,
+pub fn build_token<'a>(
+    mut fields: impl Iterator<Item = Field>,
     elem: MathmlElement,
-    attributes: A,
+    attributes: impl Iterator<Item = (&'a str, &'a str)>,
     context: &mut ParseContext,
-) -> Result<MathExpression>
-where
-    A: Iterator<Item = ResultPos<(&'a [u8], &'a [u8])>>,
-{
+) -> MathExpression {
     let mut token_style = TokenStyle::default();
     let mut op_attrs = if elem.identifier == "mo" {
         Some(operator::Attributes::default())
@@ -268,28 +223,24 @@ where
     };
     let mut space = None;
     attributes
-        .filter_map(|attr| attr.ok())
         .filter(|attr| !parse_token_attribute(&mut token_style, elem.identifier, &attr))
         .filter(|attr| !parse_operator_attribute(op_attrs.as_mut(), &attr))
         .filter(|attr| !parse_mspace_attribute(&mut space, elem.identifier, &attr))
         .fold((), |_, _| {});
 
-    let mut fields = parse_token_contents(parser, elem, token_style)?;
-
     if let Some(width) = space {
         let item = MathExpression::new(MathItem::Space(MathSpace::horizontal_space(width)), ());
-        return Ok(item)
+        return item;
     }
 
-    let mut item = if fields.len() == 1 {
-        let field = fields.remove(0);
+    let mut item = if fields.size_hint().1 == Some(1) {
+        let field = fields.next().unwrap();
         if let Some(ref mut op_attrs) = op_attrs {
             op_attrs.character = try_extract_char(&field);
         }
         MathExpression::new(MathItem::Field(field), ())
     } else {
         let list = fields
-            .into_iter()
             .map(|field| MathExpression::new(MathItem::Field(field), ()))
             .collect();
         MathExpression::new(MathItem::List(list), ())
@@ -301,14 +252,16 @@ where
     });
 
     item.set_user_data(index);
-    Ok(item)
+    item
 }
 
 #[cfg(test)]
+#[cfg(feature = "mathml_parser")]
 mod tests {
     use super::*;
-    use crate::mathmlparser::{match_math_element, Event};
+    use crate::mathmlparser::{match_math_element, xml_reader::parse_token_contents};
 
+    use quick_xml::{Event, XmlReader};
     use stash::Stash;
 
     fn test_operator_flag_parse(attr_name: &str, flag: operator::Flags) {
@@ -321,10 +274,16 @@ mod tests {
         };
         let mathml_elem = match_math_element(elem.name()).unwrap();
         let attributes = elem.attributes();
+        let attrs = attributes.filter_map(|res| {
+            res.ok().and_then(|(a, b)| {
+                Some((std::str::from_utf8(a).ok()?, std::str::from_utf8(b).ok()?))
+            })
+        });
 
         let info = Stash::new();
         let mut context = ParseContext { mathml_info: info };
-        let expr = parse(&mut parser, mathml_elem, attributes, &mut context).unwrap();
+        let mut fields = parse_token_contents(&mut parser, mathml_elem).unwrap();
+        let expr = build_token(fields, mathml_elem, attrs, &mut context);
 
         let operator_attrs = context
             .info_for_expr(&expr)
