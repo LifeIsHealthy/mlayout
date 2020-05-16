@@ -209,7 +209,7 @@ pub enum Child {
     Expression(MathExpression),
 }
 
-pub fn build_element<'a, A>(
+pub fn build_element<'a>(
     elem: MathmlElement,
     attributes: impl Iterator<Item = (&'a str, &'a str)>,
     children: impl Iterator<Item = Child>,
