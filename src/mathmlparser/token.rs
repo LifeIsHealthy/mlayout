@@ -1,13 +1,13 @@
 use std;
 use std::borrow::Cow;
-use std::io::BufRead;
 
-use super::error::ParsingError;
+
+
 use super::operator;
 use super::{FromXmlAttribute, MathmlElement, MathmlInfo, ParseContext};
 use crate::mathmlparser::AttributeParse;
 
-use super::escape::StringExtUnescape;
+
 use crate::types::{Field, Length, MathExpression, MathItem, MathSpace};
 use crate::unicode_math::{convert_character_to_family, Family};
 
