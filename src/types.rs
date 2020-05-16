@@ -10,7 +10,7 @@ use crate::typesetting::MathLayout;
 /// An identifier of a glyph inside a font.
 pub type GlyphCode = u32;
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct MathExpression {
     pub(crate) item: Box<MathItem>,
     pub user_data: Option<Arc<dyn Any + Send + Sync>>,
@@ -35,7 +35,7 @@ impl MathExpression {
 
 /// A `MathItem` is the abstract representation of mathematical notation that manages the layout
 /// of its subexpressions.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum MathItem {
     /// A simple element displaying a single field without special formatting.
     Field(Field),
@@ -59,7 +59,7 @@ pub enum MathItem {
     /// A list of math expressions to be laid out sequentially.
     List(Vec<MathExpression>),
     /// Any math expression of another type.
-    Other(Box<dyn MathLayout + Send + Sync>),
+    Other(Arc<dyn MathLayout + Send + Sync>),
 }
 
 impl Default for MathItem {
@@ -138,7 +138,7 @@ impl MathSpace {
 
 /// An expression that consists of a base (called nucleus) and attachments at each corner (e.g.
 /// subscripts and superscripts).
-#[derive(Default, Debug)]
+#[derive(Default, Debug, Clone)]
 pub struct Atom {
     /// The base of the atom.
     pub nucleus: Option<MathExpression>,
@@ -155,7 +155,7 @@ pub struct Atom {
 
 /// An expression that consists of a base (called nucleus) and attachments that go above or below
 /// the nucleus like e.g. accents.
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct OverUnder {
     /// the base
     pub nucleus: Option<MathExpression>,
@@ -181,7 +181,7 @@ pub struct OverUnder {
 /// This can either be rendered as a fraction (with a line separating the numerator and the
 /// denominator) or as a stack with no separating line (setting the `thickness`-parameter to a
 /// value of 0).
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct GeneralizedFraction {
     /// The field above the fraction bar.
     pub numerator: Option<MathExpression>,
@@ -194,7 +194,7 @@ pub struct GeneralizedFraction {
 
 /// An expression consisting of a radical symbol encapsulating the radicand and an optional degree
 /// expression that is displayed above the beginning of the surd.
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct Root {
     /// The expression "inside" of the radical symbol.
     pub radicand: Option<MathExpression>,
