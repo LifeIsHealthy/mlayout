@@ -40,11 +40,11 @@ impl fmt::Display for ParsingError {
         match self.error_type {
             ErrorType::UnknownElement(ref name) => write!(f, "Unknown Element: \"{}\"", name),
             ErrorType::UnexpectedEndOfInput => write!(f, "Unexpected end of input."),
-            ErrorType::WrongEndElement(ref name) => {
-                write!(f,
-                       "Unexpected end element \"<{}>\" without corresponding start element.",
-                       name)
-            }
+            ErrorType::WrongEndElement(ref name) => write!(
+                f,
+                "Unexpected end element \"<{}>\" without corresponding start element.",
+                name
+            ),
             ErrorType::OtherError(ref string) => write!(f, "Error: {}", string),
             ErrorType::XmlError(ref error) => write!(f, "XML error: {}", error),
         }

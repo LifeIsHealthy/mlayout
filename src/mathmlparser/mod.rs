@@ -7,8 +7,9 @@ mod token;
 use std;
 use std::io::BufRead;
 
-use crate::types::{Atom, GeneralizedFraction, Length, LengthUnit, MathExpression, MathItem, OverUnder,
-            Root};
+use crate::types::{
+    Atom, GeneralizedFraction, Length, LengthUnit, MathExpression, MathItem, OverUnder, Root,
+};
 
 pub use quick_xml::error::ResultPos;
 pub use quick_xml::{Element, Event, XmlReader};
@@ -212,6 +213,31 @@ pub fn parse<R: BufRead>(file: R) -> Result<MathExpression> {
     parse_element(&mut parser, root_elem, std::iter::empty(), &mut context)
 }
 
+pub fn build_element<'a, A>(
+    elem: MathmlElement,
+    attributes: A,
+    children: impl Iterator<Item = MathExpression>,
+    context: &mut ParseContext,
+) -> MathExpression
+where
+    A: Iterator<Item = ResultPos<(&'a [u8], &'a [u8])>>,
+{
+    match elem.elem_type {
+        ElementType::LayoutSchema {
+            args: ArgumentRequirements::RequiredArguments(_),
+        } => parse_fixed_schema(children, elem, attributes, context),
+        ElementType::LayoutSchema {
+            args: ArgumentRequirements::ArgumentList,
+        }
+        | ElementType::MathmlRoot => {
+            let mut list = children.collect();
+            operator::process_operators(&mut list, context);
+            parse_list_schema(list, elem)
+        }
+        _ => todo!(),
+    }
+}
+
 fn parse_element<'a, R: BufRead, A>(
     parser: &mut XmlReader<R>,
     elem: MathmlElement,
@@ -229,13 +255,18 @@ where
         | ElementType::MathmlRoot => {
             let mut list = parse_element_list(parser, elem, context)?;
             operator::process_operators(&mut list, context);
-            parse_list_schema(list, elem, attributes, context)
+            Ok(parse_list_schema(list, elem))
         }
         ElementType::LayoutSchema {
             args: ArgumentRequirements::RequiredArguments(_),
         } => {
-            let arguments = parse_fixed_arguments(parser, elem, context);
-            parse_fixed_schema(arguments?, elem, attributes, context)
+            let arguments = parse_fixed_arguments(parser, elem, context)?;
+            Ok(parse_fixed_schema(
+                arguments.into_iter(),
+                elem,
+                attributes,
+                context,
+            ))
         }
         _ => unimplemented!(),
     }
@@ -307,15 +338,7 @@ fn parse_element_list<R: BufRead>(
     Ok(list)
 }
 
-fn parse_list_schema<'a, A>(
-    mut content: Vec<MathExpression>,
-    elem: MathmlElement,
-    _attributes: A,
-    _context: &mut ParseContext,
-) -> Result<MathExpression>
-where
-    A: Iterator<Item = ResultPos<(&'a [u8], &'a [u8])>>,
-{
+fn parse_list_schema<'a>(mut content: Vec<MathExpression>, elem: MathmlElement) -> MathExpression {
     // a mrow with a single element is strictly equivalent to the element
     let content = if content.len() == 1 {
         content.remove(0)
@@ -323,18 +346,18 @@ where
         MathExpression::new(MathItem::List(content), ())
     };
     if elem.elem_type == ElementType::MathmlRoot {
-        return Ok(content);
+        return content;
     }
     match elem.identifier {
-        "mrow" | "math" => Ok(content),
+        "mrow" | "math" => content,
         "msqrt" => {
             let item = Root {
                 radicand: Some(content),
                 ..Default::default()
             };
-            Ok(MathExpression::new(MathItem::Root(item), ()))
+            MathExpression::new(MathItem::Root(item), ())
         }
-        _ => Ok(content),
+        _ => content,
     }
 }
 
@@ -373,7 +396,7 @@ fn construct_under_over<'a>(
     over: Option<MathExpression>,
     attributes: impl Iterator<Item = ResultPos<(&'a [u8], &'a [u8])>>,
     context: &mut ParseContext,
-) -> Result<MathItem> {
+) -> MathItem {
     let over = over.map(|x| guess_if_operator_with_form(x, Form::Postfix, context));
     let under = under.map(|x| guess_if_operator_with_form(x, Form::Postfix, context));
 
@@ -389,7 +412,7 @@ fn construct_under_over<'a>(
 
     // now check the accent attributes of the mover/munder element.
     for attrib in attributes {
-        let (ident, value) = attrib?;
+        let (ident, value) = attrib.unwrap();
         if ident == b"accent" {
             over_is_accent = value.parse_xml().unwrap_or(false);
         }
@@ -399,47 +422,48 @@ fn construct_under_over<'a>(
     }
 
     let item = OverUnder {
-        nucleus: nucleus,
-        under: under,
-        over: over,
+        nucleus,
+        under,
+        over,
         over_is_accent,
         under_is_accent,
         ..Default::default()
     };
 
-    Ok(MathItem::OverUnder(item))
+    MathItem::OverUnder(item)
 }
 
 fn parse_fixed_schema<'a, A>(
-    mut content: Vec<MathExpression>,
+    mut content: impl Iterator<Item = MathExpression>,
     elem: MathmlElement,
     attributes: A,
     context: &mut ParseContext,
-) -> Result<MathExpression>
+) -> MathExpression
 where
     A: Iterator<Item = ResultPos<(&'a [u8], &'a [u8])>>,
 {
+    let mut next = || Some(content.next().unwrap());
     let result = match elem.identifier {
         "mfrac" => {
             let frac = GeneralizedFraction {
-                numerator: Some(content.remove(0)),
-                denominator: Some(content.remove(0)),
+                numerator: next(),
+                denominator: next(),
                 thickness: None,
             };
             MathItem::GeneralizedFraction(frac)
         }
         "mroot" => {
             let root = Root {
-                radicand: Some(content.remove(0)),
-                degree: Some(content.remove(0)),
+                radicand: next(),
+                degree: next(),
             };
             MathItem::Root(root)
         }
         "msub" => {
             let atom = Atom {
-                nucleus: Some(content.remove(0)),
+                nucleus: next(),
                 bottom_right: Some(guess_if_operator_with_form(
-                    content.remove(0),
+                    next().unwrap(),
                     Form::Postfix,
                     context,
                 )),
@@ -449,9 +473,9 @@ where
         }
         "msup" => {
             let atom = Atom {
-                nucleus: Some(content.remove(0)),
+                nucleus: next(),
                 top_right: Some(guess_if_operator_with_form(
-                    content.remove(0),
+                    next().unwrap(),
                     Form::Postfix,
                     context,
                 )),
@@ -461,14 +485,14 @@ where
         }
         "msubsup" => {
             let atom = Atom {
-                nucleus: Some(content.remove(0)),
+                nucleus: next(),
                 bottom_right: Some(guess_if_operator_with_form(
-                    content.remove(0),
+                    next().unwrap(),
                     Form::Postfix,
                     context,
                 )),
                 top_right: Some(guess_if_operator_with_form(
-                    content.remove(0),
+                    next().unwrap(),
                     Form::Postfix,
                     context,
                 )),
@@ -477,20 +501,20 @@ where
             MathItem::Atom(atom)
         }
         "mover" => {
-            let nuc = Some(content.remove(0));
-            let over = Some(content.remove(0));
-            construct_under_over(nuc, None, over, attributes, context)?
+            let nuc = next();
+            let over = next();
+            construct_under_over(nuc, None, over, attributes, context)
         }
         "munder" => {
-            let nuc = Some(content.remove(0));
-            let under = Some(content.remove(0));
-            construct_under_over(nuc, under, None, attributes, context)?
+            let nuc = next();
+            let under = next();
+            construct_under_over(nuc, under, None, attributes, context)
         }
         "munderover" => {
-            let nuc = Some(content.remove(0));
-            let under = Some(content.remove(0));
-            let over = Some(content.remove(0));
-            construct_under_over(nuc, under, over, attributes, context)?
+            let nuc = next();
+            let under = next();
+            let over = next();
+            construct_under_over(nuc, under, over, attributes, context)
         }
         _ => unreachable!(),
     };
@@ -511,7 +535,7 @@ where
     };
     let index = context.mathml_info.put(info);
     let expr = MathExpression::new(result, index);
-    Ok(expr)
+    expr
 }
 
 impl FromXmlAttribute for Length {
@@ -558,7 +582,8 @@ mod tests {
 
     fn find_operator(expr: &MathExpression) -> &MathExpression {
         match *expr.item {
-            MathItem::List(ref list) => list.iter()
+            MathItem::List(ref list) => list
+                .iter()
                 .filter(|&expr| {
                     if let MathItem::Operator(_) = *expr.item {
                         true

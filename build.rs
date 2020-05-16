@@ -1,6 +1,4 @@
-extern crate rustc_serialize;
-
-use rustc_serialize::json::Json;
+use serde_json::Value;
 
 use std::env;
 use std::fs::File;
@@ -17,13 +15,13 @@ fn main() {
     let dest_path = Path::new(&out_dir).join("entities.rs");
 
     let json = std::str::from_utf8(include_bytes!("resources/htmlmathml.json")).unwrap();
-    let data = Json::from_str(json).unwrap();
+    let data: Value = serde_json::from_str(json).unwrap();
     let data = data.as_object().unwrap();
     let map = data["characters"].as_object().unwrap();
 
     let mut entities = Vec::new();
     for (key, value) in map {
-        let value = value.as_string().unwrap();
+        let value = value.as_str().unwrap();
         let new_entity = EntityData {
             name: key,
             character: &value,
