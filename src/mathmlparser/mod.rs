@@ -164,7 +164,7 @@ impl ParseContext {
         &self,
         expr: T,
     ) -> Option<&MathmlInfo> {
-        if let Some(index) = expr.into().map(|x| x.downcast_user_data_ref()) {
+        if let Some(index) = expr.into().map(|x| x.user_data) {
             self.mathml_info.get(&index)
         } else {
             None
@@ -175,7 +175,7 @@ impl ParseContext {
         &mut self,
         expr: T,
     ) -> Option<&mut MathmlInfo> {
-        if let Some(index) = expr.into().map(|x| x.downcast_user_data_ref()) {
+        if let Some(index) = expr.into().map(|x| x.user_data) {
             self.mathml_info.get_mut(&index)
         } else {
             None
