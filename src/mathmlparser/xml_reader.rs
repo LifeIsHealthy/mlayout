@@ -36,7 +36,6 @@ where
     match elem.elem_type {
         ElementType::TokenElement => {
             let fields = parse_token_contents(parser, elem)?;
-
             Ok(token::build_token(fields, elem, attrs, context, user_data)?)
         }
         ElementType::LayoutSchema {

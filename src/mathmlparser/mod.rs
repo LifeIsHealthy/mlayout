@@ -236,7 +236,7 @@ pub fn build_element<'a>(
             });
             let mut list = expressions.collect();
             operator::process_operators(&mut list, context);
-            parse_list_schema(list, elem)
+            parse_list_schema(list, elem, user_data)
         }
         ElementType::TokenElement => {
             let fields = children.filter_map(|child| match child {
@@ -249,12 +249,12 @@ pub fn build_element<'a>(
     }
 }
 
-fn parse_list_schema<'a>(mut content: Vec<MathExpression>, elem: MathmlElement) -> MathExpression {
+fn parse_list_schema<'a>(mut content: Vec<MathExpression>, elem: MathmlElement, user_data: u64) -> MathExpression {
     // a mrow with a single element is strictly equivalent to the element
     let content = if content.len() == 1 {
         content.remove(0)
     } else {
-        MathExpression::new(MathItem::List(content), 0)
+        MathExpression::new(MathItem::List(content), user_data)
     };
     if elem.elem_type == ElementType::MathmlRoot {
         return content;
@@ -266,7 +266,7 @@ fn parse_list_schema<'a>(mut content: Vec<MathExpression>, elem: MathmlElement) 
                 radicand: Some(content),
                 ..Default::default()
             };
-            MathExpression::new(MathItem::Root(item), 0)
+            MathExpression::new(MathItem::Root(item), user_data)
         }
         _ => content,
     }

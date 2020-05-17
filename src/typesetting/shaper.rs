@@ -5,7 +5,6 @@ use std;
 use std::cell::RefCell;
 use std::cmp::min;
 
-
 pub use self::harfbuzz_rs::Position;
 use self::harfbuzz_rs::{
     shape, Blob, Feature, Font, GlyphBuffer, GlyphInfo, GlyphPosition, HarfbuzzObject, Shared, Tag,
@@ -77,7 +76,7 @@ pub enum MathConstant {
 }
 
 /// A structure that describes an individual glyph in a font.
-#[derive(Default, Debug, Copy, Clone, PartialEq, Eq)]
+#[derive(Default, Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub struct MathGlyph {
     /// The font-specific glyph code
     pub glyph_code: u32,
@@ -360,7 +359,7 @@ fn point_with_offset(offset: i32, horizontal: bool) -> Vector<i32> {
 
 impl<'a> MathShaper for HarfbuzzShaper<'a> {
     fn math_constant(&self, c: MathConstant) -> i32 {
-        unsafe { hb::hb_ot_math_get_constant(self.font.as_raw(), std::mem::transmute(c)) }
+        unsafe { hb::hb_ot_math_get_constant(self.font.as_raw(), c as _) }
     }
 
     fn get_math_table(&self) -> &[u8] {
@@ -733,7 +732,6 @@ fn try_assembly<'a>(
 
 #[cfg(test)]
 mod test {
-    
 
     #[test]
     fn test_assembly() {}

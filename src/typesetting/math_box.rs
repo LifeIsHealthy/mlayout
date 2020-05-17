@@ -1,7 +1,7 @@
-use std::cmp::{max, min};
-use std::ops::{Add, Div, Mul, Sub};
 use crate::types::PercentValue;
+use std::cmp::{max, min};
 use std::default::Default;
+use std::ops::{Add, Div, Mul, Sub};
 
 use crate::typesetting::shaper::MathGlyph;
 
@@ -63,7 +63,7 @@ impl Mul<PercentValue> for Vector<i32> {
 
 /// Basic Extents of ink inside boxes
 // TODO: Image for documentation
-#[derive(Debug, Default, PartialEq, Eq, Clone, Copy)]
+#[derive(Debug, Default, PartialEq, Eq, Clone, Copy, Hash)]
 pub struct Extents<T> {
     /// Horizontal offset from the left edge.
     pub left_side_bearing: T,
@@ -372,7 +372,8 @@ impl MathBoxMetrics for MathBoxContent {
                         item.origin.x + item.extents().left_side_bearing + item.extents().width
                     })
                     .max()
-                    .unwrap_or(0) - left_side_bearing;
+                    .unwrap_or(0)
+                    - left_side_bearing;
                 Extents {
                     left_side_bearing: left_side_bearing,
                     width: width,
