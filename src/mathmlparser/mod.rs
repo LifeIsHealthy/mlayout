@@ -10,6 +10,7 @@ mod xml_reader;
 pub use xml_reader::parse;
 
 use std;
+use std::collections::BTreeMap;
 
 use crate::{
     types::{
@@ -17,8 +18,6 @@ use crate::{
     },
     Field,
 };
-
-use stash::Stash;
 
 use self::operator::{guess_if_operator_with_form, Form};
 
@@ -157,7 +156,7 @@ pub fn match_math_element(identifier: &[u8]) -> Option<MathmlElement> {
 
 #[derive(Clone, Debug, Default)]
 pub struct ParseContext {
-    pub mathml_info: Stash<MathmlInfo>,
+    pub mathml_info: BTreeMap<u64, MathmlInfo>,
 }
 
 impl ParseContext {
@@ -166,7 +165,7 @@ impl ParseContext {
         expr: T,
     ) -> Option<&MathmlInfo> {
         if let Some(index) = expr.into().map(|x| x.downcast_user_data_ref()) {
-            self.mathml_info.get(index as usize)
+            self.mathml_info.get(&index)
         } else {
             None
         }
@@ -177,7 +176,7 @@ impl ParseContext {
         expr: T,
     ) -> Option<&mut MathmlInfo> {
         if let Some(index) = expr.into().map(|x| x.downcast_user_data_ref()) {
-            self.mathml_info.get_mut(index as usize)
+            self.mathml_info.get_mut(&index)
         } else {
             None
         }
@@ -214,6 +213,8 @@ pub fn build_element<'a>(
     attributes: impl Iterator<Item = (&'a str, &'a str)>,
     children: impl Iterator<Item = Child>,
     context: &mut ParseContext,
+    // You have to ensure that this key is unique
+    user_data: u64,
 ) -> MathExpression {
     match elem.elem_type {
         ElementType::LayoutSchema {
@@ -223,7 +224,7 @@ pub fn build_element<'a>(
                 Child::Expression(expr) => Some(expr),
                 _ => None,
             });
-            parse_fixed_schema(expressions, elem, attributes, context)
+            parse_fixed_schema(expressions, elem, attributes, context, user_data)
         }
         ElementType::LayoutSchema {
             args: ArgumentRequirements::ArgumentList,
@@ -242,7 +243,7 @@ pub fn build_element<'a>(
                 Child::Field(field) => Some(field),
                 _ => None,
             });
-            token::build_token(fields, elem, attributes, context).unwrap()
+            token::build_token(fields, elem, attributes, context, user_data).unwrap()
         }
         _ => todo!(),
     }
@@ -319,6 +320,7 @@ fn parse_fixed_schema<'a, A>(
     elem: MathmlElement,
     attributes: A,
     context: &mut ParseContext,
+    user_data: u64,
 ) -> MathExpression
 where
     A: Iterator<Item = (&'a str, &'a str)>,
@@ -414,8 +416,8 @@ where
         },
         ..Default::default()
     };
-    let index = context.mathml_info.put(info);
-    let expr = MathExpression::new(result, index as u64);
+    context.mathml_info.insert(user_data, info);
+    let expr = MathExpression::new(result, user_data);
     expr
 }
 

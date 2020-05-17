@@ -12,6 +12,8 @@ pub type GlyphCode = u32;
 #[derive(Debug, Default, Clone)]
 pub struct MathExpression {
     pub(crate) item: Box<MathItem>,
+    /// An arbitrary number provided by the user that will be passed through the layout process to
+    /// the generated math boxes.
     pub user_data: u64,
 }
 

@@ -3,7 +3,6 @@
 
 #[macro_use]
 extern crate bitflags;
-extern crate stash;
 
 mod types;
 mod typesetting;

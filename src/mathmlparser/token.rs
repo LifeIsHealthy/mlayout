@@ -214,6 +214,7 @@ pub fn build_token<'a>(
     elem: MathmlElement,
     attributes: impl Iterator<Item = (&'a str, &'a str)>,
     context: &mut ParseContext,
+    user_data: u64
 ) -> Result<MathExpression, ParsingError> {
     let mut token_style = TokenStyle::default();
     let mut op_attrs = if elem.identifier == "mo" {
@@ -261,12 +262,12 @@ pub fn build_token<'a>(
         MathExpression::new(MathItem::List(list), 0)
     };
 
-    let index = context.mathml_info.put(MathmlInfo {
+    context.mathml_info.insert(user_data, MathmlInfo {
         operator_attrs: op_attrs,
         ..Default::default()
     });
 
-    item.set_user_data(index as u64);
+    item.set_user_data(user_data);
     Ok(item)
 }
 
@@ -277,7 +278,6 @@ mod tests {
     use crate::mathmlparser::{match_math_element, xml_reader::parse_token_contents};
 
     use quick_xml::{Event, XmlReader};
-    use stash::Stash;
 
     fn test_operator_flag_parse(attr_name: &str, flag: operator::Flags) {
         let xml = format!("<mo {}=\"true\">a</mo>", attr_name);
@@ -295,10 +295,9 @@ mod tests {
             })
         });
 
-        let info = Stash::new();
-        let mut context = ParseContext { mathml_info: info };
+        let mut context = ParseContext::default();
         let fields = parse_token_contents(&mut parser, mathml_elem).unwrap();
-        let expr = build_token(fields, mathml_elem, attrs, &mut context).unwrap();
+        let expr = build_token(fields, mathml_elem, attrs, &mut context, 0).unwrap();
 
         let operator_attrs = context
             .info_for_expr(&expr)

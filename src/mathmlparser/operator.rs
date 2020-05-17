@@ -101,7 +101,7 @@ pub fn process_operators(list: &mut Vec<MathExpression>, context: &mut ParseCont
             .map(|info| info.is_operator())
             .unwrap_or(false)
         {
-            // current element is not an operator, nothing to do
+            // current expression is not an operator, nothing to do
             continue;
         }
         if len > 1 {
@@ -253,29 +253,13 @@ fn make_operator(expr: &mut MathExpression, context: &mut ParseContext) {
             _ => unreachable!(),
         };
         let new_elem = Operator {
-            stretch_constraints: stretch_constraints,
-            field: field,
+            stretch_constraints,
+            field,
             is_large_op: flags.contains(Flags::LARGEOP),
             leading_space: operator_attrs.lspace.expect("operator has no lspace"),
             trailing_space: operator_attrs.rspace.expect("operator has no rspace"),
             ..Default::default()
         };
         core_expr.item = Box::new(MathItem::Operator(new_elem));
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use crate::mathmlparser::ParseContext;
-
-    use stash::Stash;
-
-    #[test]
-    fn test_set_default_form() {
-        let info = Stash::new();
-        let _context = ParseContext { mathml_info: info };
-        let _context = ParseContext {
-            mathml_info: Stash::new(),
-        };
     }
 }

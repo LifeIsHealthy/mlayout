@@ -32,11 +32,12 @@ where
         res.ok()
             .and_then(|(a, b)| Some((std::str::from_utf8(a).ok()?, std::str::from_utf8(b).ok()?)))
     });
+    let user_data = context.mathml_info.len() as u64;
     match elem.elem_type {
         ElementType::TokenElement => {
             let fields = parse_token_contents(parser, elem)?;
 
-            Ok(token::build_token(fields, elem, attrs, context)?)
+            Ok(token::build_token(fields, elem, attrs, context, user_data)?)
         }
         ElementType::LayoutSchema {
             args: ArgumentRequirements::ArgumentList,
@@ -55,6 +56,7 @@ where
                 elem,
                 attrs,
                 context,
+                user_data,
             ))
         }
         _ => unimplemented!(),
