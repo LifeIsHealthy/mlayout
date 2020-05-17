@@ -44,7 +44,7 @@ where
         | ElementType::MathmlRoot => {
             let mut list = parse_element_list(parser, elem, context)?;
             operator::process_operators(&mut list, context);
-            Ok(parse_list_schema(list, elem))
+            Ok(parse_list_schema(list, elem, user_data))
         }
         ElementType::LayoutSchema {
             args: ArgumentRequirements::RequiredArguments(_),
