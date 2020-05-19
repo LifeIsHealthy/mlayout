@@ -214,7 +214,7 @@ pub fn build_token<'a>(
     elem: MathmlElement,
     attributes: impl Iterator<Item = (&'a str, &'a str)>,
     context: &mut ParseContext,
-    user_data: u64
+    user_data: u64,
 ) -> Result<MathExpression, ParsingError> {
     let mut token_style = TokenStyle::default();
     let mut op_attrs = if elem.identifier == "mo" {
@@ -230,43 +230,64 @@ pub fn build_token<'a>(
         .fold((), |_, _| {});
 
     if let Some(width) = space {
-        let item = MathExpression::new(MathItem::Space(MathSpace::horizontal_space(width)), user_data);
+        let item = MathExpression::new(
+            MathItem::Space(MathSpace::horizontal_space(width)),
+            user_data,
+        );
+        context.mathml_info.insert(
+            user_data,
+            MathmlInfo {
+                operator_attrs: op_attrs,
+                ..Default::default()
+            },
+        );
         return Ok(item);
     }
 
-    let mut fields = fields.map(|field| match field {
-        Field::Unicode(string) => {
-            let string = string.unescape().map(|string| {
-                string
-                    .adapt_to_family(token_style.math_variant)
-                    .replace_anomalous_characters(elem)
-            })?;
-            Ok(Field::Unicode(string))
+    let fields = fields.map(|field| -> Result<Field, ParsingError> {
+        match field {
+            Field::Unicode(string) => {
+                let string = string.unescape().map(|string| {
+                    string
+                        .adapt_to_family(token_style.math_variant)
+                        .replace_anomalous_characters(elem)
+                })?;
+                Ok(Field::Unicode(string))
+            }
+            Field::Glyph(glyph) => Ok(Field::Glyph(glyph)),
+            Field::Empty => Ok(Field::Empty),
         }
-        Field::Glyph(glyph) => Ok(Field::Glyph(glyph)),
-        Field::Empty => Ok(Field::Empty),
     });
 
-    let mut item = if fields.size_hint().1 == Some(1) {
-        let field = fields.next().unwrap()?;
-        if let Some(ref mut op_attrs) = op_attrs {
-            op_attrs.character = try_extract_char(&field);
+    let mut list = vec![];
+    let mut first_field_char = None;
+    for (field_num, field) in fields.enumerate() {
+        let field = field?;
+        if field_num == 0 {
+            first_field_char = try_extract_char(&field);
         }
-        MathExpression::new(MathItem::Field(field), user_data)
+        let expr = MathExpression::new(MathItem::Field(field), user_data);
+        list.push(expr);
+    }
+
+    let expr = if list.len() == 1 {
+        if let Some(ref mut op_attrs) = op_attrs {
+            op_attrs.character = first_field_char;
+        }
+        list.pop().unwrap()
     } else {
-        let list = fields
-            .map(|field: Result<_, ParsingError>| {
-                Ok(MathExpression::new(MathItem::Field(field?), user_data))
-            })
-            .collect::<Result<Vec<_>, ParsingError>>()?;
         MathExpression::new(MathItem::List(list), user_data)
     };
 
-    context.mathml_info.insert(user_data, MathmlInfo {
-        operator_attrs: op_attrs,
-        ..Default::default()
-    });
-    Ok(item)
+    context.mathml_info.insert(
+        user_data,
+        MathmlInfo {
+            operator_attrs: op_attrs,
+            ..Default::default()
+        },
+    );
+
+    Ok(expr)
 }
 
 #[cfg(test)]

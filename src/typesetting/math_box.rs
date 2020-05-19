@@ -77,10 +77,10 @@ pub struct Extents<T> {
 impl Extents<i32> {
     pub fn new(left_side_bearing: i32, width: i32, ascent: i32, descent: i32) -> Self {
         Extents {
-            left_side_bearing: left_side_bearing,
-            width: width,
-            ascent: ascent,
-            descent: descent,
+            left_side_bearing,
+            width,
+            ascent,
+            descent,
         }
     }
     /// Returns the height = ascent + descent of the box

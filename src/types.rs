@@ -14,7 +14,7 @@ pub struct MathExpression {
     pub(crate) item: Box<MathItem>,
     /// An arbitrary number provided by the user that will be passed through the layout process to
     /// the generated math boxes.
-    pub user_data: u64,
+    user_data: u64,
 }
 
 impl MathExpression {
@@ -25,11 +25,11 @@ impl MathExpression {
         }
     }
 
-    pub fn set_user_data(&mut self, user_data: u64) {
-        self.user_data = user_data;
-    }
+    // pub fn set_user_data(&mut self, user_data: u64) {
+    //     self.user_data = user_data;
+    // }
 
-    pub fn downcast_user_data_ref(&self) -> u64 {
+    pub fn get_user_data(&self) -> u64 {
         self.user_data
     }
 }

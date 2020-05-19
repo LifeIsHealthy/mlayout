@@ -27,6 +27,17 @@ pub struct MathmlElement {
     elem_type: ElementType,
 }
 
+impl Default for MathmlElement {
+    fn default() -> Self {
+        MathmlElement {
+            identifier: "mrow",
+            elem_type: ElementType::LayoutSchema {
+                args: ArgumentRequirements::ArgumentList,
+            },
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum ElementType {
     TokenElement,
@@ -164,7 +175,7 @@ impl ParseContext {
         &self,
         expr: T,
     ) -> Option<&MathmlInfo> {
-        if let Some(index) = expr.into().map(|x| x.user_data) {
+        if let Some(index) = expr.into().map(|x| x.get_user_data()) {
             self.mathml_info.get(&index)
         } else {
             None
@@ -175,7 +186,7 @@ impl ParseContext {
         &mut self,
         expr: T,
     ) -> Option<&mut MathmlInfo> {
-        if let Some(index) = expr.into().map(|x| x.user_data) {
+        if let Some(index) = expr.into().map(|x| x.get_user_data()) {
             self.mathml_info.get_mut(&index)
         } else {
             None
@@ -249,7 +260,11 @@ pub fn build_element<'a>(
     }
 }
 
-fn parse_list_schema<'a>(mut content: Vec<MathExpression>, elem: MathmlElement, user_data: u64) -> MathExpression {
+fn parse_list_schema<'a>(
+    mut content: Vec<MathExpression>,
+    elem: MathmlElement,
+    user_data: u64,
+) -> MathExpression {
     // a mrow with a single element is strictly equivalent to the element
     let content = if content.len() == 1 {
         content.remove(0)
