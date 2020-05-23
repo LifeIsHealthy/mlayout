@@ -624,7 +624,7 @@ impl MathLayout for Root {
         let surd = options.shaper.shape("√", options.style, options.user_data);
         let mut surd = surd
             .first_glyph()
-            .and_then(|glyph| {
+            .and_then(|(glyph, _scale)| {
                 if options.shaper.is_stretchable(glyph.glyph_code, false) {
                     Some(options.shaper.stretch_glyph(
                         glyph.glyph_code,
@@ -714,7 +714,7 @@ impl Operator {
                     options.user_data,
                 );
                 let first_glyph = match shape_result.first_glyph() {
-                    Some(glyph) => glyph,
+                    Some((glyph, _scale)) => glyph,
                     None => return MathBox::empty(Extents::default(), options.user_data),
                 };
 

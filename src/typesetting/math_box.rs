@@ -265,43 +265,60 @@ impl MathBoxMetrics for Metrics {
 
 #[derive(Debug)]
 pub enum Drawable {
-    Glyphs(Vec<MathGlyph>),
-    Line { vector: Vector<i32>, thickness: u32 },
+    Glyphs {
+        glyphs: Vec<MathGlyph>,
+        /// The size at which these glyphs should be rendered relative to their normal size.
+        ///
+        /// This is used to render subscripts and superscripts in a smaller size.
+        scale: PercentValue,
+    },
+    Line {
+        vector: Vector<i32>,
+        thickness: u32,
+    },
 }
 
 impl MathBoxMetrics for Drawable {
     fn advance_width(&self) -> i32 {
         match self {
-            Drawable::Glyphs(glyphs) => glyphs.iter().map(|g| g.advance_width).sum(),
+            Drawable::Glyphs { glyphs, scale } => {
+                glyphs.iter().map(|g| g.advance_width).sum::<i32>() * *scale
+            }
             Drawable::Line { ref vector, .. } => vector.x,
         }
     }
     fn extents(&self) -> Extents<i32> {
-        match self {
-            Drawable::Glyphs(glyphs) => {
+        match *self {
+            Drawable::Glyphs { ref glyphs, scale } => {
                 let max_ascent = glyphs
                     .iter()
-                    .map(|item| -item.offset.y * item.scale + item.extents().ascent)
+                    .map(|item| -item.offset.y + item.extents().ascent)
                     .max()
-                    .unwrap_or_default();
+                    .unwrap_or_default()
+                    * scale;
                 let max_descent = glyphs
                     .iter()
-                    .map(|item| item.offset.y * item.scale + item.extents().descent)
+                    .map(|item| item.offset.y + item.extents().descent)
                     .max()
-                    .unwrap_or_default();
+                    .unwrap_or_default()
+                    * scale;
                 let left_side_bearing = glyphs
                     .first()
                     .map(|x| x.extents().left_side_bearing)
-                    .unwrap_or(0);
-                let width = self.advance_width()
-                    - glyphs
-                        .last()
-                        .map(|item| {
-                            item.advance_width()
-                                - item.extents().width
-                                - item.extents().left_side_bearing
-                        })
-                        .unwrap_or(0);
+                    .unwrap_or(0)
+                    * scale;
+
+                let right_side_bearing = glyphs
+                    .last()
+                    .map(|item| {
+                        item.advance_width()
+                            - item.extents().width
+                            - item.extents().left_side_bearing
+                    })
+                    .unwrap_or(0)
+                    * scale;
+
+                let width = self.advance_width() - right_side_bearing - left_side_bearing;
                 Extents {
                     left_side_bearing,
                     width,
@@ -320,9 +337,9 @@ impl MathBoxMetrics for Drawable {
 
     fn italic_correction(&self) -> i32 {
         match self {
-            Drawable::Glyphs(glyphs) => glyphs
+            Drawable::Glyphs { glyphs, scale } => glyphs
                 .last()
-                .map(|g| g.italic_correction)
+                .map(|g| g.italic_correction * *scale)
                 .unwrap_or_default(),
             Drawable::Line { .. } => 0,
         }
@@ -330,7 +347,9 @@ impl MathBoxMetrics for Drawable {
 
     fn top_accent_attachment(&self) -> i32 {
         let value = match self {
-            Drawable::Glyphs(glyphs) if glyphs.len() == 1 => glyphs[0].top_accent_attachment(),
+            Drawable::Glyphs { glyphs, scale } if glyphs.len() == 1 => {
+                glyphs[0].top_accent_attachment() * *scale
+            }
             _ => 0,
         };
         if value == 0 {
@@ -476,9 +495,9 @@ impl MathBox {
         math_box
     }
 
-    pub fn with_glyphs(glyphs: Vec<MathGlyph>, user_data: u64) -> Self {
+    pub fn with_glyphs(glyphs: Vec<MathGlyph>, scale: PercentValue, user_data: u64) -> Self {
         MathBox::with_content(
-            MathBoxContent::Drawable(Drawable::Glyphs(glyphs)),
+            MathBoxContent::Drawable(Drawable::Glyphs { glyphs, scale }),
             user_data,
         )
     }
@@ -499,17 +518,21 @@ impl MathBox {
     }
 
     /// recursive search for a glyph at the leftmost position
-    pub fn first_glyph(&self) -> Option<&MathGlyph> {
-        match *self.content() {
-            MathBoxContent::Drawable(Drawable::Glyphs(ref glyphs)) => glyphs.first(),
-            MathBoxContent::Boxes(ref boxes) => boxes.first().and_then(|node| node.first_glyph()),
+    pub fn first_glyph(&self) -> Option<(MathGlyph, PercentValue)> {
+        match self.content() {
+            MathBoxContent::Drawable(Drawable::Glyphs { glyphs, scale }) => {
+                glyphs.first().map(|&g| (g, *scale))
+            }
+            MathBoxContent::Boxes(boxes) => boxes.first().and_then(|node| node.first_glyph()),
             _ => None,
         }
     }
 
-    pub fn last_glyph(&self) -> Option<&MathGlyph> {
-        match *self.content() {
-            MathBoxContent::Drawable(Drawable::Glyphs(ref glyphs)) => glyphs.first(),
+    pub fn last_glyph(&self) -> Option<(MathGlyph, PercentValue)> {
+        match self.content() {
+            MathBoxContent::Drawable(Drawable::Glyphs { glyphs, scale }) => {
+                glyphs.last().map(|g| (*g, *scale))
+            }
             MathBoxContent::Boxes(ref boxes) => boxes.last().and_then(|node| node.last_glyph()),
             _ => None,
         }

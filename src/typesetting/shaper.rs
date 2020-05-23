@@ -92,27 +92,23 @@ pub struct MathGlyph {
     pub italic_correction: i32,
     /// The x-coordinate where a top accent should be attached.
     pub top_accent_attachment: i32,
-    /// The size at which this glyph should be rendered relative to the other glyphs.
-    ///
-    /// This is used to render subscripts and superscripts in a smaller size.
-    pub scale: PercentValue,
 }
 
 impl MathBoxMetrics for MathGlyph {
     fn advance_width(&self) -> i32 {
-        self.advance_width * self.scale
+        self.advance_width
     }
 
     fn extents(&self) -> Extents<i32> {
-        self.extents * self.scale
+        self.extents
     }
 
     fn italic_correction(&self) -> i32 {
-        self.italic_correction * self.scale
+        self.italic_correction
     }
 
     fn top_accent_attachment(&self) -> i32 {
-        self.top_accent_attachment * self.scale
+        self.top_accent_attachment
     }
 }
 
@@ -156,13 +152,12 @@ pub struct HarfbuzzGlyph<'a> {
     pub advance: Vector<i32>,
     pub glyph: u32,
     pub cluster: u32,
-    pub scale: PercentValue,
     shaper: &'a HarfbuzzShaper<'a>,
 }
 
 impl<'a> MathBoxMetrics for HarfbuzzGlyph<'a> {
     fn advance_width(&self) -> i32 {
-        self.advance.x * self.scale
+        self.advance.x
     }
 
     fn extents(&self) -> Extents<i32> {
@@ -176,20 +171,18 @@ impl<'a> MathBoxMetrics for HarfbuzzGlyph<'a> {
             width: glyph_extents.width,
             ascent: glyph_extents.y_bearing,
             descent: -(glyph_extents.height + glyph_extents.y_bearing),
-        } * self.scale
+        }
     }
 
     fn italic_correction(&self) -> i32 {
         unsafe {
             hb::hb_ot_math_get_glyph_italics_correction(self.shaper.font.as_raw(), self.glyph)
-                * self.scale
         }
     }
 
     fn top_accent_attachment(&self) -> i32 {
         unsafe {
             hb::hb_ot_math_get_glyph_top_accent_attachment(self.shaper.font.as_raw(), self.glyph)
-                * self.scale
         }
     }
 }
@@ -198,14 +191,14 @@ impl<'a> HarfbuzzGlyph<'a> {
     fn origin(&self) -> Vector<i32> {
         let mut origin = self.origin;
         origin.y = -origin.y;
-        origin * self.scale
+        origin
     }
 
     fn new(
         shaper: &'a HarfbuzzShaper<'a>,
         pos: GlyphPosition,
         info: GlyphInfo,
-        style: LayoutStyle,
+        _style: LayoutStyle,
     ) -> Self {
         let origin = Vector {
             x: pos.x_offset,
@@ -221,7 +214,6 @@ impl<'a> HarfbuzzGlyph<'a> {
             advance: advance,
             glyph: info.codepoint,
             cluster: info.cluster,
-            scale: shaper.scale_factor(style),
         }
     }
 }
@@ -236,7 +228,6 @@ impl<'a> From<HarfbuzzGlyph<'a>> for MathGlyph {
             extents: hbglyph.extents(),
             italic_correction: hbglyph.italic_correction(),
             top_accent_attachment: hbglyph.top_accent_attachment(),
-            scale: hbglyph.scale,
         }
     }
 }
@@ -308,7 +299,7 @@ impl<'a> HarfbuzzShaper<'a> {
         *self.buffer.borrow_mut() = Some(buffer);
         let math_box = self.do_shape(&self.no_cmap_font, style, user_data);
         match math_box.content {
-            MathBoxContent::Drawable(Drawable::Glyphs(glyphs)) => glyphs,
+            MathBoxContent::Drawable(Drawable::Glyphs { glyphs, .. }) => glyphs,
             _ => unreachable!(),
         }
     }
@@ -333,7 +324,7 @@ impl<'a> HarfbuzzShaper<'a> {
         let glyph_buffer = shape(font, buffer.set_script(Tag::from(b"Math")), &features);
         let math_box = {
             let shaped_glyphs = self.layout_boxes(&glyph_buffer, style);
-            MathBox::with_glyphs(shaped_glyphs.collect(), user_data)
+            MathBox::with_glyphs(shaped_glyphs.collect(), self.scale_factor(style), user_data)
         };
         *self.buffer.borrow_mut() = Some(glyph_buffer.clear());
 
@@ -422,7 +413,11 @@ impl<'a> MathShaper for HarfbuzzShaper<'a> {
             .or_else(|| try_variant(self, glyph, horizontal, target_size, style, user_data))
             .or_else(|| try_assembly(self, glyph, horizontal, target_size, style, user_data))
             .unwrap_or_else(|| {
-                MathBox::with_glyphs(self.glyph_from_index(glyph, style, user_data), user_data)
+                MathBox::with_glyphs(
+                    self.glyph_from_index(glyph, style, user_data),
+                    self.scale_factor(style),
+                    user_data,
+                )
             });
 
         // let result = {
@@ -452,8 +447,8 @@ impl<'a> MathShaper for HarfbuzzShaper<'a> {
                 self.font.as_raw(),
                 glyph.glyph_code,
                 std::mem::transmute(corner),
-                correction_height / glyph.scale,
-            ) * glyph.scale
+                correction_height,
+            )
         }
     }
 }
@@ -475,7 +470,11 @@ fn try_base_glyph<'a>(
     };
 
     if advance >= target_size as i32 {
-        Some(MathBox::with_glyphs(vec![glyph], user_data))
+        Some(MathBox::with_glyphs(
+            vec![glyph],
+            shaper.scale_factor(style),
+            user_data,
+        ))
     } else {
         None
     }
@@ -568,7 +567,11 @@ fn try_variant<'a>(
     };
 
     let glyphs = shaper.glyph_from_index(variant.glyph, style, user_data);
-    Some(MathBox::with_glyphs(glyphs, user_data))
+    Some(MathBox::with_glyphs(
+        glyphs,
+        shaper.scale_factor(style),
+        user_data,
+    ))
 }
 
 struct AssemblyIterator<'a> {
@@ -727,7 +730,7 @@ fn try_assembly<'a>(
             let origin = point_with_offset(*current_offset, horizontal);
             let glyphs = shaper.glyph_from_index(part.glyph, style, user_data);
 
-            let mut math_box = MathBox::with_glyphs(glyphs, user_data);
+            let mut math_box = MathBox::with_glyphs(glyphs, shaper.scale_factor(style), user_data);
             math_box.origin = origin;
 
             if horizontal {

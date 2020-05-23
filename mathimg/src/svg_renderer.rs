@@ -160,7 +160,7 @@ fn draw_filled<'a, T: Node>(doc: &mut T, math_box: &MathBox) {
 }
 
 fn draw_ink_rect<'a, T: Node>(group: &mut T, math_box: &MathBox) {
-    if let MathBoxContent::Drawable(Drawable::Glyph(_)) = *math_box.content() {
+    if let MathBoxContent::Drawable(Drawable::Glyphs { .. }) = *math_box.content() {
         let ink_rect = Rectangle::new()
             .set(
                 "x",
@@ -175,7 +175,7 @@ fn draw_ink_rect<'a, T: Node>(group: &mut T, math_box: &MathBox) {
 }
 
 fn draw_logical_bounds<'a, T: Node>(group: &mut T, math_box: &MathBox) {
-    if let MathBoxContent::Drawable(Drawable::Glyph(_)) = *math_box.content() {
+    if let MathBoxContent::Drawable(Drawable::Glyphs { .. }) = *math_box.content() {
         let logical_bounds = math_box.bounds().normalize();
 
         if logical_bounds.extents.ascent != 0 {
@@ -199,7 +199,7 @@ fn draw_logical_bounds<'a, T: Node>(group: &mut T, math_box: &MathBox) {
 }
 
 fn draw_italic_correction<'a, T: Node>(doc: &mut T, math_box: &MathBox) {
-    if let MathBoxContent::Drawable(Drawable::Glyph(_)) = *math_box.content() {
+    if let MathBoxContent::Drawable(Drawable::Glyphs { .. }) = *math_box.content() {
         let ink_bounds = math_box.bounds().normalize();
 
         if math_box.italic_correction() == 0 {
@@ -245,12 +245,9 @@ fn draw_top_accent_attachment<'a, T: Node>(doc: &mut T, math_box: &MathBox) {
 }
 
 fn draw_glyph<'a, T: Node>(doc: &mut T, math_box: &MathBox, face: &FT_Face<'_>) {
-    let (glyph, scale_x, scale_y) =
-        if let MathBoxContent::Drawable(Drawable::Glyph(MathGlyph {
-            glyph_code, scale, ..
-        })) = *math_box.content()
-        {
-            (glyph_code, scale.as_scale_mult(), scale.as_scale_mult())
+    let (glyphs, scale_x, scale_y) =
+        if let MathBoxContent::Drawable(Drawable::Glyphs { glyphs, scale }) = math_box.content() {
+            (glyphs, scale.as_scale_mult(), scale.as_scale_mult())
         } else {
             return;
         };
@@ -258,9 +255,6 @@ fn draw_glyph<'a, T: Node>(doc: &mut T, math_box: &MathBox, face: &FT_Face<'_>) 
     let mut group = Group::new();
     {
         let origin = math_box.origin;
-
-        face.load_glyph(glyph, face::NO_SCALE).unwrap();
-        let outline = face.glyph().outline().expect("Glyph has no outline.");
 
         group.assign(
             "transform",
@@ -270,25 +264,36 @@ fn draw_glyph<'a, T: Node>(doc: &mut T, math_box: &MathBox, face: &FT_Face<'_>) 
             ),
         );
 
-        let mut data = Data::new();
-        for contour in outline.contours_iter() {
-            let Vector { x, y } = *contour.start();
-            data = data.move_to((x, y));
-            for curve in contour {
-                match curve {
-                    Curve::Line(pt) => data = data.line_to((pt.x, pt.y)),
-                    Curve::Bezier2(pt1, pt2) => {
-                        data = data.quadratic_curve_to((pt1.x, pt1.y, pt2.x, pt2.y))
-                    }
-                    Curve::Bezier3(pt1, pt2, pt3) => {
-                        data = data.cubic_curve_to((pt1.x, pt1.y, pt2.x, pt2.y, pt3.x, pt3.y))
+        let mut advance = 0;
+        for glyph in glyphs {
+            let mut glyph_group =
+                Group::new().set("transform", format!("translate({}, 0)", advance));
+            advance += glyph.advance_width();
+
+            face.load_glyph(glyph.glyph_code, face::NO_SCALE).unwrap();
+            let outline = face.glyph().outline().expect("Glyph has no outline.");
+
+            let mut data = Data::new();
+            for contour in outline.contours_iter() {
+                let Vector { x, y } = *contour.start();
+                data = data.move_to((x, y));
+                for curve in contour {
+                    match curve {
+                        Curve::Line(pt) => data = data.line_to((pt.x, pt.y)),
+                        Curve::Bezier2(pt1, pt2) => {
+                            data = data.quadratic_curve_to((pt1.x, pt1.y, pt2.x, pt2.y))
+                        }
+                        Curve::Bezier3(pt1, pt2, pt3) => {
+                            data = data.cubic_curve_to((pt1.x, pt1.y, pt2.x, pt2.y, pt3.x, pt3.y))
+                        }
                     }
                 }
             }
+            data = data.close();
+            let path = Path::new().set("d", data);
+            glyph_group.append(path);
+            group.append(glyph_group);
         }
-        data = data.close();
-        let path = Path::new().set("d", data);
-        group.append(path);
     }
 
     doc.append(group);

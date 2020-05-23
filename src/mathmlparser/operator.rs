@@ -55,7 +55,7 @@ impl FromXmlAttribute for Form {
     }
 }
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Copy, Clone, Default)]
 pub struct Attributes {
     pub character: Option<char>,
     pub form: Option<Form>,

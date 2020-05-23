@@ -1,9 +1,11 @@
 use super::error::{ErrorType, ParsingError, Result};
 use super::{
-    match_math_element, operator, parse_fixed_schema, parse_list_schema, token,
-    ArgumentRequirements, ElementType, MathmlElement, ParseContext,
+    escape::StringExtUnescape, match_math_element, operator, parse_fixed_schema, parse_list_schema,
+    token, ArgumentRequirements, AttributeParse, ElementType, MathmlElement, ParseContext,
+    SchemaAttributes, StringExtMathml,
 };
-use crate::{Field, MathExpression};
+
+use crate::{unicode_math::Family, Field, Length, MathExpression};
 pub use quick_xml::error::ResultPos;
 pub use quick_xml::{Element, Event, XmlReader};
 use std::io::BufRead;
@@ -35,8 +37,32 @@ where
     let user_data = context.mathml_info.len() as u64;
     match elem.elem_type {
         ElementType::TokenElement => {
-            let fields = parse_token_contents(parser, elem)?;
-            Ok(token::build_token(fields, elem, attrs, context, user_data)?)
+            let mut token_style = token::TokenStyle::default();
+            let mut op_attrs = operator::Attributes::default();
+            let mut space = None;
+            attrs
+                .filter(|attr| !parse_token_attribute(&mut token_style, elem.identifier, &attr))
+                .filter(|attr| {
+                    if elem.is("mo") {
+                        !parse_operator_attribute(&mut op_attrs, &attr)
+                    } else {
+                        true
+                    }
+                })
+                .filter(|attr| !parse_mspace_attribute(&mut space, elem.identifier, &attr))
+                .fold((), |_, _| {});
+
+            let fields = parse_token_contents(parser, elem, token_style)?;
+
+            let attributes = token::Attributes {
+                operator_attributes: op_attrs,
+                token_style,
+                horizontal_space: space,
+            };
+
+            Ok(token::build_token(
+                fields, elem, attributes, context, user_data,
+            )?)
         }
         ElementType::LayoutSchema {
             args: ArgumentRequirements::ArgumentList,
@@ -49,11 +75,16 @@ where
         ElementType::LayoutSchema {
             args: ArgumentRequirements::RequiredArguments(_),
         } => {
+            let mut attributes = SchemaAttributes::default();
+            for attr in attrs {
+                parse_schema_attribute(&mut attributes, &attr);
+            }
+
             let arguments = parse_fixed_arguments(parser, elem, context)?;
             Ok(parse_fixed_schema(
                 arguments.into_iter(),
                 elem,
-                attrs,
+                attributes,
                 context,
                 user_data,
             ))
@@ -163,7 +194,7 @@ fn parse_fixed_arguments<'a, R: BufRead>(
 pub fn parse_token_contents<R: BufRead>(
     parser: &mut XmlReader<R>,
     elem: MathmlElement,
-    // style: TokenStyle,
+    token_style: token::TokenStyle,
 ) -> Result<impl ExactSizeIterator<Item = (Field, u64)>> {
     let mut fields: Vec<(Field, u64)> = Vec::new();
 
@@ -171,7 +202,13 @@ pub fn parse_token_contents<R: BufRead>(
         match event? {
             Event::Text(text) => {
                 let text = std::str::from_utf8(text.content())?;
-                fields.push((Field::Unicode(text.to_owned()), 0));
+
+                let text = text.unescape().map(|text| {
+                    text.adapt_to_family(token_style.math_variant)
+                        .replace_anomalous_characters(elem)
+                })?;
+
+                fields.push((Field::Unicode(text), 0));
             }
             Event::Start(elem) => match elem.name() {
                 b"mglyph" | b"malignmark" => Err(ParsingError::from_string(
@@ -193,4 +230,94 @@ pub fn parse_token_contents<R: BufRead>(
         }
     }
     Ok(fields.into_iter())
+}
+
+#[allow(match_same_arms)]
+fn parse_token_attribute<'a>(
+    style: &mut token::TokenStyle,
+    element_identifier: &str,
+    new_attribute: &(&'a str, &'a str),
+) -> bool {
+    match *new_attribute {
+        ("mathvariant", variant) => style.math_variant = variant.parse_xml().ok(),
+        ("dir", dir) => style.direction = dir.parse_xml().unwrap(),
+        _ => return false,
+    }
+    match (element_identifier, style.math_variant) {
+        ("mi", None) => {}
+        (_, None) => style.math_variant = Some(Family::Normal),
+        _ => {}
+    }
+    true
+}
+
+fn parse_operator_attribute(op_attrs: &mut operator::Attributes, new_attr: &(&str, &str)) -> bool {
+    match *new_attr {
+        ("form", form_str) => op_attrs.form = form_str.parse_xml().ok(),
+        ("lspace", lspace) => {
+            op_attrs.lspace = lspace.parse_xml().ok();
+        }
+        ("rspace", rspace) => {
+            op_attrs.rspace = rspace.parse_xml().ok();
+        }
+        ("fence", is_fence) => {
+            if let Ok(is_fence) = is_fence.parse_xml() {
+                op_attrs.set_user_override(operator::Flags::FENCE, is_fence);
+            }
+        }
+        ("symmetric", is_symmetric) => {
+            if let Ok(is_symmetric) = is_symmetric.parse_xml() {
+                op_attrs.set_user_override(operator::Flags::SYMMETRIC, is_symmetric);
+            }
+        }
+        ("stretchy", is_stretchy) => {
+            if let Ok(is_stretchy) = is_stretchy.parse_xml() {
+                op_attrs.set_user_override(operator::Flags::STRETCHY, is_stretchy);
+            }
+        }
+        ("largeop", is_largeop) => {
+            if let Ok(is_largeop) = is_largeop.parse_xml() {
+                op_attrs.set_user_override(operator::Flags::LARGEOP, is_largeop);
+            }
+        }
+        ("movablelimits", has_movable_limits) => {
+            if let Ok(has_movable_limits) = has_movable_limits.parse_xml() {
+                op_attrs.set_user_override(operator::Flags::MOVABLE_LIMITS, has_movable_limits);
+            }
+        }
+        ("accent", is_accent) => {
+            if let Ok(is_accent) = is_accent.parse_xml() {
+                op_attrs.set_user_override(operator::Flags::ACCENT, is_accent);
+            }
+        }
+        _ => return false,
+    }
+    true
+}
+
+fn parse_mspace_attribute(
+    horiz_space: &mut Option<Length>,
+    identifier: &str,
+    new_attr: &(&str, &str),
+) -> bool {
+    if identifier != "mspace" {
+        return false;
+    }
+    match *new_attr {
+        ("width", width) => {
+            if let Ok(width) = width.parse_xml() {
+                *horiz_space = Some(width);
+            }
+            true
+        }
+        _ => false,
+    }
+}
+
+fn parse_schema_attribute(attributes: &mut SchemaAttributes, new_attr: &(&str, &str)) {
+    match *new_attr {
+        ("accent", is_accent) => attributes.accent = is_accent.parse().unwrap(),
+        ("accentunder", is_accent) => attributes.accentunder = is_accent.parse().unwrap(),
+        _ => {}
+    }
 }

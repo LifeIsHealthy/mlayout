@@ -1,9 +1,9 @@
 use std::cmp::max;
 
-use crate::types::CornerPosition;
 use super::layout::LayoutOptions;
-use super::shaper::{MathConstant, Position};
 use super::math_box::{MathBox, MathBoxMetrics};
+use super::shaper::{MathConstant, Position};
+use crate::types::CornerPosition;
 
 pub fn get_superscript_shift_up(
     superscript: &MathBox,
@@ -49,7 +49,7 @@ pub fn get_subscript_shift_dn(
     )
 }
 
-pub fn get_subsup_shifts (
+pub fn get_subsup_shifts(
     subscript: &MathBox,
     superscript: &MathBox,
     nucleus: &MathBox,
@@ -97,24 +97,32 @@ pub fn get_attachment_kern(
         nucleus.first_glyph()
     };
 
-    if let Some(nucleus_glyph) = nucleus_glyph {
+    if let Some((nucleus_glyph, scale)) = nucleus_glyph {
         let attachment_glyph = if attachment_position.is_left() {
             attachment.last_glyph()
         } else {
             attachment.first_glyph()
         };
-        if let Some(attachment_glyph) = attachment_glyph {
+        if let Some((attachment_glyph, attachment_scale)) = attachment_glyph {
             let (bch, ach) = if attachment_position.is_top() {
-                let base_correction_height = attachment_shift - attachment.extents().descent;
-                let attachment_correction_height = nucleus.extents().ascent - attachment_shift;
+                let base_correction_height =
+                    attachment_shift - attachment.extents().descent * attachment_scale;
+                let attachment_correction_height =
+                    nucleus.extents().ascent * scale - attachment_shift;
                 (base_correction_height, attachment_correction_height)
             } else {
-                let base_correction_height = -attachment_shift + attachment.extents().ascent;
-                let attachment_correction_height = attachment_shift - nucleus.extents().descent;
+                let base_correction_height =
+                    -attachment_shift + attachment.extents().ascent * attachment_scale;
+                let attachment_correction_height =
+                    attachment_shift - nucleus.extents().descent * scale;
                 (base_correction_height, attachment_correction_height)
             };
-            kerning += shaper.math_kerning(nucleus_glyph, attachment_position, bch);
-            kerning += shaper.math_kerning(attachment_glyph, attachment_position.diagonal_mirror(), ach);
+            kerning += shaper.math_kerning(&nucleus_glyph, attachment_position, bch) * scale;
+            kerning += shaper.math_kerning(
+                &attachment_glyph,
+                attachment_position.diagonal_mirror(),
+                ach,
+            ) * attachment_scale;
         }
     };
     kerning

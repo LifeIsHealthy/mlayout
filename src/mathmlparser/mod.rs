@@ -29,6 +29,12 @@ pub struct MathmlElement {
     elem_type: ElementType,
 }
 
+impl MathmlElement {
+    pub fn is(&self, elem: &'static str) -> bool {
+        self.identifier == elem
+    }
+}
+
 impl Default for MathmlElement {
     fn default() -> Self {
         MathmlElement {
@@ -221,9 +227,21 @@ pub enum Child {
     Expression(MathExpression),
 }
 
+#[derive(Debug, Default, Clone)]
+pub struct Attributes {
+    token: token::Attributes,
+    schema: SchemaAttributes,
+}
+
+#[derive(Debug, Default, Clone)]
+pub struct SchemaAttributes {
+    accent: bool,
+    accentunder: bool,
+}
+
 pub fn build_element<'a>(
     elem: MathmlElement,
-    attributes: impl Iterator<Item = (&'a str, &'a str)>,
+    attributes: Attributes,
     children: impl Iterator<Item = Child>,
     context: &mut ParseContext,
     // You have to ensure that this key is unique
@@ -237,7 +255,7 @@ pub fn build_element<'a>(
                 Child::Expression(expr) => Some(expr),
                 _ => None,
             });
-            parse_fixed_schema(expressions, elem, attributes, context, user_data)
+            parse_fixed_schema(expressions, elem, attributes.schema, context, user_data)
         }
         ElementType::LayoutSchema {
             args: ArgumentRequirements::ArgumentList,
@@ -256,7 +274,7 @@ pub fn build_element<'a>(
                 Child::Field(field) => Some(field),
                 _ => None,
             });
-            token::build_token(fields, elem, attributes, context, user_data).unwrap()
+            token::build_token(fields, elem, attributes.token, context, user_data).unwrap()
         }
         _ => todo!(),
     }
@@ -293,55 +311,41 @@ fn construct_under_over<'a>(
     nucleus: Option<MathExpression>,
     under: Option<MathExpression>,
     over: Option<MathExpression>,
-    attributes: impl Iterator<Item = (&'a str, &'a str)>,
+    attributes: SchemaAttributes,
     context: &mut ParseContext,
 ) -> MathItem {
     let over = over.map(|x| guess_if_operator_with_form(x, Form::Postfix, context));
     let under = under.map(|x| guess_if_operator_with_form(x, Form::Postfix, context));
 
-    let mut over_is_accent = context
+    let _over_is_accent = context
         .operator_attrs(over.as_ref())
         .map(|op_attrs| op_attrs.flags.contains(operator::Flags::ACCENT))
         .unwrap_or(false);
 
-    let mut under_is_accent = context
+    let _under_is_accent = context
         .operator_attrs(under.as_ref())
         .map(|op_attrs| op_attrs.flags.contains(operator::Flags::ACCENT))
         .unwrap_or(false);
-
-    // now check the accent attributes of the mover/munder element.
-    for attrib in attributes {
-        let (ident, value) = attrib;
-        if ident == "accent" {
-            over_is_accent = value.parse_xml().unwrap_or(false);
-        }
-        if ident == "accentunder" {
-            under_is_accent = value.parse_xml().unwrap_or(false);
-        }
-    }
 
     let item = OverUnder {
         nucleus,
         under,
         over,
-        over_is_accent,
-        under_is_accent,
+        over_is_accent: attributes.accent,
+        under_is_accent: attributes.accentunder,
         ..Default::default()
     };
 
     MathItem::OverUnder(item)
 }
 
-fn parse_fixed_schema<'a, A>(
+fn parse_fixed_schema<'a>(
     mut content: impl Iterator<Item = MathExpression>,
     elem: MathmlElement,
-    attributes: A,
+    attributes: SchemaAttributes,
     context: &mut ParseContext,
     user_data: u64,
-) -> MathExpression
-where
-    A: Iterator<Item = (&'a str, &'a str)>,
-{
+) -> MathExpression {
     let mut next = || Some(content.next().unwrap());
     let result = match elem.identifier {
         "mfrac" => {
