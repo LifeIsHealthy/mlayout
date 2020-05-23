@@ -80,6 +80,8 @@ pub enum MathConstant {
 pub struct MathGlyph {
     /// The font-specific glyph code
     pub glyph_code: u32,
+    /// the utf-8 offset into the field that generated this glyph
+    pub cluster: u32,
     /// The Offset at which the glyph should be rendered.
     pub offset: Vector<i32>,
     /// The glyph's advance width.
@@ -96,11 +98,29 @@ pub struct MathGlyph {
     pub scale: PercentValue,
 }
 
+impl MathBoxMetrics for MathGlyph {
+    fn advance_width(&self) -> i32 {
+        self.advance_width * self.scale
+    }
+
+    fn extents(&self) -> Extents<i32> {
+        self.extents * self.scale
+    }
+
+    fn italic_correction(&self) -> i32 {
+        self.italic_correction * self.scale
+    }
+
+    fn top_accent_attachment(&self) -> i32 {
+        self.top_accent_attachment * self.scale
+    }
+}
+
 pub trait MathShaper {
     /// Returns value of a constant for the current font.
     fn math_constant(&self, c: MathConstant) -> i32;
 
-    fn shape(&self, string: &str, style: LayoutStyle) -> MathBox;
+    fn shape(&self, string: &str, style: LayoutStyle, user_data: u64) -> MathBox;
 
     /// Returns a pointer to an OpenType-Math table.
     fn get_math_table(&self) -> &[u8];
@@ -119,6 +139,7 @@ pub trait MathShaper {
         horizontal: bool,
         target_size: u32,
         style: LayoutStyle,
+        user_data: u64,
     ) -> MathBox;
 
     fn math_kerning(
@@ -209,6 +230,7 @@ impl<'a> From<HarfbuzzGlyph<'a>> for MathGlyph {
     fn from(hbglyph: HarfbuzzGlyph<'a>) -> MathGlyph {
         MathGlyph {
             glyph_code: hbglyph.glyph,
+            cluster: hbglyph.cluster,
             offset: hbglyph.origin(),
             advance_width: hbglyph.advance_width(),
             extents: hbglyph.extents(),
@@ -267,27 +289,31 @@ impl<'a> HarfbuzzShaper<'a> {
         PercentValue::new(percent as u8)
     }
 
-    fn shape_with_style(&self, string: &str, style: LayoutStyle) -> MathBox {
+    fn shape_with_style(&self, string: &str, style: LayoutStyle, user_data: u64) -> MathBox {
         let mut buffer = self.buffer.borrow_mut().take().unwrap();
 
         buffer = buffer.add_str(string);
         *self.buffer.borrow_mut() = Some(buffer);
-        self.do_shape(&self.font, style)
+        self.do_shape(&self.font, style, user_data)
     }
 
-    fn glyph_from_index(&self, glyph_index: u32, style: LayoutStyle) -> MathGlyph {
+    fn glyph_from_index(
+        &self,
+        glyph_index: u32,
+        style: LayoutStyle,
+        user_data: u64,
+    ) -> Vec<MathGlyph> {
         let buffer = self.buffer.borrow_mut().take().unwrap();
         let buffer = buffer.add(glyph_index, 0);
         *self.buffer.borrow_mut() = Some(buffer);
-        let math_box = self.do_shape(&self.no_cmap_font, style);
+        let math_box = self.do_shape(&self.no_cmap_font, style, user_data);
         match math_box.content {
-            MathBoxContent::Boxes(_) => panic!("No single glyph was shaped"),
-            MathBoxContent::Drawable(Drawable::Glyph(glyph)) => glyph,
+            MathBoxContent::Drawable(Drawable::Glyphs(glyphs)) => glyphs,
             _ => unreachable!(),
         }
     }
 
-    fn do_shape(&self, font: &Font, style: LayoutStyle) -> MathBox {
+    fn do_shape(&self, font: &Font, style: LayoutStyle, user_data: u64) -> MathBox {
         let mut features = Vec::with_capacity(2);
         if style.script_level >= 1 {
             let math_variants_tag = Tag::new('s', 's', 't', 'y');
@@ -307,7 +333,7 @@ impl<'a> HarfbuzzShaper<'a> {
         let glyph_buffer = shape(font, buffer.set_script(Tag::from(b"Math")), &features);
         let math_box = {
             let shaped_glyphs = self.layout_boxes(&glyph_buffer, style);
-            self.math_box_from_glyphs(shaped_glyphs, style)
+            MathBox::with_glyphs(shaped_glyphs.collect(), user_data)
         };
         *self.buffer.borrow_mut() = Some(glyph_buffer.clear());
 
@@ -325,27 +351,6 @@ impl<'a> HarfbuzzShaper<'a> {
             let hb_glyph = HarfbuzzGlyph::new(self, *pos, *info, style);
             hb_glyph.into()
         })
-    }
-
-    fn math_box_from_glyphs(
-        &self,
-        glyphs: impl Iterator<Item = MathGlyph>,
-        _style: LayoutStyle,
-    ) -> MathBox {
-        let mut cursor = Vector { x: 0, y: 0 };
-        let iterator = glyphs.into_iter().map(move |glyph| {
-            let advance = glyph.advance_width;
-            let mut math_box = MathBox::with_glyph(glyph);
-            math_box.origin = cursor;
-            cursor.x += advance;
-            math_box
-        });
-        let mut boxes = iterator.collect::<Vec<_>>();
-        if boxes.len() == 1 {
-            boxes.remove(0)
-        } else {
-            MathBox::with_vec(boxes)
-        }
     }
 }
 
@@ -366,8 +371,8 @@ impl<'a> MathShaper for HarfbuzzShaper<'a> {
         &self.math_table
     }
 
-    fn shape(&self, string: &str, style: LayoutStyle) -> MathBox {
-        self.shape_with_style(string, style)
+    fn shape(&self, string: &str, style: LayoutStyle, user_data: u64) -> MathBox {
+        self.shape_with_style(string, style, user_data)
     }
 
     fn is_stretchable(&self, glyph: u32, horizontal: bool) -> bool {
@@ -408,14 +413,17 @@ impl<'a> MathShaper for HarfbuzzShaper<'a> {
         horizontal: bool,
         target_size: u32,
         style: LayoutStyle,
+        user_data: u64,
     ) -> MathBox {
         // rescale target size for the current layout
         let target_size = target_size / self.scale_factor(style);
 
-        let glyphs = try_base_glyph(self, glyph, horizontal, target_size, style)
-            .or_else(|| try_variant(self, glyph, horizontal, target_size, style))
-            .or_else(|| try_assembly(self, glyph, horizontal, target_size, style))
-            .unwrap_or_else(|| MathBox::with_glyph(self.glyph_from_index(glyph, style)));
+        let glyphs = try_base_glyph(self, glyph, horizontal, target_size, style, user_data)
+            .or_else(|| try_variant(self, glyph, horizontal, target_size, style, user_data))
+            .or_else(|| try_assembly(self, glyph, horizontal, target_size, style, user_data))
+            .unwrap_or_else(|| {
+                MathBox::with_glyphs(self.glyph_from_index(glyph, style, user_data), user_data)
+            });
 
         // let result = {
         //     let glyph_indices = glyphs.iter().map(|shaped_glyph| shaped_glyph.glyph);
@@ -456,8 +464,9 @@ fn try_base_glyph<'a>(
     horizontal: bool,
     target_size: u32,
     style: LayoutStyle,
+    user_data: u64,
 ) -> Option<MathBox> {
-    let glyph = shaper.glyph_from_index(glyph, style);
+    let glyph = shaper.glyph_from_index(glyph, style, user_data)[0];
 
     let advance = if horizontal {
         glyph.extents.width
@@ -466,7 +475,7 @@ fn try_base_glyph<'a>(
     };
 
     if advance >= target_size as i32 {
-        Some(MathBox::with_glyph(glyph))
+        Some(MathBox::with_glyphs(vec![glyph], user_data))
     } else {
         None
     }
@@ -528,6 +537,7 @@ fn try_variant<'a>(
     horizontal: bool,
     target_size: u32,
     style: LayoutStyle,
+    user_data: u64,
 ) -> Option<MathBox> {
     let direction = if horizontal {
         hb::HB_DIRECTION_LTR
@@ -557,8 +567,8 @@ fn try_variant<'a>(
         None => return None,
     };
 
-    let glyph = shaper.glyph_from_index(variant.glyph, style);
-    Some(MathBox::with_glyph(glyph))
+    let glyphs = shaper.glyph_from_index(variant.glyph, style, user_data);
+    Some(MathBox::with_glyphs(glyphs, user_data))
 }
 
 struct AssemblyIterator<'a> {
@@ -619,6 +629,7 @@ fn try_assembly<'a>(
     horizontal: bool,
     target_size: u32,
     style: LayoutStyle,
+    user_data: u64,
 ) -> Option<MathBox> {
     let direction = if horizontal {
         hb::HB_DIRECTION_LTR
@@ -714,9 +725,9 @@ fn try_assembly<'a>(
         .scan(/* initial offset */ 0, move |current_offset, part| {
             let delta_offset = part.full_advance - connector_overlap;
             let origin = point_with_offset(*current_offset, horizontal);
-            let glyph = shaper.glyph_from_index(part.glyph, style);
+            let glyphs = shaper.glyph_from_index(part.glyph, style, user_data);
 
-            let mut math_box = MathBox::with_glyph(glyph);
+            let mut math_box = MathBox::with_glyphs(glyphs, user_data);
             math_box.origin = origin;
 
             if horizontal {
@@ -727,7 +738,7 @@ fn try_assembly<'a>(
             Some(math_box)
         });
 
-    Some(MathBox::with_vec(result.collect()))
+    Some(MathBox::with_vec(result.collect(), user_data))
 }
 
 #[cfg(test)]

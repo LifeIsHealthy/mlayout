@@ -9,6 +9,8 @@ mod xml_reader;
 #[cfg(feature = "mathml_parser")]
 pub use xml_reader::parse;
 
+pub use token::StringExtMathml;
+
 use std;
 use std::collections::BTreeMap;
 
@@ -215,7 +217,7 @@ impl MathmlInfo {
 }
 
 pub enum Child {
-    Field(Field),
+    Field((Field, u64)),
     Expression(MathExpression),
 }
 

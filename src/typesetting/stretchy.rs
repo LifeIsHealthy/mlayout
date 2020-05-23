@@ -1,8 +1,8 @@
 use super::*;
 
 use super::layout::{MathLayout, OperatorProperties};
-use crate::types::MathExpression;
 use crate::math_box::{Extents, MathBoxMetrics};
+use crate::types::MathExpression;
 
 fn indices_of_stretchy_elements(list: &[MathExpression], options: LayoutOptions) -> Vec<usize> {
     list.iter()
@@ -12,7 +12,7 @@ fn indices_of_stretchy_elements(list: &[MathExpression], options: LayoutOptions)
         .collect()
 }
 
-pub fn layout_list_element<T: MathLayout>(item: &T, options: LayoutOptions) -> MathBox {
+pub fn layout_list_element(item: &MathExpression, options: LayoutOptions) -> MathBox {
     if let Some(OperatorProperties {
         leading_space,
         trailing_space,
@@ -20,12 +20,15 @@ pub fn layout_list_element<T: MathLayout>(item: &T, options: LayoutOptions) -> M
     }) = item.operator_properties(options)
     {
         if options.style.math_style == MathStyle::Display {
-            let left_space = MathBox::empty(Extents::new(0, leading_space, 0, 0));
+            let left_space =
+                MathBox::empty(Extents::new(0, leading_space, 0, 0), item.get_user_data());
             let mut elem = item.layout(options);
             elem.origin.x += leading_space;
-            let mut right_space = MathBox::empty(Extents::new(0, trailing_space, 0, 0));
+            let mut right_space =
+                MathBox::empty(Extents::new(0, trailing_space, 0, 0), item.get_user_data());
             right_space.origin.x += leading_space + elem.advance_width();
-            return MathBox::with_vec(vec![left_space, elem, right_space]);
+
+            return MathBox::with_vec(vec![left_space, elem, right_space], item.get_user_data());
         }
     }
     item.layout(options)
@@ -35,7 +38,8 @@ pub fn layout_strechy_list(list: &[MathExpression], options: LayoutOptions) -> V
     let stretchy_indices = indices_of_stretchy_elements(list, options);
 
     if stretchy_indices.is_empty() {
-        return list.iter()
+        return list
+            .iter()
             .map(move |item| layout_list_element(item, options))
             .collect();
     }

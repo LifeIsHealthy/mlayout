@@ -86,7 +86,7 @@ fn parse_token_attribute<'a>(
     true
 }
 
-trait StringExtMathml {
+pub trait StringExtMathml {
     fn adapt_to_family(&self, family: Option<Family>) -> Cow<str>;
     fn replace_anomalous_characters(&self, elem: MathmlElement) -> String;
 }
@@ -210,7 +210,7 @@ fn parse_mspace_attribute(
 }
 
 pub fn build_token<'a>(
-    fields: impl Iterator<Item = Field>,
+    fields: impl Iterator<Item = (Field, u64)>,
     elem: MathmlElement,
     attributes: impl Iterator<Item = (&'a str, &'a str)>,
     context: &mut ParseContext,
@@ -244,29 +244,29 @@ pub fn build_token<'a>(
         return Ok(item);
     }
 
-    let fields = fields.map(|field| -> Result<Field, ParsingError> {
+    let fields = fields.map(|(field, user_data)| -> Result<(Field, u64), ParsingError> {
         match field {
             Field::Unicode(string) => {
-                let string = string.unescape().map(|string| {
-                    string
-                        .adapt_to_family(token_style.math_variant)
-                        .replace_anomalous_characters(elem)
-                })?;
-                Ok(Field::Unicode(string))
+                // let string = string.unescape().map(|string| {
+                    // string
+                        // .adapt_to_family(token_style.math_variant)
+                        // .replace_anomalous_characters(elem)
+                // })?;
+                Ok((Field::Unicode(string), user_data))
             }
-            Field::Glyph(glyph) => Ok(Field::Glyph(glyph)),
-            Field::Empty => Ok(Field::Empty),
+            Field::Glyph(glyph) => Ok((Field::Glyph(glyph), user_data)),
+            Field::Empty => Ok((Field::Empty, user_data)),
         }
     });
 
     let mut list = vec![];
     let mut first_field_char = None;
     for (field_num, field) in fields.enumerate() {
-        let field = field?;
+        let (field, field_user_data) = field?;
         if field_num == 0 {
             first_field_char = try_extract_char(&field);
         }
-        let expr = MathExpression::new(MathItem::Field(field), user_data);
+        let expr = MathExpression::new(MathItem::Field(field), field_user_data);
         list.push(expr);
     }
 
@@ -280,7 +280,7 @@ pub fn build_token<'a>(
     };
 
     context.mathml_info.insert(
-        user_data,
+        expr.get_user_data(),
         MathmlInfo {
             operator_attrs: op_attrs,
             ..Default::default()

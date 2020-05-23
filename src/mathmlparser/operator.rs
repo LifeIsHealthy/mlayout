@@ -239,7 +239,7 @@ fn make_operator(expr: &mut MathExpression, context: &mut ParseContext) {
         set_movable_limits(expr, context);
     }
 
-    if let Some(ref mut core_expr) = find_core_operator(expr, context) {
+    if let Some(core_expr) = find_core_operator(expr, context) {
         let stretch_constraints = if flags.contains(Flags::STRETCHY) {
             Some(StretchConstraints {
                 symmetric: flags.contains(Flags::SYMMETRIC),

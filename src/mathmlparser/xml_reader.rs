@@ -164,14 +164,14 @@ pub fn parse_token_contents<R: BufRead>(
     parser: &mut XmlReader<R>,
     elem: MathmlElement,
     // style: TokenStyle,
-) -> Result<impl ExactSizeIterator<Item = Field>> {
-    let mut fields: Vec<Field> = Vec::new();
+) -> Result<impl ExactSizeIterator<Item = (Field, u64)>> {
+    let mut fields: Vec<(Field, u64)> = Vec::new();
 
     while let Some(event) = parser.next() {
         match event? {
             Event::Text(text) => {
                 let text = std::str::from_utf8(text.content())?;
-                fields.push(Field::Unicode(text.to_owned()));
+                fields.push((Field::Unicode(text.to_owned()), 0));
             }
             Event::Start(elem) => match elem.name() {
                 b"mglyph" | b"malignmark" => Err(ParsingError::from_string(

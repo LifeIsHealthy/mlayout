@@ -265,20 +265,50 @@ impl MathBoxMetrics for Metrics {
 
 #[derive(Debug)]
 pub enum Drawable {
-    Glyph(MathGlyph),
+    Glyphs(Vec<MathGlyph>),
     Line { vector: Vector<i32>, thickness: u32 },
 }
 
 impl MathBoxMetrics for Drawable {
     fn advance_width(&self) -> i32 {
-        match *self {
-            Drawable::Glyph(glyph) => glyph.advance_width,
+        match self {
+            Drawable::Glyphs(glyphs) => glyphs.iter().map(|g| g.advance_width).sum(),
             Drawable::Line { ref vector, .. } => vector.x,
         }
     }
     fn extents(&self) -> Extents<i32> {
-        match *self {
-            Drawable::Glyph(glyph) => glyph.extents,
+        match self {
+            Drawable::Glyphs(glyphs) => {
+                let max_ascent = glyphs
+                    .iter()
+                    .map(|item| -item.offset.y * item.scale + item.extents().ascent)
+                    .max()
+                    .unwrap_or_default();
+                let max_descent = glyphs
+                    .iter()
+                    .map(|item| item.offset.y * item.scale + item.extents().descent)
+                    .max()
+                    .unwrap_or_default();
+                let left_side_bearing = glyphs
+                    .first()
+                    .map(|x| x.extents().left_side_bearing)
+                    .unwrap_or(0);
+                let width = self.advance_width()
+                    - glyphs
+                        .last()
+                        .map(|item| {
+                            item.advance_width()
+                                - item.extents().width
+                                - item.extents().left_side_bearing
+                        })
+                        .unwrap_or(0);
+                Extents {
+                    left_side_bearing,
+                    width,
+                    ascent: max_ascent,
+                    descent: max_descent,
+                }
+            }
             Drawable::Line { ref vector, .. } => Extents {
                 left_side_bearing: 0,
                 width: vector.x,
@@ -289,15 +319,18 @@ impl MathBoxMetrics for Drawable {
     }
 
     fn italic_correction(&self) -> i32 {
-        match *self {
-            Drawable::Glyph(glyph) => glyph.italic_correction,
+        match self {
+            Drawable::Glyphs(glyphs) => glyphs
+                .last()
+                .map(|g| g.italic_correction)
+                .unwrap_or_default(),
             Drawable::Line { .. } => 0,
         }
     }
 
     fn top_accent_attachment(&self) -> i32 {
-        let value = match *self {
-            Drawable::Glyph(glyph) => glyph.top_accent_attachment,
+        let value = match self {
+            Drawable::Glyphs(glyphs) if glyphs.len() == 1 => glyphs[0].top_accent_attachment(),
             _ => 0,
         };
         if value == 0 {
@@ -324,7 +357,7 @@ pub struct MathBox {
     pub origin: Vector<i32>,
     pub(crate) metrics: Metrics,
     pub content: MathBoxContent,
-    pub user_data: u64,
+    user_data: u64,
 }
 
 impl Default for MathBoxContent {
@@ -413,35 +446,45 @@ impl MathBoxMetrics for MathBoxContent {
 }
 
 impl MathBox {
-    fn with_content(content: MathBoxContent) -> Self {
+    pub fn user_data(&self) -> u64 {
+        self.user_data
+    }
+
+    fn with_content(content: MathBoxContent, user_data: u64) -> Self {
         let metrics = Metrics::from_metrics(&content);
         MathBox {
             content: content,
             metrics,
             origin: Vector::default(),
-            user_data: 0,
+            user_data,
         }
     }
 
-    pub fn empty(extents: Extents<i32>) -> Self {
-        MathBox::with_content(MathBoxContent::Empty(extents))
+    pub fn empty(extents: Extents<i32>, user_data: u64) -> Self {
+        MathBox::with_content(MathBoxContent::Empty(extents), user_data)
     }
 
-    pub fn with_line(from: Vector<i32>, to: Vector<i32>, thickness: u32) -> Self {
-        let mut math_box = MathBox::with_content(MathBoxContent::Drawable(Drawable::Line {
-            vector: to - from,
-            thickness: thickness,
-        }));
+    pub fn with_line(from: Vector<i32>, to: Vector<i32>, thickness: u32, user_data: u64) -> Self {
+        let mut math_box = MathBox::with_content(
+            MathBoxContent::Drawable(Drawable::Line {
+                vector: to - from,
+                thickness: thickness,
+            }),
+            user_data,
+        );
         math_box.origin = from;
         math_box
     }
 
-    pub fn with_glyph(glyph: MathGlyph) -> Self {
-        MathBox::with_content(MathBoxContent::Drawable(Drawable::Glyph(glyph)))
+    pub fn with_glyphs(glyphs: Vec<MathGlyph>, user_data: u64) -> Self {
+        MathBox::with_content(
+            MathBoxContent::Drawable(Drawable::Glyphs(glyphs)),
+            user_data,
+        )
     }
 
-    pub fn with_vec(vec: Vec<MathBox>) -> Self {
-        MathBox::with_content(MathBoxContent::Boxes(vec))
+    pub fn with_vec(vec: Vec<MathBox>, user_data: u64) -> Self {
+        MathBox::with_content(MathBoxContent::Boxes(vec), user_data)
     }
 
     pub fn bounds(&self) -> Bounds {
@@ -458,7 +501,7 @@ impl MathBox {
     /// recursive search for a glyph at the leftmost position
     pub fn first_glyph(&self) -> Option<&MathGlyph> {
         match *self.content() {
-            MathBoxContent::Drawable(Drawable::Glyph(ref glyph)) => Some(glyph),
+            MathBoxContent::Drawable(Drawable::Glyphs(ref glyphs)) => glyphs.first(),
             MathBoxContent::Boxes(ref boxes) => boxes.first().and_then(|node| node.first_glyph()),
             _ => None,
         }
@@ -466,7 +509,7 @@ impl MathBox {
 
     pub fn last_glyph(&self) -> Option<&MathGlyph> {
         match *self.content() {
-            MathBoxContent::Drawable(Drawable::Glyph(ref glyph)) => Some(glyph),
+            MathBoxContent::Drawable(Drawable::Glyphs(ref glyphs)) => glyphs.first(),
             MathBoxContent::Boxes(ref boxes) => boxes.last().and_then(|node| node.last_glyph()),
             _ => None,
         }

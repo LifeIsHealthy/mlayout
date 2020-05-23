@@ -1,6 +1,6 @@
 #![allow(unused_variables, dead_code)]
-use std::cmp::{max, min};
 use crate::types::*;
+use std::cmp::{max, min};
 
 use super::math_box::{Extents, MathBox, MathBoxMetrics, Vector};
 use super::multiscripts::*;
@@ -12,6 +12,13 @@ pub struct LayoutOptions<'a> {
     pub shaper: &'a dyn MathShaper,
     pub style: LayoutStyle,
     pub stretch_size: Option<Extents<i32>>,
+    pub user_data: u64,
+}
+
+impl<'a> LayoutOptions<'a> {
+    pub fn user_data(self, user_data: u64) -> Self {
+        LayoutOptions { user_data, ..self }
+    }
 }
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Default)]
@@ -86,7 +93,7 @@ impl MathLayout for Field {
             Field::Glyph(ref glyph) => unimplemented!(),
             Field::Unicode(ref content) => {
                 let shaper = options.shaper;
-                shaper.shape(&content, options.style)
+                shaper.shape(&content, options.style, options.user_data)
             }
         }
     }
@@ -108,7 +115,7 @@ impl MathLayout for [MathExpression] {
             previout_italic_correction = math_box.italic_correction();
             math_box
         });
-        MathBox::with_vec(layouted.collect())
+        MathBox::with_vec(layouted.collect(), options.user_data)
     }
 }
 
@@ -141,7 +148,7 @@ fn layout_sub_superscript(
 ) -> MathBox {
     let nucleus = match nucleus {
         Some(nucleus) => nucleus,
-        None => return MathBox::empty(Extents::default()),
+        None => return MathBox::empty(Extents::default(), options.user_data),
     };
     let subscript_options = LayoutOptions {
         style: options.style.subscript_style(),
@@ -217,7 +224,7 @@ fn layout_sub_superscript(
         (None, None) => unreachable!(),
     }
 
-    let mut space = MathBox::empty(Extents::new(0, space_after_script, 0, 0));
+    let mut space = MathBox::empty(Extents::new(0, space_after_script, 0, 0), options.user_data);
     space.origin.x = result
         .iter()
         .map(|math_box| math_box.origin.x + math_box.advance_width())
@@ -225,14 +232,14 @@ fn layout_sub_superscript(
         .unwrap_or_default();
     result.push(space);
 
-    MathBox::with_vec(result)
+    MathBox::with_vec(result, options.user_data)
 }
 
 impl MathLayout for OverUnder {
     fn layout(&self, options: LayoutOptions) -> MathBox {
         let nucleus = match self.nucleus {
             Some(ref nucleus) => nucleus,
-            None => return MathBox::empty(Extents::default()),
+            None => return MathBox::empty(Extents::default(), options.user_data),
         };
 
         // Display `OverUnder` like an `Atom` if we want to render limits and the current style is
@@ -274,7 +281,8 @@ impl MathLayout for OverUnder {
 
         for (index, &mut (ref mut arg, options, ..)) in arguments.iter_mut().enumerate() {
             // first take and layout non-stretchy subexpressions
-            if !arg.as_ref()
+            if !arg
+                .as_ref()
                 .map(|x| x.can_stretch(options))
                 .unwrap_or(false)
             {
@@ -471,7 +479,7 @@ fn layout_over_or_under(
         nucleus.origin.x + nucleus.top_accent_attachment()
     };
 
-    let mut math_box = MathBox::with_vec(vec![nucleus, attachment]);
+    let mut math_box = MathBox::with_vec(vec![nucleus, attachment], options.user_data);
     // preserve the italic collection of the nucleus
     math_box.metrics.advance_width = advance_width;
     math_box.metrics.italic_correction = italic_correction;
@@ -569,9 +577,13 @@ impl MathLayout for GeneralizedFraction {
             ),
             ..origin
         };
-        let fraction_rule = MathBox::with_line(origin, target, default_thickness as u32);
+        let fraction_rule =
+            MathBox::with_line(origin, target, default_thickness as u32, options.user_data);
 
-        MathBox::with_vec(vec![numerator, fraction_rule, denominator])
+        MathBox::with_vec(
+            vec![numerator, fraction_rule, denominator],
+            options.user_data,
+        )
     }
 
     fn operator_properties(&self, options: LayoutOptions) -> Option<OperatorProperties> {
@@ -609,8 +621,9 @@ impl MathLayout for Root {
         //     }),
         //     ..options.style
         // };
-        let surd = options.shaper.shape("√", options.style);
-        let mut surd = surd.first_glyph()
+        let surd = options.shaper.shape("√", options.style, options.user_data);
+        let mut surd = surd
+            .first_glyph()
             .and_then(|glyph| {
                 if options.shaper.is_stretchable(glyph.glyph_code, false) {
                     Some(options.shaper.stretch_glyph(
@@ -618,6 +631,7 @@ impl MathLayout for Root {
                         false,
                         needed_surd_height.abs() as u32,
                         options.style,
+                        options.user_data,
                     ))
                 } else {
                     None
@@ -645,15 +659,16 @@ impl MathLayout for Root {
             x: origin.x + radicand.extents().right_edge(),
             ..origin
         };
-        let mut radical_rule = MathBox::with_line(origin, target, line_thickness as u32);
+        let mut radical_rule =
+            MathBox::with_line(origin, target, line_thickness as u32, options.user_data);
 
         let mut boxes = vec![];
 
         // typeset the self degree
         if let &Some(ref degree) = &self.degree {
-            let degree_bottom_raise_percent = PercentValue::new(shaper
-                .math_constant(MathConstant::RadicalDegreeBottomRaisePercent)
-                as u8);
+            let degree_bottom_raise_percent = PercentValue::new(
+                shaper.math_constant(MathConstant::RadicalDegreeBottomRaisePercent) as u8,
+            );
             let kern_before = shaper.math_constant(MathConstant::RadicalKernBeforeDegree);
             let kern_after = shaper.math_constant(MathConstant::RadicalKernAfterDegree);
             let surd_height = surd.extents().ascent + surd.extents().descent;
@@ -676,7 +691,7 @@ impl MathLayout for Root {
         }
 
         boxes.append(&mut vec![surd, radical_rule, radicand]);
-        MathBox::with_vec(boxes)
+        MathBox::with_vec(boxes, options.user_data)
         // TODO
         // let mut combined_box = boxes.into_iter().collect::<MathBox>();
         // combined_box.logical_extents.ascent += extra_ascender;
@@ -693,12 +708,14 @@ impl Operator {
     ) -> MathBox {
         match self.field {
             Field::Unicode(ref string) => {
-                let shape_result = options
-                    .shaper
-                    .shape(string, options.style.no_flat_accent_style());
+                let shape_result = options.shaper.shape(
+                    string,
+                    options.style.no_flat_accent_style(),
+                    options.user_data,
+                );
                 let first_glyph = match shape_result.first_glyph() {
                     Some(glyph) => glyph,
-                    None => return MathBox::empty(Extents::default()),
+                    None => return MathBox::empty(Extents::default(), options.user_data),
                 };
 
                 if needed_width > 0 && options.shaper.is_stretchable(first_glyph.glyph_code, true) {
@@ -707,6 +724,7 @@ impl Operator {
                         true,
                         needed_width,
                         options.style,
+                        options.user_data,
                     );
                 }
 
@@ -717,6 +735,7 @@ impl Operator {
                         false,
                         needed_height,
                         options.style,
+                        options.user_data,
                     );
                     let stretch_constraints =
                         self.stretch_constraints.unwrap_or(StretchConstraints {
@@ -739,7 +758,9 @@ impl Operator {
                 }
 
                 // fallback
-                options.shaper.shape(string, options.style)
+                options
+                    .shaper
+                    .shape(string, options.style, options.user_data)
             }
             _ => unimplemented!(),
         }
@@ -774,7 +795,8 @@ impl MathLayout for Operator {
                     let display_min_height = (options
                         .shaper
                         .math_constant(MathConstant::DisplayOperatorMinHeight)
-                        as f32 * 1.42) as i32;
+                        as f32
+                        * 1.42) as i32;
                     self.layout_stretchy(display_min_height as u32, 0, options)
                 } else {
                     self.field.layout(options)
@@ -785,7 +807,8 @@ impl MathLayout for Operator {
 
     fn operator_properties(&self, options: LayoutOptions) -> Option<OperatorProperties> {
         Some(OperatorProperties {
-            stretch_properties: self.stretch_constraints
+            stretch_properties: self
+                .stretch_constraints
                 .as_ref()
                 .map(|_| Default::default()),
             leading_space: self.leading_space.to_font_units(options.shaper),
@@ -803,7 +826,7 @@ impl MathLayout for MathSpace {
             ascent: self.ascent.to_font_units(options.shaper),
             descent: self.descent.to_font_units(options.shaper),
         };
-        MathBox::empty(extents)
+        MathBox::empty(extents, options.user_data)
     }
 }
 
@@ -811,7 +834,7 @@ impl MathLayout for Option<MathExpression> {
     fn layout(&self, options: LayoutOptions) -> MathBox {
         match *self {
             Some(ref item) => item.layout(options),
-            None => MathBox::empty(Extents::default()),
+            None => MathBox::empty(Extents::default(), options.user_data),
         }
     }
 
@@ -857,9 +880,7 @@ pub fn layout_expression(expr: &MathExpression, options: LayoutOptions) -> MathB
 
 impl MathLayout for MathExpression {
     fn layout(&self, options: LayoutOptions) -> MathBox {
-        let mut mathbox = self.item.layout(options);
-        mathbox.user_data = self.get_user_data();
-        mathbox
+        self.item.layout(options.user_data(self.get_user_data()))
     }
 
     fn operator_properties(&self, options: LayoutOptions) -> Option<OperatorProperties> {

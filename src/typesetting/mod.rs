@@ -27,6 +27,7 @@ where
             as_accent: false,
         },
         stretch_size: None,
+        user_data: expression.get_user_data()
     };
 
     layout::layout_expression(expression, options)
