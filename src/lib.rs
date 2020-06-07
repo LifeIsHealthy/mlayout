@@ -12,5 +12,5 @@ extern crate quick_xml;
 
 pub mod mathmlparser;
 
-pub use crate::typesetting::{math_box, unicode_math, shaper, layout};
+pub use crate::typesetting::{math_box, unicode_math, shaper, layout, layout_with_style};
 pub use crate::types::*;

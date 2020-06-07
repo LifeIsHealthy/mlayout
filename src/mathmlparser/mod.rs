@@ -9,7 +9,8 @@ mod xml_reader;
 #[cfg(feature = "mathml_parser")]
 pub use xml_reader::parse;
 
-pub use token::StringExtMathml;
+pub use operator::{Attributes as OperatorAttributes, Flags, Form};
+pub use token::{Attributes as TokenAttributes, StringExtMathml};
 
 use std;
 use std::collections::BTreeMap;
@@ -21,7 +22,7 @@ use crate::{
     Field,
 };
 
-use self::operator::{guess_if_operator_with_form, Form};
+use self::operator::{guess_if_operator_with_form};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct MathmlElement {
@@ -229,8 +230,8 @@ pub enum Child {
 
 #[derive(Debug, Default, Clone)]
 pub struct Attributes {
-    token: token::Attributes,
-    schema: SchemaAttributes,
+    pub token: token::Attributes,
+    pub schema: SchemaAttributes,
 }
 
 #[derive(Debug, Default, Clone)]

@@ -10,12 +10,20 @@ use super::stretchy::*;
 #[derive(Copy, Clone)]
 pub struct LayoutOptions<'a> {
     pub shaper: &'a dyn MathShaper,
+    pub style_provider: &'a dyn Fn(LayoutStyle, u64) -> LayoutStyle,
     pub style: LayoutStyle,
     pub stretch_size: Option<Extents<i32>>,
     pub user_data: u64,
 }
 
 impl<'a> LayoutOptions<'a> {
+    pub fn style(self, new_style: LayoutStyle) -> Self {
+        LayoutOptions {
+            style: new_style,
+            ..self
+        }
+    }
+
     pub fn user_data(self, user_data: u64) -> Self {
         LayoutOptions { user_data, ..self }
     }
@@ -880,7 +888,11 @@ pub fn layout_expression(expr: &MathExpression, options: LayoutOptions) -> MathB
 
 impl MathLayout for MathExpression {
     fn layout(&self, options: LayoutOptions) -> MathBox {
-        self.item.layout(options.user_data(self.get_user_data()))
+        let old_style = options.style;
+        let new_style = (options.style_provider)(old_style, options.user_data);
+
+        self.item
+            .layout(options.style(new_style).user_data(self.get_user_data()))
     }
 
     fn operator_properties(&self, options: LayoutOptions) -> Option<OperatorProperties> {
